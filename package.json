@@ -1,0 +1,38 @@
+{
+  "name": "feuerwehr-odenthal-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "next typegen && tsc --noEmit",
+    "test": "tsx --test src/domain/*.test.ts",
+    "test:e2e": "playwright test",
+    "icons": "node scripts/generate-icons.mjs",
+    "build:pages": "node scripts/build-pages.mjs",
+    "preview:pages": "node scripts/preview-pages.mjs"
+  },
+  "dependencies": {
+    "next": "16.4.3",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "lucide-react": "^0.577.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@tailwindcss/turbopack": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.4.3",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "tsx": "^4.21.0",
+    "@playwright/test": "^1.58.2",
+    "@axe-core/playwright": "^4.11.1",
+    "sharp": "^0.34.5"
+  }
+}
