@@ -9,7 +9,7 @@ returns boolean language sql stable security definer set search_path = '' as $$
       and u.email ~* '^[^@[:space:]]+@feuerwehr-odenthal\.de$'
       and p.approved_email = lower(u.email)
       and not coalesce(u.is_anonymous, false) and u.deleted_at is null
-      and (u.banned_until is null or u.banned_until <= now())
+      and (u.banned_until is null or u.banned_until <= statement_timestamp())
   );
 $$;
 create function ff_private.is_active()
@@ -40,11 +40,11 @@ returns boolean language sql stable security definer set search_path = '' as $$
     kind = 'organization' or
     (kind = 'unit' and exists (
       select 1 from public.unit_memberships m where m.user_id = auth.uid() and m.unit_id = target_unit
-        and m.valid_from <= now() and (m.valid_until is null or m.valid_until > now())
+        and m.valid_from <= statement_timestamp() and (m.valid_until is null or m.valid_until > statement_timestamp())
     )) or
     (kind = 'function' and exists (
       select 1 from public.function_memberships m where m.user_id = auth.uid() and m.function_id = target_function
-        and m.valid_from <= now() and (m.valid_until is null or m.valid_until > now())
+        and m.valid_from <= statement_timestamp() and (m.valid_until is null or m.valid_until > statement_timestamp())
     ))
   );
 $$;
@@ -77,11 +77,11 @@ returns boolean language sql stable security definer set search_path = '' as $$
     and (
       ff_private.is_overseer() or exists (
         select 1 from public.unit_memberships m where m.user_id = target
-          and m.valid_from <= now() and (m.valid_until is null or m.valid_until > now())
+          and m.valid_from <= statement_timestamp() and (m.valid_until is null or m.valid_until > statement_timestamp())
           and ff_private.has_role('UNIT_ADMIN', m.unit_id, null)
       ) or exists (
         select 1 from public.function_memberships m where m.user_id = target
-          and m.valid_from <= now() and (m.valid_until is null or m.valid_until > now())
+          and m.valid_from <= statement_timestamp() and (m.valid_until is null or m.valid_until > statement_timestamp())
           and ff_private.has_role('FUNCTION_ADMIN', null, m.function_id)
       ) or exists (
         select 1 from public.event_roster r where r.user_id = target and ff_private.can_lead_event(r.event_id)
@@ -179,7 +179,7 @@ from public.actual_attendance a
 join public.events e on e.id = a.event_id
 join public.event_roster r on r.event_id = a.event_id and r.user_id = a.user_id
 join public.attendance_confirmations c on c.event_id = a.event_id
-where e.status = 'scheduled' and e.starts_at <= now();
+where e.status = 'scheduled' and e.starts_at <= statement_timestamp();
 revoke all on public.confirmed_attendance from public, anon, authenticated;
 grant select on public.confirmed_attendance to authenticated;
 

@@ -45,7 +45,7 @@ begin
   perform ff_private.require_rule(found, 'Pending profile required');
   select lower(email) into verified_email from auth.users where id = target_user and email_confirmed_at is not null
     and email ~* '^[^@[:space:]]+@feuerwehr-odenthal\.de$' and not coalesce(is_anonymous, false)
-    and deleted_at is null and (banned_until is null or banned_until <= now());
+    and deleted_at is null and (banned_until is null or banned_until <= statement_timestamp());
   perform ff_private.require_rule(verified_email is not null and exists (select 1 from public.units where id = target_unit), 'Verified email and existing unit required');
   update public.profiles set status = 'approved', approved_at = clock_timestamp(), approved_by = target_user, approved_email = verified_email where id = target_user;
   insert into public.unit_memberships(user_id, unit_id) values (target_user, target_unit);
@@ -71,7 +71,7 @@ begin
   select * into previous from public.profiles where id = target_user for update;
   select lower(email) into verified_email from auth.users where id = target_user and email_confirmed_at is not null
     and email ~* '^[^@[:space:]]+@feuerwehr-odenthal\.de$' and not coalesce(is_anonymous, false)
-    and deleted_at is null and (banned_until is null or banned_until <= now());
+    and deleted_at is null and (banned_until is null or banned_until <= statement_timestamp());
   perform ff_private.require_rule(verified_email is not null and (
     previous.status = 'pending' or (previous.status = 'approved' and previous.approved_email is distinct from verified_email)
   ), 'Verified pending registration required');
