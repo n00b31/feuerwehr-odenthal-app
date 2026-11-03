@@ -236,13 +236,13 @@ test("global membership, role, function and status changes are reflected in rene
   const row = page.locator(".dev-member").filter({ has: page.getByText("Synthetic Member", { exact: true }) });
   await row.locator("summary").click();
   await row.getByLabel("Änderungsgrund für Synthetic Member", { exact: true }).fill("Synthetic membership test");
-  await row.getByLabel("Einheit für Synthetic Member", { exact: true }).selectOption(otherUnit);
+  await row.getByRole("combobox", { name: "Einheit für Synthetic Member", exact: true }).selectOption(otherUnit);
   await row.getByRole("button",{ name: "Einheitszuordnung speichern" }).click();
   await expect(row.locator("summary")).toContainText("Andere Einheit");
   await memberPage.reload();
   await expect(memberPage.getByText(/Andere Einheit · MEMBER/)).toBeVisible();
-  await row.getByLabel("Neue Rolle für Synthetic Member").selectOption("UNIT_ADMIN");
-  await row.getByLabel("Rollenbereich").selectOption(otherUnit);
+  await row.getByRole("combobox", { name: "Neue Rolle für Synthetic Member", exact: true }).selectOption("UNIT_ADMIN");
+  await row.getByRole("combobox", { name: "Rollenbereich", exact: true }).selectOption(otherUnit);
   await row.getByRole("button",{ name: "Rolle zuweisen", exact: true }).click();
   await expect(row.getByRole("button",{ name: "Rolle UNIT_ADMIN entziehen" })).toBeVisible();
   await memberPage.reload();
@@ -253,7 +253,7 @@ test("global membership, role, function and status changes are reflected in rene
   await expect(row.getByRole("button",{ name: "Rolle UNIT_ADMIN entziehen" })).toHaveCount(0);
   await memberPage.reload();
   await expect(memberPage.getByRole("link",{ name: "Administration", exact: true })).toHaveCount(0);
-  await row.getByLabel("Sonderfunktion", { exact: true }).selectOption(specialFunction);
+  await row.getByRole("combobox", { name: "Sonderfunktion", exact: true }).selectOption(specialFunction);
   await row.getByRole("button",{ name: "Sonderfunktion zuweisen" }).click();
   await expect(row.getByRole("button",{ name: "Sonderfunktion Synthetic Atemschutz entfernen" })).toBeVisible();
   await row.getByRole("button",{ name: "Mitglied deaktivieren", exact: true }).click();
