@@ -12,8 +12,8 @@ import { resetAuthCallback, useDevAuth } from "@/auth/use-dev-auth";
 import { BrandLogo } from "./branding";
 import { useTheme } from "./theme-provider";
 import { PageHeading } from "./ui";
-import { EVENT_TYPES } from "@/config/app";
 import { dateLabel } from "@/domain/time";
+import { SupabaseEvents, type EventEditorState } from "./supabase-events";
 
 const links = [
   ["/", "Start"], ["/termine", "Termine"], ["/dokumente", "Dokumente"],
@@ -28,6 +28,8 @@ export function SupabaseDev() {
   const pathname = usePathname().replace(/\/+$/, "") || "/";
   const [operationError, setOperationError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [eventEditor, setEventEditor] = useState<EventEditorState | null>(null);
+  if (eventEditor && (screen.phase === "blocked" || screen.phase === "signed-out" || screen.phase === "error")) setEventEditor(null);
 
   useEffect(() => {
     let current = true;
@@ -92,7 +94,7 @@ export function SupabaseDev() {
           <p>Keine Termine, Dokumente, Rollenlisten oder Statistiken werden geladen. Bei E-Mail-Wechsel oder entfallener Zuordnung ist eine erneute Prüfung nötig.</p>
           <button className="button" onClick={refresh}><RefreshCw size={18} />Freigabestatus prüfen</button>
         </section>
-        : screen.phase === "active" && client ? <DevWorkspace client={client} access={screen.access} data={screen.data} pathname={pathname} refresh={refresh} />
+        : screen.phase === "active" && client ? <DevWorkspace client={client} access={screen.access} data={screen.data} pathname={pathname} refresh={refresh} eventEditor={eventEditor} setEventEditor={setEventEditor} />
         : null}
     </main>
     <footer className="footer"><span>Feuerwehr Odenthal · Supabase DEV</span><span>Keine Offline-Freigabe · Europe/Berlin</span></footer>
@@ -172,20 +174,20 @@ function AuthForm({ client, refresh }: { client: SupabaseClient; refresh: () => 
   </section>;
 }
 
-function DevWorkspace({ client, access, data, pathname, refresh }: { client: SupabaseClient; access: Access; data: DevData; pathname: string; refresh: () => void }) {
+function DevWorkspace({ client, access, data, pathname, refresh, eventEditor, setEventEditor }: { client: SupabaseClient; access: Access; data: DevData; pathname: string; refresh: () => void; eventEditor: EventEditorState | null; setEventEditor: (value: EventEditorState | null) => void }) {
   const globalAdmin = access.roles.includes("GLOBAL_ADMIN");
   const year = Number(new Intl.DateTimeFormat("en", { year: "numeric", timeZone: "Europe/Berlin" }).format(new Date()));
   const ownAttendance = data.attendance.filter((item) => item.report_year === year);
   return <>
     <PageHeading eyebrow="GESCHÜTZTER DEV-BEREICH" title={pathname === "/administration" ? "Registrierungen freigeben" : `Hallo ${access.display_name}`} description={`${access.unit_name} · ${access.roles.join(", ")} · live durch Supabase geprüft`} action={<button className="button secondary" onClick={refresh}><RefreshCw size={18} />Aktualisieren</button>} />
-    <p className="notice">Diese Integrationsstufe zeigt echte DEV-Daten über RLS und ermöglicht die Registrierungsfreigabe. Vollständige Termin-, Anwesenheits-, Rollen- und Dokumentbearbeitung ist hier noch nicht angebunden. Es werden keine lokalen Demo-Daten als Backend-Daten ausgegeben.</p>
+    <p className="notice">DEV 0.3: Einzeltermine und Teilnahmeantworten liegen zentral in Supabase. Serienverwaltung, Anwesenheits-, Rollen- und Dokumentbearbeitung folgen separat. Keine Übernahme lokaler Demo-Daten.</p>
     {pathname === "/administration" ? globalAdmin
       ? <section className="card section-card"><h2>Wartende Testregistrierungen</h2>{data.registrations.length === 0 && <p>Keine wartenden Registrierungen.</p>}{data.registrations.map((person) => <ApprovalRow key={person.user_id} client={client} person={person} units={data.units} refresh={refresh} />)}</section>
       : <p className="notice error" role="alert">Nur die globale Administration darf Registrierungen freigeben. Direkte API-Aufrufe werden ebenfalls serverseitig geprüft.</p>
     : pathname === "/dokumente" ? <section className="card section-card"><h2>Dokumentenbereiche</h2><p>App-Sichtbarkeit ersetzt keine SharePoint-Berechtigung.</p>{data.documents.length === 0 && <p>Noch keine sichtbaren DEV-Dokumentenbereiche.</p>}{data.documents.map((item) => <article key={item.id}><h3>{item.name}</h3><p>{item.description}</p><a href={item.sharepoint_url} target="_blank" rel="noopener noreferrer">SharePoint öffnen</a></article>)}</section>
     : pathname === "/statistik" ? <section className="card section-card"><h2>Bestätigte eigene Anwesenheiten {year}</h2><p>{ownAttendance.filter((item) => item.status === "present").length} tatsächliche Teilnahmen · {ownAttendance.reduce((sum, item) => sum + item.training_hours, 0).toFixed(1)} Ausbildungsstunden</p><p>Nur serverseitig bestätigte Listen. Zusagen, vorläufige Werte und unbekannte Anwesenheiten zählen nicht als Teilnahme.</p>{ownAttendance.map((item) => <p key={item.event_id}>{item.title} · {dateLabel(item.starts_at)} · {item.status === "present" ? "Anwesend" : item.status === "absent" ? "Abwesend" : "Nicht festgestellt"}</p>)}</section>
     : pathname === "/profil" ? <section className="card section-card"><h2>Verifiziertes DEV-Profil</h2><p>{access.display_name} · Einheit {access.unit_name}</p><p>Status: Freigegeben. Kein Identitäts- oder Rollenwechsel über lokale Demo-Profile.</p><p>Die Sitzung liegt ausschließlich unter einem projekt- und unterpfadbezogenen SDK-Speicherschlüssel in diesem Browser. Zum Entfernen „Abmelden / Sitzung entfernen“ verwenden.</p></section>
-    : <section className="card section-card"><h2>{pathname === "/termine" ? "Sichtbare DEV-Termine" : "DEV-Überblick"}</h2>{data.events.length === 0 && <p>Noch keine sichtbaren DEV-Termine. Das leere Projekt wird nicht automatisch mit Personen oder Terminen befüllt.</p>}{data.events.map((item) => <article className="dev-event" key={item.id}><h3>{item.title}</h3><p>{dateLabel(item.starts_at)} · {item.location} · {EVENT_TYPES[item.event_type]}</p><p>{item.description}</p><span className="badge">{item.status === "cancelled" ? "Abgesagt" : "Geplant"}</span></article>)}</section>}
+    : <SupabaseEvents client={client} initial={data} preferredUnit={access.unit_id} editor={eventEditor} setEditor={setEventEditor} />}
   </>;
 }
 

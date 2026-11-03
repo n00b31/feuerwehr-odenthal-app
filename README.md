@@ -16,7 +16,9 @@ Die **[Supabase-DEV-Anleitung](docs/supabase-dev-setup.md)** enthält die geprü
 
 `.github/workflows/pages.yml` prüft Fachregeln, TypeScript, ESLint, Icons und die bisherigen Demo-Szenarien sowie einen separaten statischen Auth-Testbuild mit abgefangenen synthetischen Endpunkten. Ein frischer DEV-Export mit `SUPABASE_DEV_URL` und `SUPABASE_DEV_PUBLISHABLE_KEY` aus Repository-Variablen ist das einzige Pages-Artefakt. **Nur ein erfolgreicher Main-Lauf veröffentlicht.** PRs und manuelle Feature-Branch-Läufe verändern keine öffentliche Veröffentlichung. Actions → **Validate demo and Supabase DEV / publish Pages** → Run workflow. Keine geheimen Supabase-Schlüssel im Build.
 
-Artefakte: **`ui-review`** für lokale Demo-Regression, **`synthetic-auth-test-results`** für künstliche Auth-Szenarien und **`supabase-dev-export`** für den eigentlichen statischen DEV-Export. Keine echten Auth-Tokens/Passwörter in Testartefakten. Unternehmensrichtlinien nicht umgehen; Installationen und Builds laufen vollständig in GitHub Actions.
+**DEV 0.3 – Einzeltermine:** Auf `feature/supabase-events-dev` ergänzt die additive Migration 006 bereichsgeprüfte RPCs für Erstellen, Bearbeiten, Absagen und begründete Rückmeldungskorrekturen. Die Terminansicht verwendet ausschließlich zentrale Supabase-Daten, eigene Zusage/Absage/Vielleicht und eine Teilnehmerübersicht für berechtigte Leitung. Die normale Beginns-/Fristsperre bleibt in der vorhandenen Server-RPC; Admins und aktuelle Delegierte korrigieren separat mit Pflichtgrund. Serien, Auth und unabhängige Demo bleiben erhalten. Migration, CI-Nachweise und die getrennte echte Zwei-Konten-Abnahme stehen in [Abschnitt 11 der DEV-Anleitung](docs/supabase-dev-setup.md#11-dev-03--zentrale-einzeltermine).
+
+Artefakte: **`ui-review`** für lokale Demo-Regression, **`synthetic-auth-test-results`** für künstliche Auth-/Zwei-Sitzungs-Termin-Szenarien und **`supabase-dev-export`** für den eigentlichen statischen DEV-Export. Keine echten Auth-Tokens/Passwörter in Testartefakten. Unternehmensrichtlinien nicht umgehen; Installationen und Builds laufen vollständig in GitHub Actions.
 
 ### Redesign vor einem Merge ausprobieren
 

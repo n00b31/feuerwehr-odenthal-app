@@ -1,0 +1,213 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { CalendarPlus, RefreshCw } from "lucide-react";
+import {
+  readEventWorkspace, saveSingleEvent, cancelSingleEvent, setEventResponse, correctEventResponse,
+  type DevEvent, type EventWorkspace,
+} from "@/data/supabase-repository";
+import {
+  eventPayload, eventErrorMessage, responseCounts, devEventTypeSchema,
+  type DevEventDraft, type DevResponse,
+} from "@/domain/dev-events";
+import { dateLabel, localInput, timeLabel } from "@/domain/time";
+import { EVENT_TYPES } from "@/config/app";
+
+export type EventEditorState = { id?: string; revision: number; draft: DevEventDraft };
+const responses: [DevResponse, string][] = [["yes", "Ich komme"], ["no", "Ich kann nicht"], ["maybe", "Vielleicht"]];
+const responseNames = { yes: "Zusage", no: "Absage", maybe: "Vielleicht" };
+
+export function SupabaseEvents({ client, initial, preferredUnit, editor, setEditor }: {
+  client: SupabaseClient; initial: EventWorkspace; editor: EventEditorState | null;
+  preferredUnit: string | null;
+  setEditor: (value: EventEditorState | null) => void;
+}) {
+  const [workspace, setWorkspace] = useState<EventWorkspace | null>(initial);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [serverTime, setServerTime] = useState(() => Date.parse(initial.server_now));
+  const [filter, setFilter] = useState("all");
+  const anchor = useRef(0);
+  const epoch = useRef({ value: 0 });
+  const working = useRef(false);
+  useEffect(() => {
+    anchor.current = performance.now();
+    const lifetime = epoch.current;
+    const timer = window.setInterval(() => setElapsed(Math.max(0, performance.now() - anchor.current)), 1000);
+    return () => { window.clearInterval(timer); lifetime.value++; };
+  }, []);
+  const reload = useCallback(async () => {
+    const version = ++epoch.current.value;
+    let result: EventWorkspace;
+    try { result = await readEventWorkspace(client); }
+    catch (cause) {
+      // A replaced or unmounted read must not clear a newer authorized snapshot.
+      if (version !== epoch.current.value) return;
+      throw cause;
+    }
+    if (version !== epoch.current.value) return;
+    anchor.current = performance.now();
+    setServerTime(Date.parse(result.server_now));
+    setElapsed(0);
+    setWorkspace(result);
+  }, [client]);
+  useEffect(() => {
+    if (editor) return;
+    const timer = window.setInterval(() => {
+      if (document.hidden || working.current) return;
+      void reload().catch((cause: unknown) => {
+        setWorkspace(null); setError(eventErrorMessage(cause));
+      });
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [reload, editor]);
+  // Elapsed monotonic time from the server snapshot, never the device wall clock.
+  const serverNow = serverTime + elapsed;
+
+  async function run(operation: () => Promise<void>, success: string) {
+    if (working.current) return;
+    working.current = true;
+    setBusy(true); setError(""); setMessage("");
+    let committed = false;
+    try {
+      await operation();
+      committed = true;
+      setMessage(success);
+      await reload();
+    } catch (cause) {
+      if (committed) setWorkspace(null);
+      setError(`${committed ? "Änderung gespeichert, erneutes Laden fehlgeschlagen: " : ""}${eventErrorMessage(cause)}`);
+    } finally { working.current = false; setBusy(false); }
+  }
+  async function refresh() {
+    setBusy(true); setError("");
+    try { await reload(); }
+    catch (cause) { setWorkspace(null); setError(eventErrorMessage(cause)); }
+    finally { setBusy(false); }
+  }
+  function edit(item?: DevEvent) {
+    setMessage(""); setError("");
+    setEditor(item ? {
+      id: item.id, revision: item.revision,
+      draft: { title: item.title, description: item.description, event_type: item.event_type, location: item.location,
+        unit_id: item.unit_id ?? "", start: localInput(item.starts_at), end: localInput(item.ends_at),
+        deadline: item.response_deadline ? localInput(item.response_deadline) : "" },
+    } : {
+      revision: 0,
+      draft: { title: "", description: "", event_type: "regular", location: "",
+        unit_id: workspace?.manageable_units.find((unit) => unit.id === preferredUnit)?.id ?? workspace?.manageable_units[0]?.id ?? "", start: "", end: "", deadline: "" },
+    });
+  }
+  return <section className="card section-card">
+    <div className="event-card-top"><h2>Sichtbare DEV-Termine</h2><div className="dev-actions">
+      <button className="button secondary" disabled={busy} onClick={() => void refresh()}><RefreshCw size={18} />Termine aktualisieren</button>
+      {!!workspace?.manageable_units.length && !editor && <button className="button" disabled={busy} onClick={() => edit()}><CalendarPlus size={18} />Einzeltermin erstellen</button>}
+    </div></div>
+    <p className="muted text-sm">Zentrale Supabase-Daten · Aktualisierung spätestens alle 30 Sekunden bei geöffneter Ansicht. Rückmeldungen sind Planung, keine tatsächliche Anwesenheit.</p>
+    {message && <p className="notice" role="status">{message}</p>}
+    {error && <p className="notice error" role="alert">{error}</p>}
+    {busy && <p role="status">Supabase-Anfrage läuft …</p>}
+    {editor && workspace && <EventForm editor={editor} units={workspace.manageable_units} busy={busy} change={setEditor}
+      close={() => setEditor(null)} submit={() => run(async () => {
+        await saveSingleEvent(client, eventPayload(editor.draft), editor.id ? { id: editor.id, revision: editor.revision } : undefined);
+        setEditor(null);
+      }, editor.id ? "Termin in Supabase geändert." : "Termin in Supabase erstellt.")} />}
+    {workspace && <><label className="dev-event-filter">Terminstatus<select value={filter} onChange={(event) => setFilter(event.target.value)}>
+      <option value="all">Alle sichtbaren Termine</option><option value="scheduled">Geplant</option><option value="cancelled">Abgesagt</option>
+    </select></label>
+    {workspace.events.length === 0 && <p>Noch keine sichtbaren DEV-Termine. Es werden keine Demo-Daten übernommen.</p>}
+    {workspace.events.filter((item) => filter === "all" || item.status === filter).map((item) =>
+      <EventCard key={item.id} item={item} serverNow={serverNow} busy={busy} edit={() => edit(item)}
+        reply={(answer) => run(() => setEventResponse(client, item.id, answer), "Rückmeldung in Supabase gespeichert.")}
+        cancel={(reason) => run(() => cancelSingleEvent(client, item, reason), "Termin in Supabase abgesagt. Rückmeldungen und Historie bleiben erhalten.")}
+        correct={(user, answer, reason) => run(() => correctEventResponse(client, item.id, user, answer, reason), "Rückmeldung mit Korrekturgrund protokolliert.")} />)}
+    </>}
+  </section>;
+}
+
+function EventForm({ editor, units, busy, change, close, submit }: {
+  editor: EventEditorState; units: EventWorkspace["manageable_units"]; busy: boolean;
+  change: (value: EventEditorState) => void; close: () => void; submit: () => Promise<void>;
+}) {
+  const draft = editor.draft;
+  function field<K extends keyof DevEventDraft>(key: K, value: DevEventDraft[K]) {
+    change({ ...editor, draft: { ...draft, [key]: value } });
+  }
+  return <section className="soft-panel dev-event-editor" aria-label={editor.id ? "Einzeltermin bearbeiten" : "Neuer Einzeltermin"}>
+    <h3>{editor.id ? "Einzeltermin bearbeiten" : "Neuer Einzeltermin"}</h3>
+    <p className="text-sm muted">Alle Zeiten in Europe/Berlin. Bestehender Bereich und Teilnehmerkreis bleiben erhalten; Serien werden hier nicht bearbeitet.</p>
+    <form className="form-grid" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
+      <label className="span-2">Titel<input value={draft.title} onChange={(e) => field("title", e.target.value)} required minLength={3} maxLength={120} disabled={busy} /></label>
+      <label className="span-2">Beschreibung<textarea value={draft.description} onChange={(e) => field("description", e.target.value)} maxLength={2000} rows={3} disabled={busy} /></label>
+      <label>Beginn (Europe/Berlin)<input type="datetime-local" value={draft.start} onChange={(e) => field("start", e.target.value)} required disabled={busy} /></label>
+      <label>Ende (Europe/Berlin)<input type="datetime-local" value={draft.end} onChange={(e) => field("end", e.target.value)} required disabled={busy} /></label>
+      <label>Ort<input value={draft.location} onChange={(e) => field("location", e.target.value)} required maxLength={200} disabled={busy} /></label>
+      <label>Terminart<select value={draft.event_type} onChange={(e) => field("event_type", devEventTypeSchema.parse(e.target.value))} disabled={busy}>
+        {Object.entries(EVENT_TYPES).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
+      </select></label>
+      {!editor.id && <label>Einheit<select value={draft.unit_id} onChange={(e) => field("unit_id", e.target.value)} required disabled={busy}>
+        {units.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
+      </select></label>}
+      <label>Anmeldeschluss (optional)<input type="datetime-local" value={draft.deadline} onChange={(e) => field("deadline", e.target.value)} disabled={busy} /></label>
+      <div className="form-actions span-2"><button type="button" className="button secondary" disabled={busy} onClick={close}>Bearbeitung verwerfen</button><button className="button" disabled={busy}>Termin speichern</button></div>
+    </form>
+  </section>;
+}
+
+function EventCard({ item, serverNow, busy, edit, reply, cancel, correct }: {
+  item: DevEvent; serverNow: number; busy: boolean; edit: () => void;
+  reply: (response: DevResponse) => Promise<void>; cancel: (reason: string) => Promise<void>;
+  correct: (user: string, answer: DevResponse, reason: string) => Promise<void>;
+}) {
+  const [cancelling, setCancelling] = useState(false);
+  const [reason, setReason] = useState("");
+  const [target, setTarget] = useState("");
+  const [answer, setAnswer] = useState<DevResponse>("yes");
+  const [correction, setCorrection] = useState("");
+  const planned = item.status === "scheduled";
+  const unlocked = serverNow < Date.parse(item.starts_at) && (!item.response_deadline || serverNow < Date.parse(item.response_deadline));
+  const counts = item.participants ? responseCounts(item.participants) : null;
+  return <article className="dev-event" aria-labelledby={`event-${item.id}`}>
+    <div className="event-card-top"><h3 id={`event-${item.id}`}>{item.title}</h3><span className={`badge ${planned ? "" : "muted"}`}>{planned ? "Geplant" : "Abgesagt"}</span></div>
+    <p>{dateLabel(item.starts_at, { year: "numeric" })} · {timeLabel(item.starts_at)} – {dateLabel(item.ends_at)} {timeLabel(item.ends_at)} · {item.location}</p>
+    <p className="muted text-sm">{item.scope_name} · {EVENT_TYPES[item.event_type]}{item.series_id && " · Serieninstanz (nur Lesen und Rückmelden)"}</p>
+    <p className="description">{item.description}</p>
+    {item.response_deadline && <p className="muted text-sm">Anmeldeschluss: {dateLabel(item.response_deadline)} · {timeLabel(item.response_deadline)}</p>}
+    {item.in_roster ? <div className="dev-response">
+      <p><strong>Deine Rückmeldung: {item.own_response ? responseNames[item.own_response] : "Ohne Rückmeldung"}</strong> · Nur Planung</p>
+      <div className="dev-actions">{responses.map(([value, label]) => <button className="button secondary" key={value}
+        aria-pressed={item.own_response === value} disabled={busy || !planned || !unlocked} onClick={() => void reply(value)}>{label}</button>)}</div>
+      {planned && !unlocked && <p className="lock-note">Rückmeldung ab Beginn/Anmeldeschluss gesperrt. Maßgeblich ist die Supabase-Serverzeit.{item.can_lead && " Als zuständige Leitung kannst du eine begründete Korrektur erfassen."}</p>}
+    </div> : <p className="muted text-sm">Du gehörst nicht zum gespeicherten Teilnehmerkreis; keine eigene Rückmeldung möglich.</p>}
+    {counts && <details className="dev-participants">
+      <summary>Teilnehmerübersicht · {counts.yes} Zusagen · {counts.no} Absagen · {counts.maybe} Vielleicht · {counts.unanswered} ohne Rückmeldung</summary>
+      <ul>{item.participants?.map((person) => <li key={person.user_id}><span>{person.name}</span><strong>{person.response ? responseNames[person.response] : "Ohne Rückmeldung"}</strong></li>)}</ul>
+      {item.can_lead && planned && <form className="form-grid soft-panel" onSubmit={(event: FormEvent) => {
+        event.preventDefault(); void correct(target, answer, correction);
+      }}>
+        <h4 className="span-2">Rückmeldung korrigieren</h4>
+        <label>Mitglied<select value={target} onChange={(e) => setTarget(e.target.value)} required disabled={busy}>
+          <option value="">Mitglied auswählen</option>{item.participants?.map((person) => <option key={person.user_id} value={person.user_id}>{person.name}</option>)}
+        </select></label>
+        <label>Neue Rückmeldung<select value={answer} onChange={(e) => setAnswer(e.target.value === "yes" ? "yes" : e.target.value === "no" ? "no" : "maybe")} disabled={busy}>
+          {Object.entries(responseNames).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select></label>
+        <label className="span-2">Korrekturgrund<input value={correction} onChange={(e) => setCorrection(e.target.value)} required minLength={5} maxLength={2000} disabled={busy} /></label>
+        <p className="span-2 muted text-sm">Gilt nur für diese Termininstanz, auch nach Beginn. Ändert keine tatsächliche Anwesenheit. Akteur, Mitglied und Grund werden protokolliert.</p>
+        <button className="button span-2" disabled={busy || !target}>Korrektur speichern</button>
+      </form>}
+    </details>}
+    {item.can_manage && planned && <div className="dev-actions">
+      <button className="button secondary" disabled={busy || serverNow >= Date.parse(item.starts_at)} onClick={edit}>Termin bearbeiten</button>
+      <button className="button secondary danger-button" disabled={busy} onClick={() => setCancelling(!cancelling)}>Termin absagen</button>
+    </div>}
+    {cancelling && planned && <form className="dev-cancel soft-panel" onSubmit={(event) => { event.preventDefault(); void cancel(reason); }}>
+      <label>Absagegrund<input value={reason} onChange={(e) => setReason(e.target.value)} required minLength={5} maxLength={2000} disabled={busy} /></label>
+      <button className="button danger-button" disabled={busy}>Absage bestätigen</button>
+      <p className="muted text-sm">Keine Löschung. Teilnehmer, Rückmeldungen und Protokoll bleiben erhalten. Erfasste Anwesenheit verhindert eine Absage.</p>
+    </form>}
+  </article>;
+}
