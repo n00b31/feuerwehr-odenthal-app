@@ -67,6 +67,8 @@ test("original branding, padded PWA icons and repository paths are valid", async
   await expect(logo).toBeVisible();
   await expect(logo).toHaveAttribute("src", publicPath("/branding/feuerwehr-odenthal-logo.png"));
   await expect.poll(() => logo.evaluate((image: HTMLImageElement) => [image.naturalWidth, image.naturalHeight])).toEqual([300, 100]);
+  await expect(logo).toHaveCSS("border-radius", "6px");
+  await expect(page.getByRole("complementary").locator(".brand-flame")).toHaveCSS("border-radius", "6px");
   const manifest = await (await page.request.get(publicPath("/manifest.webmanifest"))).json();
   expect(manifest.scope).toBe(publicPath("/"));
   for (const [file, size] of [["icon-192", 192], ["icon-512", 512], ["maskable-512", 512], ["apple-touch-icon", 180], ["favicon-32", 32]] as const) {
@@ -75,6 +77,11 @@ test("original branding, padded PWA icons and repository paths are valid", async
     const png = await response.body();
     expect(png.subarray(1, 4).toString()).toBe("PNG");
     expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([size, size]);
+    const rgba = await sharp(png).ensureAlpha().raw().toBuffer();
+    const cornerAlpha = [rgba[3], rgba[(size - 1) * 4 + 3], rgba[(size - 1) * size * 4 + 3], rgba[(size * size - 1) * 4 + 3]];
+    const rounded = file.startsWith("icon-") || file === "favicon-32";
+    expect(cornerAlpha).toEqual(Array(4).fill(rounded ? 0 : 255));
+    expect(rgba[(Math.floor(size / 2) * size + Math.floor(size / 2)) * 4 + 3]).toBe(255);
     if (file === "maskable-512") {
       const { data, info } = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
       const background = [data[0], data[1], data[2]];

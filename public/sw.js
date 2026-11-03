@@ -1,6 +1,6 @@
 const ROOT = new URL("./", self.location.href);
 const PREFIX = `feuerwehr-offline:${ROOT.pathname}:`;
-const CACHE = `${PREFIX}v3`;
+const CACHE = `${PREFIX}v4`;
 const OFFLINE = new URL("offline.html", ROOT).href;
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll([OFFLINE, ...["icons/favicon-32.png", "icons/icon-192.png", "icons/icon-512.png"].map((path) => new URL(path, ROOT).href)])).then(() => self.skipWaiting()));

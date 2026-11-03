@@ -172,6 +172,8 @@ Die Systemdarstellung wird automatisch erkannt. Unter **Profil → Darstellung**
 
 Die bereitgestellten Grafiken sind laut Auftrag Originalgrafiken der Feuerwehr Odenthal; ihre Verwendung macht den Prototyp nicht zu einer offiziellen App. Keine zusätzliche Lizenz oder allgemeine Weiterverwendungserlaubnis wird hiermit behauptet. **Grenze:** Die Flammenvorlage hat nur 48 Pixel; Hochskalierung erzeugt keine neuen Details. Für ein schärferes großes Installationssymbol wäre eine höher aufgelöste Originalvorlage nötig. Keine nachgezeichneten oder KI-erzeugten Ersatzlogos.
 
+Logo und Flammensymbol werden in der Oberfläche mit dezentem 6-Pixel-Eckenradius dargestellt; die Original-PNGs bleiben unverändert. Normale App-Icons und Favicon besitzen proportional abgerundete, transparente Ecken. Maskierbares Android-Icon und Apple-Touch-Icon bleiben vollflächig deckend, damit die jeweilige Plattform ihre eigene Form ohne dunkle Transparenzränder anwenden kann.
+
 Installationsangebot ist browser-/plattformabhängig; Manifest und Service Worker benötigen einen sicheren Kontext (localhost oder HTTPS). Auf iOS: Safari → Teilen → Zum Home-Bildschirm. Auf Android: Browser-Menü → App installieren, sofern angeboten.
 
 **Keine vollständige Offline-App:** Der Service Worker cached ausschließlich die Offline-Hinweisseite und Basissymbole, keine personenbezogenen Daten, Next.js-Routen oder React-Flight-Antworten. Bereits geladene Ansichten können bei Serverausfall teilweise weiterarbeiten; neue Navigationen sind nicht garantiert. Bei nicht erreichbarem Server und echtem Seitenaufruf erscheint die Offline-Seite. Installation auf echten iPhone-/Android-Geräten wurde nicht hardwareseitig zertifiziert.
