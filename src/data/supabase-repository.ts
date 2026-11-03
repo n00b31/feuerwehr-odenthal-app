@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { devResponseSchema, devEventTypeSchema, devEventPayloadSchema, type DevEventPayload, type DevResponse } from "@/domain/dev-events";
 
 const roleSchema = z.enum(["MEMBER", "UNIT_ADMIN", "FUNCTION_ADMIN", "FIRE_CHIEF", "GLOBAL_ADMIN"]);
 export const accessSchema = z.object({
@@ -14,12 +15,28 @@ export const accessSchema = z.object({
   value.account_status === "approved" && value.unit_id !== null && value.unit_name !== null
 ), "Freigabe erfordert einen genehmigten Account mit Einheit.");
 export type Access = z.infer<typeof accessSchema>;
-const eventSchema = z.object({
+export const devEventSchema = z.object({
   id: z.uuid(), title: z.string(), description: z.string(),
-  event_type: z.enum(["regular", "special", "breathing", "training", "community", "other"]),
-  starts_at: z.string(), ends_at: z.string(), location: z.string(),
+  event_type: devEventTypeSchema,
+  starts_at: z.iso.datetime({ offset: true }), ends_at: z.iso.datetime({ offset: true }), location: z.string(),
   status: z.enum(["scheduled", "cancelled"]),
+  unit_id: z.uuid().nullable(), series_id: z.uuid().nullable(),
+  response_deadline: z.iso.datetime({ offset: true }).nullable(),
+  revision: z.number().int().nonnegative(), scope_name: z.string(),
+  can_manage: z.boolean(), can_lead: z.boolean(), in_roster: z.boolean(),
+  own_response: devResponseSchema.nullable(),
+  participants: z.array(z.object({
+    user_id: z.uuid(), name: z.string(), response: devResponseSchema.nullable(),
+    updated_at: z.iso.datetime({ offset: true }).nullable(),
+  })).nullable(),
 });
+export type DevEvent = z.infer<typeof devEventSchema>;
+export const eventWorkspaceSchema = z.object({
+  server_now: z.iso.datetime({ offset: true }),
+  manageable_units: z.array(z.object({ id: z.uuid(), name: z.string() })),
+  events: z.array(devEventSchema),
+});
+export type EventWorkspace = z.infer<typeof eventWorkspaceSchema>;
 const documentSchema = z.object({
   id: z.uuid(), name: z.string(), description: z.string(),
   sharepoint_url: z.url().regex(/^https:\/\/[^/@?#\s]+\.sharepoint\.com\//),
@@ -34,8 +51,7 @@ const registrationSchema = z.object({
   email_verified: z.boolean(), registered_at: z.string(),
 });
 export type PendingRegistration = z.infer<typeof registrationSchema>;
-export type DevData = {
-  events: z.infer<typeof eventSchema>[];
+export type DevData = EventWorkspace & {
   documents: z.infer<typeof documentSchema>[];
   attendance: z.infer<typeof attendanceSchema>[];
   units: z.infer<typeof unitSchema>[];
@@ -55,7 +71,7 @@ export async function readAccess(client: SupabaseClient): Promise<Access> {
 export async function readDevData(client: SupabaseClient, access: Access): Promise<DevData> {
   if (!access.access_granted) throw new Error("Freigabe erforderlich.");
   const [events, documents, attendance, units, registrations] = await Promise.all([
-    client.from("events").select("id,title,description,event_type,starts_at,ends_at,location,status").order("starts_at"),
+    readEventWorkspace(client),
     client.from("document_areas").select("id,name,description,sharepoint_url").order("name"),
     client.from("confirmed_attendance").select("event_id,user_id,title,starts_at,status,report_year,training_hours")
       .eq("user_id", access.user_id).order("starts_at", { ascending: false }),
@@ -63,12 +79,43 @@ export async function readDevData(client: SupabaseClient, access: Access): Promi
     access.roles.includes("GLOBAL_ADMIN") ? client.rpc("ff_pending_registrations") : Promise.resolve({ data: [], error: null }),
   ]);
   return {
-    events: z.array(eventSchema).parse(checked(events)),
+    ...events,
     documents: z.array(documentSchema).parse(checked(documents)),
     attendance: z.array(attendanceSchema).parse(checked(attendance)),
     units: z.array(unitSchema).parse(checked(units)),
     registrations: z.array(registrationSchema).parse(checked(registrations)),
   };
+}
+
+export async function readEventWorkspace(client: SupabaseClient): Promise<EventWorkspace> {
+  return eventWorkspaceSchema.parse(checked(await client.rpc("ff_events_workspace")));
+}
+
+export async function saveSingleEvent(client: SupabaseClient, input: DevEventPayload, event?: { id: string; revision: number }) {
+  const payload = devEventPayloadSchema.parse(input);
+  if (event) {
+    z.uuid().parse(event.id);
+    z.number().int().nonnegative().parse(event.revision);
+    checked(await client.rpc("ff_update_single_event", { target_event: event.id, expected_revision: event.revision, input: payload }));
+  } else {
+    if (!payload.unit_id) throw new Error("Einheit erforderlich.");
+    checked(await client.rpc("ff_create_single_event", { input: payload }));
+  }
+}
+export async function cancelSingleEvent(client: SupabaseClient, event: DevEvent, reason: string) {
+  z.uuid().parse(event.id);
+  z.string().trim().min(5, "Absagegrund: mindestens fünf Zeichen.").max(2000).parse(reason);
+  checked(await client.rpc("ff_cancel_single_event", { target_event: event.id, expected_revision: event.revision, reason: reason.trim() }));
+}
+export async function setEventResponse(client: SupabaseClient, eventId: string, response: DevResponse) {
+  z.uuid().parse(eventId);
+  devResponseSchema.parse(response);
+  checked(await client.rpc("ff_set_response", { target_event: eventId, answer: response }));
+}
+export async function correctEventResponse(client: SupabaseClient, eventId: string, userId: string, response: DevResponse, reason: string) {
+  z.uuid().parse(eventId); z.uuid().parse(userId); devResponseSchema.parse(response);
+  z.string().trim().min(5, "Korrekturgrund: mindestens fünf Zeichen.").max(2000).parse(reason);
+  checked(await client.rpc("ff_set_member_response", { target_event: eventId, target_user: userId, answer: response, reason: reason.trim() }));
 }
 
 export async function approveMember(client: SupabaseClient, userId: string, unitId: string) {

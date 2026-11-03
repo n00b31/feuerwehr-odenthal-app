@@ -78,11 +78,16 @@ async function fixture(context: BrowserContext) {
         user_id: memberId, display_name: "Synthetic Mitglied", email, email_verified: state.verified, registered_at: new Date().toISOString(),
       }]);
       if (url.pathname.endsWith("/units")) return respond([{ id: unitId, name: "Scheuren" }]);
-      if (url.pathname.endsWith("/events")) return respond([{
+      if (url.pathname.endsWith("/ff_events_workspace")) return respond({
+        server_now: new Date().toISOString(), manageable_units: state.admin ? [{ id: unitId, name: "Scheuren" }] : [],
+        events: [{
         id: "30000000-0000-4000-8000-000000000001", title: "Synthetic DEV Dienst", description: "Nur Testdaten",
         event_type: "regular", starts_at: "2026-12-01T18:00:00Z", ends_at: "2026-12-01T20:00:00Z",
         location: "Synthetischer Testort", status: "scheduled",
-      }]);
+        unit_id: unitId, series_id: null, revision: 0, response_deadline: null, scope_name: "Scheuren",
+        can_manage: state.admin, can_lead: state.admin, in_roster: true, own_response: null,
+        participants: state.admin ? [{ user_id: memberId, name: "Synthetic Mitglied", response: null, updated_at: null }] : null,
+      }] });
       return respond([]);
     }
     throw new Error(`Unexpected synthetic endpoint: ${url.pathname}`);

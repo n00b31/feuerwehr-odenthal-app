@@ -13,6 +13,23 @@
 .dev-approval label { max-width: 480px; margin-bottom: 12px; }
 .dev-shell .topbar { flex-wrap: wrap; gap: 12px; }
 .dev-shell .topbar-actions { flex-wrap: wrap; }
+.dev-event-editor, .dev-participants, .dev-cancel { margin-block: var(--cp-space-4); }
+.dev-event-filter { max-width: 360px; }
+.dev-response .button[aria-pressed="true"] { color: var(--cp-text); background: var(--cp-accent-soft); border-color: var(--cp-accent); }
+.dev-participants summary { cursor: pointer; min-height: 44px; padding-block: var(--cp-space-3); overflow-wrap: anywhere; }
+.dev-participants ul { list-style: none; padding: 0; }
+.dev-participants li { display: flex; justify-content: space-between; gap: var(--cp-space-3); padding-block: var(--cp-space-3); border-bottom: 1px solid var(--cp-border); overflow-wrap: anywhere; }
+.dev-participants li span { min-width: 0; }
+.dev-participants li strong { flex-shrink: 0; }
+@media (max-width: 760px) {
+  .dev-shell { padding-bottom: 84px; }
+  .dev-navigation { position: fixed; bottom: 0; inset-inline: 0; z-index: 50; flex-wrap: nowrap; overflow-x: auto; gap: 0; padding: 4px; border-top: 1px solid var(--cp-border); }
+  .dev-navigation a { flex: 1 0 auto; padding: 16px 8px; font-size: var(--cp-font-xs); text-align: center; }
+  .dev-shell .section-card { padding: var(--cp-space-4); }
+  .dev-event-editor .form-grid, .dev-participants .form-grid { grid-template-columns: minmax(0, 1fr); }
+  .dev-event-editor .span-2, .dev-participants .span-2 { grid-column: 1; }
+  .dev-event .dev-actions { padding-inline: 0; }
+}
 
 :root {
   color-scheme: light;

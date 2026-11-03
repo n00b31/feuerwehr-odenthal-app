@@ -555,6 +555,97 @@ Merge-Commit ohne ergänzten Nachweis als vollständige Sicherung markieren.
   administrative Schutzmechanismen ändern. Betriebs- und Aufbewahrungskonzept fehlen.
 - Kein automatischer Merge, keine produktive Freischaltung und kein Eingriff in das unabhängige Demo-Repository.
 
+## 11. DEV 0.3 – zentrale Einzeltermine
+
+Ausgangsbasis ist der vollständige DEV-0.2-Snapshot `v0.2-auth-dev`
+(`d211d303bd411a6cff291008b84b560830f0bbe3`). Neue Arbeit ausschließlich auf
+`feature/supabase-events-dev`. Beim read-only MCP-Preflight am 03.11.2026:
+Migrationen 001–005 vorhanden, null Termine und null Teilnahmeantworten.
+Keine erneute Auth-Einrichtung, kein neues Projekt und keine importierten Demo-Personen.
+
+### Migration und Servergrenze
+
+`20261103000600_single_events.sql` ist eine additive Migration:
+`events.revision` schützt gegen verlorene Änderungen, neue RPCs verwenden die vorhandenen
+Prädikate `is_active`, `manages_scope`, `can_view_event` und `can_lead_event`.
+Bestehende RLS-Policies und direkte Client-Schreibverbote bleiben unverändert.
+Eine private Validierung plus alle privilegierten RPCs besitzen leeren `search_path`;
+nur die öffentlichen geprüften RPCs sind für `authenticated` ausführbar, niemals für `anon`.
+
+- `ff_create_single_event(input)`: UNIT_ADMIN nur seine zugewiesene Einheit, GLOBAL_ADMIN
+  alle Einheiten. Nur zukünftige Einzeltermine. Atomarer Snapshot aktuell freigegebener
+  Mitglieder der gewählten Einheit mit damaligem Namen/Einheit und Audit.
+- `ff_update_single_event(target_event, expected_revision, input)`: nur zuständige Administration,
+  zukünftiger geplanter Einzeltermin, Revision muss passen. Bereits gespeicherter Bereich
+  und Teilnehmerkreis bleiben unverändert, damit Antworten/Historie nicht überschrieben werden.
+  Für eine andere Einheit einen neuen Termin anlegen. Eine Serieninstanz wird nicht verändert.
+- `ff_cancel_single_event(target_event, expected_revision, reason)`: zuständige Administration,
+  Pflichtgrund, Revision und Einzelterminstatus geprüft. Keine Löschung; Teilnehmer, Antworten
+  und Audit bleiben erhalten. Erfasste tatsächliche Anwesenheit oder Bestätigung verhindern Absage.
+- `ff_set_response(target_event, answer)` bleibt unverändert der eigene MEMBER-Pfad:
+  aktuelle Freigabe, gespeicherter Teilnehmerkreis, geplanter Status und `clock_timestamp()`
+  strikt vor Beginn sowie Anmeldeschluss. Genau eine aktuelle Antwort je Person/Termin.
+- `ff_set_member_response(target_event, target_user, answer, reason)`: separate begründete
+  Korrektur für zuständige Administration oder aktuell zugewiesene Leitung, auch nach Beginn.
+  Nur freigegebene Personen im Teilnehmerkreis, keine Selbstdelegation und keine Rechte für andere
+  Termininstanzen. Keine Änderung tatsächlicher Anwesenheit. Vorher/nachher, Akteur, Person, Grund
+  und Termin werden atomar protokolliert.
+- `ff_events_workspace()`: serverseitig sichtbare Termine, eigener Antwortstatus, Serverzeit und
+  verwaltbare Einheiten. Voller Teilnehmerkreis mit Antworten nur für Leitung bzw. bestehende
+  organisationsweite Leseaufsicht. MEMBER erhält keine fremden Antwortidentitäten.
+
+**Anwendungsstatus:** 006 ist versioniert vorbereitet, noch nicht am gehosteten Projekt angewendet.
+Zuerst die isolierte PostgreSQL-CI vollständig bestehen lassen, dann den tatsächlichen Remote-Zustand
+mit 001–005 abgleichen und ausschließlich die fehlende 006 kontrolliert anwenden.
+MCP-Historienversion und SQL-Prüfsumme ergänzen. Keine Fixture oder Testdatensuite im DEV-Projekt ausführen.
+
+### Oberfläche und Betrieb
+
+Static Export bleibt unverändert; keine Server Actions, API-Routen oder zusätzlichen Server.
+Browser nutzt SDK und Publishable Key, keine Service Role. Termine/Antworten haben keinen
+lokalen Datenbestand oder Offline-Schreibpfad. Erneute Anmeldung/Neuladen lädt zentrale Antworten.
+Offene Terminansicht aktualisiert spätestens alle 30 Sekunden, außerdem über den vorhandenen
+Freigabezyklus sowie manuell; keine Supabase-Realtime-Aktivierung erforderlich.
+Während einer offenen Bearbeitung bleibt der Formularentwurf über die Sitzungskontrolle erhalten.
+Bei Sperrung, Logout oder Auth-Fehler wird er verworfen.
+
+Alle Formulardaten werden als Berliner Lokalzeit eingegeben und mit dem vorhandenen DST-Helper
+in Instants umgesetzt. Die UI schätzt die Serverzeit mit monoton verstrichener Zeit; maßgeblich
+bleibt ausschließlich die Server-RPC. Veraltete Revision erzeugt einen sichtbaren Konflikt,
+kein stilles Überschreiben. Ein erfolgreicher Write mit fehlgeschlagenem anschließenden Read
+wird ausdrücklich getrennt gemeldet; keine erfundene Teilnehmerübersicht.
+Light/Dark, Branding und mobile Bottom-Navigation verwenden die bestehenden Theme-Tokens.
+
+### Tests und tatsächliche Abnahme
+
+- Lokal mit vorhandenen Paketen: 65/65 Fach-/Konfigurationstests bestanden, einschließlich
+  sechs neuen Terminpayload-/Berliner-Zeit-/Antwortzählungs-/Fehlerfällen.
+  Lokaler Typecheck ist wegen fehlendem `@supabase/supabase-js` im vorhandenen `node_modules`
+  blockiert; keine lokale Installation. Vollständige Typen/Build/Lint in GitHub Actions prüfen.
+- `supabase/tests/events.sql`: ausschließlich `ff_dev_ci`, transaktional zurückgerollte
+  Auth-/Rollenfixtures. Erstellen, gemeinsamer gespeicherter Termin, eigene Antwortänderung,
+  Admin-Übersicht, fremde Einheiten, direkte DML-Sperre, serverseitige Beginnsgrenze,
+  UNIT_ADMIN/GLOBAL_ADMIN, zeitlich unbeschränkte begründete Leitungskorrektur, Delegationswiderruf,
+  Stale-Revision, Absage mit erhaltenen Antworten und reine Leseaufsicht.
+- `tests/supabase-events.spec.ts`: zwei getrennte Browserprofile mit abgefangenen Protokollendpunkten
+  und gemeinsamer synthetischer Datenquelle; Erstellen/Sichtbarkeit/Zusage/Änderung/Reload,
+  Teilnehmerzahlen, Bearbeiten/Absage, gesperrte API-Requests ab Beginn/fremde Einheit,
+  Fehler/konkurrierende Revision, Light/Dark/Axe und mobile Navigation.
+  Das ist **kein** Test gegen das echte Supabase-Projekt; SQL-CI prüft die tatsächliche RPC-/RLS-Logik.
+- Bestehende 19 Demo-Browser- und sechs Auth-Szenarien laufen zusätzlich unverändert weiter,
+  nur der neue gelesene Termin-RPC-Vertrag wird in den Auth-Fixtures ergänzt.
+
+**Echte DEV-0.3-Abnahme noch offen:** Nach Migration und bewusster Frontend-Veröffentlichung
+mit den vorhandenen zwei Konten in getrennten Browserprofilen einen ausdrücklich synthetischen
+Einzeltermin für Scheuren erstellen. Mitglied liest denselben Termin, sagt zu; Admin aktualisiert
+und sieht Zusage. Mitglied ändert auf Vielleicht/Absage, lädt neu; Admin prüft denselben zentralen
+Stand und Teilnehmerzahlen. Vor Freigabe/aus fremder Einheit bleiben Zugriffe gesperrt.
+Den Beginn des ausdrücklich gewählten Testtermins tatsächlich abwarten: MEMBER-Änderung
+über Server abweisen, Leitungskorrektur nur mit Grund. Anschließend Testtermin begründet absagen;
+keine Löschung, keine Mailserie und keine künstliche Verifizierung bestehender Konten.
+Benutzer bedient Passwörter/Sitzungen selbst; keine Tokens oder persönlichen Accountdaten
+in Chat, Screenshots, Logs oder öffentliche Dokumentation aufnehmen.
+
 ## Quellen
 
 - [Supabase Passwortauthentifizierung](https://supabase.com/docs/guides/auth/passwords)
