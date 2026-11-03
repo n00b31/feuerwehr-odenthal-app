@@ -253,7 +253,7 @@ test("global membership, role, function and status changes are reflected in rene
   await expect(row.getByRole("button",{ name: "Rolle UNIT_ADMIN entziehen" })).toHaveCount(0);
   await memberPage.reload();
   await expect(memberPage.getByRole("link",{ name: "Administration", exact: true })).toHaveCount(0);
-  await expect(memberPage.getByRole("alert")).toContainText("Keine Berechtigung zur Mitgliederverwaltung");
+  await expect(memberPage.getByRole("main").getByRole("alert")).toContainText("Keine Berechtigung zur Mitgliederverwaltung");
   await row.getByRole("combobox", { name: "Sonderfunktion", exact: true }).selectOption(specialFunction);
   await row.getByRole("button",{ name: "Sonderfunktion zuweisen" }).click();
   await expect(row.getByRole("button",{ name: "Sonderfunktion Synthetic Atemschutz entfernen" })).toBeVisible();
