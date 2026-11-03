@@ -56,7 +56,7 @@ test("failed theme persistence is reported, not presented as saved", async ({ pa
   await expect(page.getByRole("heading", { name: "Darstellung", exact: true })).toBeVisible();
   await page.evaluate(() => { Storage.prototype.setItem = () => { throw new DOMException("Test", "QuotaExceededError"); }; });
   await page.getByRole("group", { name: "Farbschema", exact: true }).getByRole("button", { name: "Dunkel", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("nur für diese Sitzung");
+  await expect(page.locator("#main").getByRole("alert")).toContainText("nur für diese Sitzung");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 });
 

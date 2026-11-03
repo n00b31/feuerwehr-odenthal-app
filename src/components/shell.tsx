@@ -19,10 +19,11 @@ const navigation = [
   { href: "/statistik", name: "Statistik", icon: ChartNoAxesCombined },
   { href: "/profil", name: "Profil", icon: UserRound },
 ];
+const normalizedPath = (path: string) => path.replace(/\/+$/, "") || "/";
 export function Shell({ children }: { children: ReactNode }) {
   const { state, user, message } = useDemo();
   const { resolved, setPreference, error } = useTheme();
-  const pathname = usePathname();
+  const pathname = normalizedPath(usePathname());
   const [menu, setMenu] = useState(false);
   const unit = state.units.find((u) => u.id === user.unitId)!;
   const initials = user.name.split(" ").slice(0, 2).map((w) => w[0]).join("");
@@ -57,7 +58,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
 function SidebarContent({ close }: { close?: () => void }) {
   const { state, user } = useDemo();
-  const pathname = usePathname();
+  const pathname = normalizedPath(usePathname());
   const unit = state.units.find((item) => item.id === user.unitId)!;
   return <>
     <Link href="/" className="brand" onClick={close}><BrandFlame /><span><strong>Mein Dienst</strong><small>Feuerwehr Odenthal</small></span></Link>
