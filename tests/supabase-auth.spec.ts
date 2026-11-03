@@ -212,6 +212,8 @@ test("foreign-domain registration is rejected before a network request", async (
   await page.getByLabel("Anzeigename").fill("Synthetic Mitglied");
   await page.getByLabel("Feuerwehr-E-Mail").fill("synthetic@example.test");
   await page.getByLabel("Passwort", { exact: true }).fill(password);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(page.getByLabel("Anzeigename")).toHaveValue("Synthetic Mitglied");
   await page.getByRole("button", { name: "Registrierung anfordern" }).click();
   await expect(page.getByRole("main").getByRole("alert")).toContainText("Nur @feuerwehr-odenthal.de");
   expect(state.signupCalls).toBe(0);

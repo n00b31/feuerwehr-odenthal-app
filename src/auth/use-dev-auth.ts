@@ -35,6 +35,8 @@ export function useDevAuth(client: SupabaseClient | null) {
   const [screen, setScreen] = useState<Screen>({ phase: "loading" });
   const [revision, setRevision] = useState(0);
   const epoch = useRef(0);
+  const phase = useRef(screen.phase);
+  useEffect(() => { phase.current = screen.phase; }, [screen.phase]);
   const refresh = useCallback(() => {
     epoch.current++;
     setScreen({ phase: "loading" });
@@ -45,17 +47,18 @@ export function useDevAuth(client: SupabaseClient | null) {
     if (!client) return;
     // Keep callbacks synchronous: awaiting Auth methods here can deadlock the SDK.
     const { data: subscription } = client.auth.onAuthStateChange(refresh);
-    window.addEventListener("focus", refresh);
-    window.addEventListener("online", refresh);
-    window.addEventListener("offline", refresh);
-    const visible = () => { if (!document.hidden) refresh(); };
+    const recheck = () => { if (phase.current !== "signed-out") refresh(); };
+    window.addEventListener("focus", recheck);
+    window.addEventListener("online", recheck);
+    window.addEventListener("offline", recheck);
+    const visible = () => { if (!document.hidden) recheck(); };
     document.addEventListener("visibilitychange", visible);
-    const interval = window.setInterval(() => { if (!document.hidden) refresh(); }, 60_000);
+    const interval = window.setInterval(() => { if (!document.hidden) recheck(); }, 60_000);
     return () => {
       subscription.subscription.unsubscribe();
-      window.removeEventListener("focus", refresh);
-      window.removeEventListener("online", refresh);
-      window.removeEventListener("offline", refresh);
+      window.removeEventListener("focus", recheck);
+      window.removeEventListener("online", recheck);
+      window.removeEventListener("offline", recheck);
       document.removeEventListener("visibilitychange", visible);
       window.clearInterval(interval);
     };
