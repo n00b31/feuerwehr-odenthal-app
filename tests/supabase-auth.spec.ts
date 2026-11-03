@@ -33,7 +33,11 @@ async function fixture(context: BrowserContext) {
     const url = new URL(request.url());
     const respond = (body: unknown, status = 200) => route.fulfill({
       status, contentType: "application/json",
-      headers: { "x-supabase-api-version": "2024-01-01" },
+      headers: {
+        "x-supabase-api-version": "2024-01-01",
+        "access-control-allow-origin": "*",
+        "access-control-expose-headers": "x-supabase-api-version",
+      },
       body: JSON.stringify(body),
     });
     if (url.pathname === "/auth/v1/signup") {
@@ -95,7 +99,7 @@ async function login(page: import("@playwright/test").Page, address = email) {
 }
 
 test("full DEV registration, PKCE confirmation, pending approval, admin release and renewed login", async ({ browser }) => {
-  const context = await browser.newContext();
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: "light" });
   const state = await fixture(context);
   const page = await context.newPage();
   const errors: string[] = [];
@@ -132,6 +136,7 @@ test("full DEV registration, PKCE confirmation, pending approval, admin release 
   await page.getByRole("button", { name: /Abmelden/ }).click();
   await expect(page.getByRole("heading", { name: "Anmelden", exact: true })).toBeVisible();
   state.admin = false;
+  await page.goto(publicPath("/"));
   await login(page);
   await expect(page.getByRole("heading", { name: "Hallo Synthetic Mitglied" })).toBeVisible();
   await page.getByRole("link", { name: "Termine", exact: true }).click();
@@ -140,8 +145,10 @@ test("full DEV registration, PKCE confirmation, pending approval, admin release 
   await expect(page.getByText(/Demo-Profil wechseln/)).toHaveCount(0);
   expect(await page.evaluate(() => Object.keys(localStorage).some((key) => key.startsWith("ff-odenthal-demo-v1")))).toBe(false);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.screenshot({ path: "test-results/supabase-dev-member-light.png", fullPage: true });
   await page.getByRole("button", { name: "Farbschema wechseln" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.screenshot({ path: "test-results/supabase-dev-member-dark.png", fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(errors).toEqual([]);
   await context.close();
