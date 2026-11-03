@@ -1,6 +1,6 @@
 import { test, expect, type BrowserContext, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { publicPath } from "../src/config/app";
+import { APP, publicPath } from "../src/config/app";
 import { localInput } from "../src/domain/time";
 
 const api = "https://syntheticci.supabase.co";
@@ -155,7 +155,9 @@ test("two independent sessions centrally create, respond, change, reload, edit a
   await memberPage.screenshot({ path: "test-results/dev-events-member-dark.png", fullPage: true });
   await adminPage.screenshot({ path: "test-results/dev-events-admin-light.png", fullPage: true });
   expect(await memberPage.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  expect(await memberPage.evaluate(() => Object.keys(localStorage).some((key) => key.startsWith("ff-odenthal-demo-v1")))).toBe(false);
+  expect(await memberPage.evaluate((key) => [
+    localStorage.getItem(key), localStorage.getItem(`${key}-profile`),
+  ], APP.storageKey)).toEqual([null, null]);
   await adminPage.getByRole("button", { name: "Termin absagen", exact: true }).click();
   await adminPage.getByLabel("Absagegrund", { exact: true }).fill("Synthetic Absagegrund");
   await adminPage.getByRole("button", { name: "Absage bestätigen" }).click();
