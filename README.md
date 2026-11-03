@@ -18,7 +18,14 @@ Der Workflow speichert den statischen Export und Browser-Screenshots/-Fehlertrac
 
 Im Pull Request den erfolgreichen Lauf **Publish demo to GitHub Pages** öffnen, `ui-review` herunterladen und entpacken. Der enthaltene Ordner `out` ist die vollständige statische Vorschau. Die Bilder unter `test-results` zeigen Hell/Dunkel sowie mobile und Desktop-Ansichten.
 
-Mit vorhandenem Node.js lässt sich das heruntergeladene `out` im Repository-Hauptverzeichnis über `node scripts\preview-pages.mjs` bereitstellen. Aufruf: `http://localhost:3100/feuerwehr-odenthal-app/`. Dafür sind weder npm-Installation noch lokaler Build nötig. Ein eventuell vorhandener `out`-Ordner darf nur nach bewusster Sicherung ersetzt werden. Die Vorschau bindet ausschließlich an Loopback; auf dem Smartphone ist dessen `localhost` nicht der Entwicklungsrechner. Ohne Node.js stehen die CI-Screenshots zur Ansicht bereit.
+Mit vorhandenem Node.js im entpackten Artefakt-Verzeichnis (enthält `out`) den vorhandenen Vorschau-Server aus dem Repository ausführen:
+
+```powershell
+Set-Location C:\Vorschau\ui-review
+node C:\Projekte\feuerwehr-odenthal-app\scripts\preview-pages.mjs
+```
+
+Aufruf: `http://localhost:3100/feuerwehr-odenthal-app/`. Dafür sind weder npm-Installation noch lokaler Build nötig; vorhandene Build-Ordner müssen nicht ersetzt werden. Die Vorschau bindet ausschließlich an Loopback; auf dem Smartphone ist dessen `localhost` nicht der Entwicklungsrechner. Ohne Node.js stehen die CI-Screenshots zur Ansicht bereit.
 
 Der Build setzt `NEXT_PUBLIC_BASE_PATH=/feuerwehr-odenthal-app` und `STATIC_EXPORT=true`. Next.js-Verweise, Icons, Manifest, Service-Worker-Scope und Offline-Seite berücksichtigen diesen Unterpfad. Der Browser-Speicherschlüssel ist zusätzlich nach dem Unterpfad getrennt. Das Manifest enthält ein passendes `start_url`/`scope`. Keine clientseitigen Root-Weiterleitungen als Ersatz für echte statische Seiten.
 
