@@ -1,8 +1,9 @@
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { devResponseSchema, devEventTypeSchema, devEventPayloadSchema, type DevEventPayload, type DevResponse } from "@/domain/dev-events";
+import { memberRoleSchema, membersWorkspaceSchema, memberRoleInputSchema, memberReasonSchema } from "@/domain/dev-members";
 
-const roleSchema = z.enum(["MEMBER", "UNIT_ADMIN", "FUNCTION_ADMIN", "FIRE_CHIEF", "GLOBAL_ADMIN"]);
+const roleSchema = memberRoleSchema;
 export const accessSchema = z.object({
   user_id: z.uuid(),
   display_name: z.string(),
@@ -122,4 +123,28 @@ export async function approveMember(client: SupabaseClient, userId: string, unit
   z.uuid().parse(userId);
   z.uuid().parse(unitId);
   checked(await client.rpc("ff_approve_member", { target_user: userId, target_unit: unitId }));
+}
+
+export async function readMembersWorkspace(client: SupabaseClient) {
+  return membersWorkspaceSchema.parse(checked(await client.rpc("ff_members_workspace")));
+}
+export async function setUnitMembership(client: SupabaseClient, userId: string, unitId: string, assign: boolean, reason: string) {
+  checked(await client.rpc("ff_set_unit_membership", {
+    target_user: z.uuid().parse(userId), target_unit: z.uuid().parse(unitId),
+    assign: z.boolean().parse(assign), reason: memberReasonSchema.parse(reason),
+  }));
+}
+export async function setFunctionMembership(client: SupabaseClient, userId: string, functionId: string, assign: boolean, reason: string) {
+  checked(await client.rpc("ff_set_function_membership", {
+    target_user: z.uuid().parse(userId), target_function: z.uuid().parse(functionId),
+    assign: z.boolean().parse(assign), reason: memberReasonSchema.parse(reason),
+  }));
+}
+export async function changeMemberRole(client: SupabaseClient, input: z.infer<typeof memberRoleInputSchema>) {
+  checked(await client.rpc("ff_set_role", memberRoleInputSchema.parse(input)));
+}
+export async function changeMemberStatus(client: SupabaseClient, userId: string, reactivate: boolean, reason: string) {
+  const input = { target_user: z.uuid().parse(userId), reason: memberReasonSchema.parse(reason) };
+  checked(await client.rpc(reactivate ? "ff_reactivate_member" : "ff_set_account_status",
+    reactivate ? input : { ...input, next_status: "suspended" }));
 }

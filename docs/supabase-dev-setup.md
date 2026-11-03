@@ -690,6 +690,102 @@ keine Löschung, keine Mailserie und keine künstliche Verifizierung bestehender
 Benutzer bedient Passwörter/Sitzungen selbst; keine Tokens oder persönlichen Accountdaten
 in Chat, Screenshots, Logs oder öffentliche Dokumentation aufnehmen.
 
+## 12. DEV 0.3.1 – Mitgliederverwaltung und Layout
+
+Basis: Benutzermerge von [PR #6](https://github.com/n00b31/feuerwehr-odenthal-app/pull/6),
+Main `42719c3d95e894ea866d869b9dde1e13a44ea33a`, beide Main-CIs erfolgreich.
+Änderungen ausschließlich in `feature/dev-031-fixes`; Demo-Repository unverändert.
+
+### Ursachenanalyse
+
+- Die gemeldete fehlgeschlagene Terminerstellung ließ sich nicht als Serverfehler reproduzieren.
+  Im tatsächlich vorhandenen DEV-Projekt sind 001–007 vorhanden, ein freigegebener GLOBAL_ADMIN
+  und zwei Konten eingerichtet. Eine SQL-Reproduktion mit der bestehenden Administratoridentität
+  und ausdrücklich synthetischem Payload führte `ff_create_single_event` erfolgreich aus.
+  Eine absichtliche abschließende Exception rollte den gesamten Diagnoseaufruf zurück.
+  Das ist tatsächliche Serverausführung, **kein** echter JWT-/PostgREST-/Browser-Login.
+  Der Benutzer meldete anschließend „jetzt geht es“. Es liegen weder ursprünglicher Fehlertext
+  noch ein fehlgeschlagener Request als Beweis vor. Keine erfundene Ursachenbehauptung über RLS,
+  Cache oder Migrationen und keine spekulative Änderung an funktionierenden Termin-RPCs.
+- Mitgliederverwaltung fehlte tatsächlich: bisher gab es nur Pending-Freigabe und keine
+  Oberfläche für vorhandene Profile. Rollen-/Deaktivierungs-RPCs existierten bereits,
+  Einheits-/Funktionsänderung und sichere Reaktivierung noch nicht.
+- DEV besaß einen eigenen vereinfachten Navigationsbaum statt der vorhandenen Sidebar.
+  Die gemeinsame `navigation.tsx` enthält jetzt ausschließlich Darstellung, Branding und Links.
+  Die Demo-Identität verbleibt in ihrem eigenen Shell-Wrapper; DEV nutzt ausschließlich Auth-Zustand.
+
+### Berechtigungen und Migration 008
+
+`20261103000800_member_management.sql` ist additiv. Vorhandene Auth-, Event-, Rollen- und
+Statusfunktionen bleiben unverändert. Keine direkten Client-DML-Grants und keine Lockerung
+der bisherigen RLS. Neue öffentliche RPCs: nur `authenticated`, `SECURITY DEFINER`,
+leerer `search_path`; private Helfer nicht direkt browseraufrufbar.
+
+- `ff_members_workspace`: GLOBAL_ADMIN sieht alle Profile einschließlich Pending/Sperrstatus,
+  aktuelle Einheiten, Mitgliedschaftshistorie, Rollen und Sonderfunktionen.
+  UNIT_ADMIN sieht nur aktuell eigene Mitglieder sowie ehemalige eigene Mitglieder ohne
+  andere aktuelle Einheit. Fremde Einheitswechsel sind nicht sichtbar; fremde Rollen/Funktionen
+  werden nicht ausgegeben. MEMBER/FUNCTION_ADMIN/FIRE_CHIEF ohne zusätzliche zuständige
+  Adminrolle können dieses Verwaltungs-RPC nicht verwenden.
+- `ff_set_unit_membership`: globale Administration kann die aktuelle Einheit atomar wechseln
+  oder eine Mitgliedschaft mit Grund beenden; genau eine offene Einheitsmitgliedschaft.
+  UNIT_ADMIN kann bestehende einfache Mitgliedschaften nur in der eigenen verwalteten Einheit
+  beenden/wiederherstellen, keine fremden Personen aufnehmen oder nach außerhalb verschieben.
+  Zielkonten mit aktiven Admin-/Aufsichtsrollen sind für UNIT_ADMIN schreibgeschützt.
+  Wiederherstellung erfordert zuvor freigegebenes Profil und unverändert verifizierte E-Mail;
+  kein Pending-/Domain-/Verifizierung-Bypass.
+- `ff_set_function_membership`: ausschließlich GLOBAL_ADMIN; Mehrfachzuordnung,
+  Beendigung statt Löschung und nachvollziehbare Historie.
+- Rollen über vorhandenes `ff_set_role`: ausschließlich GLOBAL_ADMIN; MEMBER bleibt Basis
+  der Freigabe, scoped UNIT_ADMIN/FUNCTION_ADMIN benötigen ihren passenden Bereich.
+  Einheitswechsel entzieht bewusst nicht eigenständige scoped Adminrollen; gesondert prüfen.
+- Deaktivieren über vorhandenes `ff_set_account_status`; Reaktivieren ausschließlich über
+  `ff_reactivate_member` mit Pflichtgrund, zuvor gesperrtem freigegebenem Profil, weiterhin
+  verifizierter unveränderter Feuerwehr-E-Mail und aktueller Einheit. Keine Auth-Metadaten ändern,
+  keine Verifizierung simulieren und keinen neuen Rollenbestand automatisch erzeugen.
+- Alle tatsächlichen Änderungen werden im bestehenden Audit protokolliert. Gemeinsame
+  `ff.role_changes`-Transaktionssperre schützt auch beim Einheitsentzug den letzten aktiven
+  GLOBAL_ADMIN; ursprüngliche Rollen-/Deaktivierungssperren bleiben erhalten.
+  Ohne aktuelle Einheit ist kein geschützter Zugriff erlaubt. Historische Event-Roster,
+  Teilnahme-/Anwesenheitsdaten und Audit-Snapshots werden nicht verändert.
+
+**Anwendungsstatus:** 008 zunächst vorbereitet, vor gehosteter Anwendung vollständige
+PostgreSQL-CI einschließlich `supabase/tests/members.sql` prüfen. Nur die fehlende 008 anwenden,
+keine alten Migrationen wiederholen oder Testfixtures im DEV-Projekt ausführen.
+
+### UI und Prüfungen
+
+Desktop: linke Sidebar mit Original-Logo, vertikalen Icons/Links und aktivem Menüpunkt,
+Hauptinhalt ohne künstliche 1180px-Begrenzung. Bis 960px mobile Bottom-Navigation mit
+Safe-Area-Padding und mindestens 56px hohen Zielen, inklusive Administration nur für
+GLOBAL_ADMIN/UNIT_ADMIN. Light/Dark verwendet vorhandene Theme-Tokens.
+Kein Rollenwechsel, kein Demo-Provider und keine lokalen DEV-Mitgliederdaten im Layout.
+Die neue Mitgliederansicht lädt über ihr eigenes geprüftes RPC; fehlende 008 öffnet nichts
+und verhindert nicht die bestehende Auth-/Terminansicht. Änderungen an der eigenen Identität
+lösen sofortige erneute Freigabeprüfung aus; alle anderen Aktionen laden die zentrale Liste erneut.
+Gespeicherte Änderung und anschließender Ladefehler werden ausdrücklich getrennt gemeldet.
+
+- Lokal 70/70 Fachtests und gezieltes ESLint bestanden. Lokale Typprüfung durch weiterhin
+  fehlendes Supabase-SDK in `node_modules` blockiert; vollständige Typprüfung in Actions erforderlich.
+- Browser: bestehender gemeinsamer Termin-/Antwort-/Reload-Ablauf plus Mitgliedschaftswechsel,
+  Rollenvergabe/-entzug, Sonderfunktion, Deaktivierung/Reaktivierung, verbotene Member-Requests
+  und Sidebar/Bottom-Navigation bei 320/390/960/1366px. Explizit abgefangene synthetische
+  Endpunkte, keine Mail oder gehostete Mutation.
+- PostgreSQL: echte Migrationen/RPCs/RLS in ausschließlich wegwerfbarer `ff_dev_ci`;
+  scoped Sichtbarkeit, Historien, Rechteentzug, Pending-/E-Mail-/Null-Bypass, Deaktivierung,
+  Reaktivierung und alle drei Entzugspfade des letzten GLOBAL_ADMIN.
+- Die zurückgerollte DEV-Termin-Diagnose und die Benutzerbestätigung sind tatsächliche
+  Beobachtungen; daraus wird keine vollständige echte Zwei-Konten-API-Abnahme abgeleitet.
+  Mitgliederänderungen gegen reale Konten sind noch nicht abgenommen und werden nicht ohne
+  bewusste Auswahl als gehostete Testfixtures ausgeführt.
+
+Nach manueller Veröffentlichung mit vorhandenen privaten Testkonten: gemeinsamer synthetischer
+Termin, Antwortänderung und Reload; MEMBER darf keinen Termin anlegen. Danach gezielt am
+MEMBER-Testkonto Einheit/Funktion bzw. scoped Rolle ändern und über erneute Requests prüfen,
+ohne den einzigen GLOBAL_ADMIN zu verändern. Deaktivierung sperrt neue Zugriffe, Reaktivierung
+öffnet nur bei gültiger Einheit/Verifizierung. Desktop/Mobil/Hell/Dunkel prüfen. Keine Tokens,
+Passwörter oder personenbezogenen Kontodaten in öffentliche Nachweise aufnehmen.
+
 ## Quellen
 
 - [Supabase Passwortauthentifizierung](https://supabase.com/docs/guides/auth/passwords)
