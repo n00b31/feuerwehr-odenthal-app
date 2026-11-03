@@ -11,15 +11,131 @@ Keine produktiven Daten, kein neues Projekt, keine kostenpflichtigen Dienste.
 | Migrationen/Fremdschlüssel | Vier transaktionale Grundlagenmigrationen geprüft: 15 Tabellen, UUID-FKs, Bereichs-/Zeit-Constraints, Indizes, historische Mitgliedschaften/Roster, getrennte Antworten/Anwesenheit/Bestätigung. Ergänzung 005 liefert den aktuellen eigenen Zugriffsstatus. |
 | RLS und Grants | Alle Anwendungstabellen mit RLS, kein anonymer Datenzugriff, kein direktes Client-DML/TRUNCATE/TRIGGER. Schreiben nur über eingeschränkte RPCs. `confirmed_attendance` verwendet `security_invoker`. Kein Ersatz durch breite Schreib-Policies. |
 | Serverfunktionen | `SECURITY DEFINER` mit leerem `search_path`, explizit entzogenen PUBLIC-Rechten, aktuellen DB-Rollen statt User-Metadaten. Freigabe verlangt verifizierte Feuerwehr-E-Mail plus Einheit. Bootstrap nicht vom Browser aufrufbar. |
-| Autorisierte Supabase-Verbindung | Keine verfügbare Supabase-Integration, CLI oder Management-Token-Umgebungsvariable. Connector-Katalog lieferte eine unpassende Vercel-Integration; nicht angeboten oder verbunden. |
-| Projektstatus/Datenbank/Auth/API | **Nicht remote geprüft.** Project Ref, URL, Schlüssel, tatsächliche PostgreSQL-Version, Tabellenbestand, Hook, Verifizierung, Redirects, Mail-Empfänger/Limits und Security Advisor sind weiterhin offen. |
-| GitHub-Konfiguration | Bei Bestandsaufnahme keine Repository-Variablen vorhanden. Keine Schlüssel/Secrets oder Dashboard-Einstellungen gesetzt. |
+| Autorisierte Supabase-Verbindung | Am 03.11.2026 über das projektgebundene Supabase-MCP bestätigt: `orxinqhhbtjpkzwlfaxq`, URL `https://orxinqhhbtjpkzwlfaxq.supabase.co`. |
+| Projektstatus/Datenbank/Auth/API | MCP meldet `ACTIVE_HEALTHY`, PostgreSQL **17.11**. Vor Anwendung keine App-Tabellen, Migrationen oder Auth-Benutzer. Öffentliche Auth-Settings bestätigen E-Mail-Anmeldung, erlaubte Registrierung und verpflichtende Verifizierung; Anonymous/Telefon/OAuth aus. Ausführung des aktivierten Domain-Hooks durch die echte Auth-API am 03.11.2026 nachgewiesen, siehe Abnahme unten. Redirects, SMTP-/Team-Empfänger und weitere Auth-Sicherheitswerte bleiben unabhängig im Dashboard zu prüfen. |
+| GitHub-Konfiguration | `SUPABASE_DEV_URL` und `SUPABASE_DEV_PUBLISHABLE_KEY` sind vorhanden; beide Werte wurden mit der bestätigten Projekt-URL und dem aktiven modernen Publishable Key desselben Projekts verglichen und stimmen überein. Keine Schlüsselwerte im Bericht, keine Secrets geändert. |
 | In diesem Auftrag geändert | Nur dieses Repository/Feature-Branch: SDK, statischer PKCE-Callback, Login/Signup/Pending/Freigabe, RLS-Leseadapter, Migration 005, Preflight, Tests, Actions und Dokumentation. |
-| Im Supabase-Projekt geändert | **Nichts.** Keine Migration, kein Testkonto, keine Mail, kein Bootstrap, keine Planänderung. |
+| Im Supabase-Projekt geändert | Fehlende Migrationen **001–005** unverändert angewendet und nachgeprüft, einschließlich fünf Einheiten/drei Sonderfunktionen. Später zwei echte Testregistrierungen durch den Benutzer, ausdrücklich autorisierter erster GLOBAL_ADMIN-Bootstrap über MCP und zweite MEMBER-Freigabe durch den Benutzer über die DEV-Administration. Keine Planänderungen, simulierte Mailverifizierung oder destruktive Bereinigung. |
 | Unabhängige Demo | `n00b31/feuerwehr-odenthal-demo` bleibt unverändert. Kein Codeimport, Build-Download, Datenzugriff oder Deployment aus diesem Repository dorthin. |
 
-Die öffentliche DEV-URL wird erst nach einem bewusst freigegebenen Main-Merge neu veröffentlicht.
-Ein Feature-Branch/PR veröffentlicht weder Pages noch Datenbankänderungen.
+Die Auth-DEV-Oberfläche wurde nach dem bewussten Benutzermerge von PR #4 veröffentlicht.
+Ein Feature-Branch/PR allein löst weder Pages-Veröffentlichung noch Datenbankänderungen aus.
+Die unten protokollierte manuelle MCP-Anwendung wurde separat ausdrücklich freigegeben.
+
+### Aktivierungsnachweis vom 03.11.2026
+
+Auf ausdrücklichen Einrichtungsauftrag wurden die geprüften Migrationen aus Commit
+`1b473f0b3531a8d32a4b4ab703d5f076fcebc02f` über MCP einzeln angewendet.
+Keine bestehende Migration musste wiederholt werden. Die von MCP vergebenen Historienversionen
+unterscheiden sich von den Dateipräfixen:
+
+| Quelldatei | Remote-Version / Name | SQL-SHA256 |
+|---|---|---|
+| `20261103000100_foundation.sql` | `20261103132058` / `ff_001_foundation` | `f4fcbc2527be0b206ba56c1045df68841a4e4fbeb30ba88d65169f0e71633c23` |
+| `20261103000200_identity_and_rls.sql` | `20261103132117` / `ff_002_identity_and_rls` | `fcd715cf8d4f3eea212b907545e214c5b7ce64689f3813641d069cc431e5d64e` |
+| `20261103000300_privileged_commands.sql` | `20261103132146` / `ff_003_privileged_commands` | `c713f78075a98060d72ee2a36fed3f01c9b9331405d8f9183841116c5f144dab` |
+| `20261103000400_reference_data.sql` | `20261103132152` / `ff_004_reference_data` | `dd7e6bd929c91267e29b068292d1ffc1ccd4cd860c549ea4a88ab250832b5dc9` |
+| `20261103000500_client_access_status.sql` | `20261103132159` / `ff_005_client_access_status` | `15f1992e5379bfbb4ae37c1cf543af281f27c6f853ff1eb15f70a30c8a2e30f7` |
+
+Prüfsummen wurden über UTF-8-SQL nach CRLF→LF und Entfernen abschließender Whitespace-Zeichen
+gebildet; alle fünf gespeicherten SQL-Inhalte stimmen so mit den lokalen Quelldateien überein.
+Vor einem späteren CLI-`db push` diese Zuordnung kontrolliert berücksichtigen: **kein blindes
+Wiederanwenden, Umbenennen bereits versionierter Dateien oder automatisches `migration repair`.**
+
+Remote bestätigt: 15 Tabellen mit jeweils SELECT-RLS-Policy, 33 Fremdschlüssel, 31 gültige Indizes,
+keine unvalidierten Constraints, kein anonymer Tabellenzugriff und keine direkten Client-Schreibrechte.
+`confirmed_attendance` ist `security_invoker`; alle App-Definer-Funktionen haben einen leeren
+`search_path`. Auth-Insert/Pending-Trigger und unveränderbare Audit-/Bestätigungs-Trigger existieren.
+Bootstrap und Audit-Schreibhelper sind nicht durch Browserrollen aufrufbar. Der Auth-Service besitzt
+das Ausführungsrecht auf den Domain-Hook. Dieser Grant allein war beim Migrationslauf noch kein
+Aktivierungsnachweis; der nachfolgende Auth-API-Test hat die Ausführung inzwischen bestätigt.
+
+Remote ausgeführt: sieben reine Domain-/Provider-Hook-Fälle als Operator, anonyme
+Tabellen-/RPC-Sperren, alle fünf Rollenprädikate für eine nicht identifizierte Sitzung,
+RLS-Lesezugriffe ohne Freischaltung sowie 14 abgewiesene privilegierte/Spaltenoperationen.
+Die Prüftransaktion wurde zurückgerollt; keine Auth-Benutzer oder Fach-Testdaten angelegt.
+Ein Versuch, `supabase_auth_admin` zu übernehmen, wurde vom gehosteten Betreiberrollenmodell
+verweigert; der Hook wurde stattdessen als Operator geprüft und sein Auth-EXECUTE-Grant separat
+bestätigt. Event-RPCs verwenden `SELECT FOR UPDATE`, weshalb die reine Lese-Transaktion hierfür
+nicht genügte; diese negativen Aufrufe liefen ohne Datenänderungen in der zurückgerollten Transaktion.
+
+Die erfolgreichen [PostgreSQL-17-Rollentests derselben Migrationen](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/41637953750)
+decken aktive MEMBER/UNIT_ADMIN/FUNCTION_ADMIN/FIRE_CHIEF/GLOBAL_ADMIN, fremde Bereiche,
+Delegation nur dieser Termininstanz, Widerruf, Verifizierung und Freigabe ab.
+**Das ersetzt keinen Rollen-/JWT-/PostgREST-Test mit real verifizierten Testkonten im DEV-Projekt.**
+Die CI-Fixture wurde nicht im gehosteten Projekt ausgeführt.
+
+Der Security Advisor meldet zehn Warnungen
+[`authenticated_security_definer_function_executable`](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable)
+für die absichtlich freigegebenen, intern berechtigungsgeprüften RPCs. Das ist eine zu
+reviewende Vertrauensgrenze, kein Anlass, deren Prüfungen oder RLS abzuschalten.
+In diesem Lauf wurden keine weiteren Security-Advisor-Meldungen zurückgegeben; das ist kein
+Nachweis einer vollständig sicheren Auth-/Betriebskonfiguration.
+
+### Erfolgreiche negative Auth-API-Abnahme am 03.11.2026
+
+Nach bestätigter Dashboard-Aktivierung durch den Benutzer wurden **genau zwei** Requests an
+`POST https://orxinqhhbtjpkzwlfaxq.supabase.co/auth/v1/signup` gesendet. Verwendet wurden der
+aktive Publishable Key und je ein zufälliges, nicht ausgegebenes oder gespeichertes Testpasswort.
+Beide Adressen liegen unter der reservierten Beispieldomain `example.com`:
+
+| Fall | Synthetische Adresse | UTC / Supabase Request-ID | Ergebnis |
+|---|---|---|---|
+| Fremddomain | `auth-hook-negative-20261103@outside.example.com` | `14:39:37.534Z` / `01a1a1d9-f123-7346-9303-c3d066581d7f` | HTTP **403**, konkrete Hook-Meldung |
+| Ähnlich benannte Domain | `auth-hook-negative-20261103@feuerwehr-odenthal.de.example.com` | `14:39:37.816Z` / `01a1a1d9-f30f-7472-a138-748d3852765c` | HTTP **403**, konkrete Hook-Meldung |
+
+Die Meldung lautete in beiden Antworten exakt:
+`Registrierung nur mit Feuerwehr-E-Mail und E-Mail-Anmeldung erlaubt.`
+Das API-Feld `code` war jeweils `unknown`; es wurde ausdrücklich nicht als Beweis verwendet.
+HTTP-Status und funktionsspezifische Meldung stimmen mit dem installierten Hook überein und
+unterscheiden sich von `Feuerwehr email required` des separaten DB-Triggers sowie von einem
+generischen Datenbank-, Mail- oder Rate-Limit-Fehler. Damit ist der negative Pfad
+**Auth-API → konfigurierter Domain-Hook → Ablehnung** nachgewiesen.
+
+MCP-Snapshots vor (`14:38:57.101972Z`) und nach (`14:39:44.542902Z`) den Requests:
+`auth.users`, `auth.identities` und `public.profiles` jeweils **0 → 0**. Die deterministischen
+SHA256-Gesamtprüfsummen aller Zeilen dieser Tabellen sind vor/nach identisch. Zusätzlich wurden
+die beiden Testadressen und sämtliche Konten außerhalb der erlaubten Domain abgefragt: jeweils
+**0** Treffer. Es gab bereits vorher keine Benutzerkonten; daher wurden weder neue unerlaubte
+Konten angelegt noch vorhandene Konten verändert. Keine Bereinigung/Löschung ausgeführt.
+
+Keine positive Registrierung, keine Bestätigungs-/Resend-Anfrage und keine Mail versandt;
+der Hook bricht vor Kontoanlage und Mailversand ab. Kein HTTP 429, kein Retry und kein
+wiederholtes Ausreizen des Limits. Diese negative Abnahme bestätigt **nicht** die positive
+Mailzustellung, den PKCE-Rückweg oder die Administratorfreigabe eines echten Testkontos.
+
+### Weitere Aktivierungsgrenzen
+
+Nachmeldung des Benutzers vom 03.11.2026: E-Mail/Registrierung, Site URL, Redirect URL und die
+beiden GitHub-Variablen sind eingerichtet; Before User Created wurde anschließend aktiviert.
+Die Hook-Ausführung und beide Variablenwerte wurden unabhängig bestätigt. Die folgenden Dashboard-Prüflücken beziehen
+sich auf die unabhängige Prüfung durch den Agenten, nicht auf eine Behauptung, dass der Benutzer
+diese Einstellungen noch nicht gesetzt hätte.
+
+- MCP bietet keine Auth-Konfigurations- oder Organisationsteam-Management-Funktion. Der zusätzlich
+  geöffnete Dashboard-Browser wurde zur Anmeldung umgeleitet. Daher Site URL, Redirect-Allowlist,
+  Mailvorlagen, Passwort-/Sessionregeln, SMTP-Modus und autorisierte Empfänger
+  **nicht gelesen oder geändert**; siehe Abschnitt 4.
+- Ein aktiver moderner Publishable Key wurde bestätigt und nicht in Git eingetragen.
+  Die beiden vom Benutzer angelegten GitHub-Variablen stimmen mit dem vorhandenen Projekt und
+  seinem aktiven Publishable Key überein. Mit dem öffentlichen Projekt-Key liefern anonyme REST-Zugriffe auf `units` und
+  `ff_my_access()` jeweils **HTTP 401**. `Accept-Profile: ff_private` liefert **HTTP 406 / PGRST106**;
+  die API nennt ausschließlich `public` und `graphql_public` als exponierte Schemas.
+  `ff_private` ist somit nicht exponiert; ob die zusätzliche GraphQL-Fläche benötigt wird,
+  bleibt im Dashboard zu entscheiden.
+- Vor der positiven Abnahme gab es **0 Auth-Benutzer, 0 Profile und 0 globale Administratoren**. Keinen Admin aus
+  einer geratenen Adresse erzeugen und keine Verifizierung simulieren. Zuerst eine tatsächlich
+  autorisierte Feuerwehr-Testadresse registrieren und verifizieren; erst dann die geprüfte UUID
+  und fachlich bestätigte Einheit für den Operator-Bootstrap aus Abschnitt 5 verwenden.
+- Die implementierte Callback-Route ist exakt
+  `https://n00b31.github.io/feuerwehr-odenthal-app/auth/callback/`.
+  Vor Veröffentlichung von PR #4 lieferte sie **HTTP 404**. Nach dem Benutzermerge und
+  erfolgreichem Main-Deployment liefert sie **HTTP 200**, ebenso alle elf eingebundenen
+  JS-/CSS-Dateien. Der positive E-Mail-Ablauf wurde erst danach gestartet. Kein Ersatz-Callback.
+- Während Migration und Hook-Abnahme wurden weder Main noch die unabhängige Demo durch den
+  Agenten geändert. Anschließend hat der Benutzer PR #3 und PR #4 selbst gemergt; Main steht auf
+  `eab9a90d6ccfa63bf023ab7ee42df064a70cb2cb`. Die unabhängige Demo bleibt auf
+  `4f6ffab14ddfba290248e3d6151c67f683a163e3`.
 
 ## 2. Bestehendes Projekt autorisiert prüfen
 
@@ -48,6 +164,9 @@ Ein Feature-Branch/PR veröffentlicht weder Pages noch Datenbankänderungen.
 | `20261103000400_reference_data.sql` | Fünf konfigurierbare Einheiten, Pilot Scheuren, drei Sonderfunktionen; keine Personen, Auth-Konten oder Termine. |
 | `20261103000500_client_access_status.sql` | `ff_my_access()`: eigene Identität, wirksamer Zugriffsstatus und nur bei Freigabe Einheit/Rollen. Dieselbe aktuelle DB-Regel wie RLS, nicht nur `profiles.status`. |
 
+**Beim dokumentierten Projekt sind 001–005 bereits angewendet; nicht erneut ausführen.**
+Die folgenden allgemeinen Hinweise gelten für einen nachweislich noch nicht migrierten Zustand.
+
 **Bei tatsächlich leerem Projekt:** Preflight reviewen, dann Dateien 001–005 einzeln, vollständig und
 in Reihenfolge im Dashboard-SQL-Editor ausführen. Jede Datei besitzt `BEGIN`/`COMMIT`; bei Fehler
 abbrechen, Ursache prüfen, keine Folgedateien blind ausführen.
@@ -71,7 +190,9 @@ Nach Anwendung: alle 15 Tabellen auf RLS prüfen, FK-/Spaltenlayout und Grants e
 
 ## 4. Manuelle Supabase-Dashboard-Einstellungen
 
-Alle Werte in dieser Tabelle sind **erforderliche Sollwerte**, nicht remote bestätigter Ist-Zustand.
+Die Tabelle enthält **erforderliche Sollwerte**. Remote bestätigte Teilwerte und verbleibende
+Prüflücken stehen in Abschnitt 1. Der Hook ist über negative Auth-API-Tests bestätigt;
+die Dashboard-URL-Werte sind vom Benutzer eingerichtet, aber noch nicht unabhängig ausgelesen.
 
 | Bereich | Einstellung / Prüfung |
 |---|---|
@@ -87,12 +208,54 @@ Alle Werte in dieser Tabelle sind **erforderliche Sollwerte**, nicht remote best
 | Schlüssel | Bestehende Project URL und **Publishable Key** (`sb_publishable_…`) verwenden. Kein Secret-/`service_role`-/Management-Key, DB-Passwort oder alter JWT-Key im Browser. Keine Schlüsselrotation ohne Anlass. |
 | Sicherheit | RLS, Funktions-/Tabellengrants, OTP-/Token-/Sessionlaufzeiten, Rate Limits und Security Advisor prüfen. Admin-MFA, Recovery/Backups und eigenes SMTP vor echter Nutzung ergänzen. |
 
+### Before User Created exakt aktivieren
+
+Im vorhandenen Projekt unter
+[Authentication → Hooks](https://supabase.com/dashboard/project/orxinqhhbtjpkzwlfaxq/auth/hooks)
+den Hook **Before User Created** hinzufügen bzw. bearbeiten:
+
+1. Als Implementierung **Postgres Function**, nicht HTTP/Edge Function, auswählen.
+2. Schema **`ff_private`**, Funktion **`before_user_created`** auswählen.
+   Die vorhandene Signatur lautet `ff_private.before_user_created(event jsonb) returns jsonb`.
+3. Speichern und prüfen, dass der Hook als aktiviert angezeigt wird.
+   Die resultierende URI lautet `pg-functions://postgres/ff_private/before_user_created`.
+   Kein HTTP-Secret, keine neue Funktion und keine Data-API-Exposition von `ff_private` nötig.
+
+Migration 002, Zeilen 95–123, enthält Funktion und Rechte. Am bestehenden Projekt erneut bestätigt:
+`supabase_auth_admin` besitzt `USAGE` auf `ff_private` und `EXECUTE` auf genau
+`ff_private.before_user_created(jsonb)`. `PUBLIC`, `anon` und `authenticated` haben kein
+EXECUTE-Recht auf diesen Hook. Die Funktion ist absichtlich **SECURITY INVOKER**, liest keine
+Tabellen und benötigt deshalb weder zusätzliche Tabellenrechte noch neue RLS-Policies.
+Keine pauschalen Rechte auf alle privaten Funktionen vergeben; die vorhandenen Grants müssen
+nicht erneut ausgeführt werden.
+
+Erneute Live-SQL-Prüfung: **8/8** Fälle bestanden (exakte Domain/Großschreibung erlaubt;
+Fremddomain, ähnlich benannte Domain, Subdomain, anonyme Identität, anderer Provider und fehlende
+Identität abgewiesen). Zusätzlich wurden drei tatsächlich versuchte `auth.users`-Inserts mit
+verbotenen Domains durch den bereits aktiven Pending-Profil-Trigger mit SQLSTATE `42501` und
+`Feuerwehr email required` abgewiesen. Die Transaktion wurde zurückgerollt; keine Konten
+angelegt oder E-Mails versandt. Damit ist die serverseitige DB-Schranke nachgewiesen.
+
+**Abnahmegrenze:** Ein direkter Funktionsaufruf oder der separate Insert-Trigger allein beweist
+nicht, dass GoTrue den Dashboard-Hook aufruft. Inzwischen ist dieser negative Pfad durch
+die zwei tatsächlichen Auth-API-Requests aus Abschnitt 1 nachgewiesen. Allgemeines Prüfkriterium:
+Eine abgewiesene Registrierung über die Auth-API muss mit dem Hook-Fehler
+`Registrierung nur mit Feuerwehr-E-Mail und E-Mail-Anmeldung erlaubt.` und ohne neuen
+Auth-Benutzer geprüft werden. Ein generischer Datenbankfehler, Mail-Empfängerfehler oder
+Rate-Limit genügt dafür nicht. Einen positiven Registrierungstest ausschließlich mit einer
+autorisierten Feuerwehr-Testadresse durchführen; keine E-Mail-Verifizierung simulieren.
+Der Domain-Hook-Prüfblocker ist damit behoben. Das ist keine Merge-/Deployment-Freigabe;
+es wurde nichts automatisch gemergt oder veröffentlicht.
+
 ### Integrierter E-Mail-Versand
 
 Standard-Supabase-Mail ist keine produktive Versandlösung. Laut Supabase-Dokumentation werden
 ohne eigenes SMTP nur Adressen aus dem Supabase-Organisationsteam angeschrieben; das dokumentierte
-Standardlimit liegt bei **2 Nachrichten/Stunde** und kann sich ändern. Die tatsächlichen Limits
-des bestehenden Projekts wurden nicht geprüft.
+Standardlimit wurde zuvor mit **2 Nachrichten/Stunde** dokumentiert und kann sich ändern.
+Die am 03.11.2026 erneut gelesene Supabase-Dokumentation bestätigt autorisierte Teamadressen und
+sehr niedrige variable Limits, liefert den Zahlenwert jedoch als dynamischen Platzhalter.
+Die tatsächlichen Limits und autorisierten Empfänger des bestehenden Projekts wurden nicht geprüft;
+ohne diese Bestätigung keine Testmails versenden.
 
 Benötigt werden zwei ausdrücklich autorisierte DEV-Testadressen (erster Administrator und Mitglied),
 die gleichzeitig unter `@feuerwehr-odenthal.de` erreichbar sind. Keine beliebigen synthetischen
@@ -237,13 +400,13 @@ Ein SMTP-Wechsel benötigt nur Supabase-Konfiguration.
 
 ## 8. Automatisierter und realer Abnahmetest
 
-| Prüfung | Automatisiert | Reale DEV-Abnahme noch erforderlich |
+| Prüfung | Automatisiert | Reale DEV-Abnahme / verbleibende Prüfungen |
 |---|---|---|
-| Registrierung | Exakte Domain/Passwort/Name; SDK-Signup-Payload ohne Rollen. | Autorisierte Testadresse, Auth-Hook und echte Mailzustellung. |
-| E-Mail | Synthetischer PKCE-Codeaustausch, Callback statisch erreichbar, URL bereinigt, kein fremdes `next`, Fehler/Wiederholung. | Echter Bestätigungslink im selben Browser, abgelaufener/zweiter Link, anderer Browser. |
+| Registrierung | Exakte Domain/Passwort/Name; SDK-Signup-Payload ohne Rollen. | Auth-Hook negativ sowie zwei autorisierte Testregistrierungen mit echter Mailzustellung abgenommen. |
+| E-Mail | Synthetischer PKCE-Codeaustausch, Callback statisch erreichbar, URL bereinigt, kein fremdes `next`, Fehler/Wiederholung. | Echter Bestätigungslink im selben Browser kooperativ abgenommen; abgelaufener/zweiter Link und anderer Browser noch offen. |
 | Pending | Kein geschützter Request vor Freigabe, auch direkte Unterseiten bleiben gesperrt. SQL prüft fehlende Verifizierung und Metadaten-Eskalation. | Echte User-Tokens gegen REST: keine fremden oder geschützten Zeilen. |
-| Freigabe | Global-Admin wählt Einheit, unbestätigt/ohne Auswahl gesperrt; RPC-Argumente geprüft. SQL schützt Rechte und letzten Admin. | Bootstrap und Freigabe durch zwei getrennte echte Testkonten/Browser. |
-| Erneute Anmeldung | Vollständiger Browserablauf Signup → Bestätigung → Pending → Admin → Freigabe → Logout → Mitgliedlogin → RLS-Datenansicht. | Derselbe Ablauf mit echtem Auth-/Mail-/PostgREST-Gateway. |
+| Freigabe | Global-Admin wählt Einheit, unbestätigt/ohne Auswahl gesperrt; RPC-Argumente geprüft. SQL schützt Rechte und letzten Admin. | Bootstrap und anschließende UI-Freigabe mit zwei getrennten echten Testkonten/Browserprofilen abgenommen; MCP bestätigt Audit, Rollen und Einheit. |
+| Erneute Anmeldung | Vollständiger Browserablauf Signup → Bestätigung → Pending → Admin → Freigabe → Logout → Mitgliedlogin → RLS-Datenansicht. | Derselbe positive Ablauf mit echtem Gateway kooperativ abgenommen; unabhängige negative JWT-/REST-Prüfungen bleiben offen. |
 | Entzug/Fehler | Sperrung, fehlende Einheit, fehlende Migration, URL-/Mailfehler schließen Zugriff; SQL prüft E-Mailwechsel, Ban, Widerruf mit gleicher Identität. | Token-Refresh, abgelaufene/widerrufene Sitzung, konkurrierende Aktionen und echte Netzwerkfehler. |
 | UI/Build | Statischer Export, Demo-Regression, mobile DEV-Ansicht, Hell/Dunkel und Axe. | Physisches iPhone/Android/Safari, kein Hardware-Nachweis durch Chromium-Emulation. |
 
@@ -266,9 +429,125 @@ Ein SMTP-Wechsel benötigt nur Supabase-Konfiguration.
 10. Ergebnis und offene Punkte privat dokumentieren. Nicht behaupten, Fixture-Tests hätten diesen
     realen Abnahmelauf ersetzt. Keine Testkonten oder Daten destruktiv automatisiert bereinigen.
 
-## 9. Noch offen / nächste Entwicklungsschritte
+### Erfolgreiche kooperative reale Abnahme am 03.11.2026
 
-- Autorisierte Verbindung und echte Projektkonfiguration, kontrollierte Migration, Mail-/API-Abnahme.
+Nach dem Benutzermerge von PR #4 wurde dessen tatsächlicher
+[Main-Lauf 41660067350](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/41660067350)
+abgewartet: `build`, `auth`, `dev-export` und `deploy` erfolgreich, Deployment-Commit
+`eab9a90d6ccfa63bf023ab7ee42df064a70cb2cb`.
+Der [Main-Datenbanklauf 41660067340](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/41660067340)
+ist ebenfalls erfolgreich. Die öffentliche Startseite und der exakte Callback liefern HTTP 200;
+alle elf im Callback eingebundenen JS-/CSS-Dateien ebenfalls.
+Der Browser zeigt die echte Supabase-DEV-Anmeldung ohne Demo-Profilwechsel.
+Eine zunächst noch alte Browseransicht wurde durch frische Navigation auf den neuen
+veröffentlichten Stand ersetzt; nicht als Auth-Fehler oder bewiesener Service-Worker-Fehler gewertet.
+
+| Schritt | Tatsächlicher Nachweis |
+|---|---|
+| Erste Registrierung / Mail / Callback | Benutzer registrierte eine autorisierte Feuerwehr-Testadresse, öffnete die Bestätigung im selben Browserprofil und meldete die Pending-Anzeige. MCP bestätigte echte E-Mail-Verifizierung, erfolgte Anmeldung, `pending`, null Rollen und null Einheiten. |
+| Erster Administrator | Zielkonto und Einheit Scheuren vorab ausdrücklich vom Benutzer bestätigt. Einmaliger Aufruf des vorhandenen privaten Bootstrap-RPCs durch MCP; keine Direktänderung an Auth-Verifizierungsfeldern. MCP bestätigt `approved`, passende verifizierte E-Mail, MEMBER und GLOBAL_ADMIN, Scheuren sowie genau einen `dev_bootstrap`-Auditeintrag. |
+| Administrator-Neuanmeldung | Benutzer meldete sich ab/erneut an und bestätigte geschützte DEV-Inhalte und Administration. |
+| Zweite Registrierung / Mail / Zugriffssperre | Zweite autorisierte Testadresse in getrenntem Browserprofil registriert und dort bestätigt. Benutzer meldete Pending ohne geschützte Inhalte; MCP bestätigte Verifizierung, Anmeldung, `pending`, null Rollen und null Einheiten. |
+| Freigabe über tatsächliche Administration | Benutzer gab das zweite Konto in der DEV-Administration für Scheuren frei. MCP bestätigt `approved`, erstes Testkonto als `approved_by`, exakt MEMBER ohne Adminrolle, Scheuren und genau einen `member_approved`-Auditeintrag mit diesem Administrator als Akteur. Keine Freigabe des zweiten Kontos durch Operator-SQL. |
+| MEMBER-Neuanmeldung | Benutzer bestätigte nach Ab-/Anmeldung geschützte DEV-Inhalte und keine verfügbaren Administrator-Freigabefunktionen. |
+| Schlussbestand | MCP bestätigt zwei Auth-Konten, beide E-Mails verifiziert, keine fremden Domains und genau eine aktive GLOBAL_ADMIN-Zuweisung. Keine Testkonten gelöscht oder Verifizierungen simuliert. |
+
+**Nachweisgrenze:** Mailbox, Passworteingabe und angemeldete private Browserprofile wurden vom
+Benutzer bedient. Der Same-Browser-Mail-/Callback-Ablauf ist kooperativ abgenommen und durch
+reale Auth-/Profil-/Audit-Zustände gestützt. Die Implementierung tauscht am tatsächlichen Callback
+den Code mit `exchangeCodeForSession` aus und entfernt URL-Credentials.
+Es wurde kein Token-/Verifier-/Netzwerkprotokoll aus den privaten Browsern aufgezeichnet;
+das ist kein unabhängiger Mitschnitt des PKCE-Protokolls und kein vollständiger negativer
+JWT-/PostgREST-Rollentest. Die weiteren vier Scoped-/Leitungsrollen und Delegationswiderrufe
+bleiben für einen gesonderten realen API-Abnahmelauf offen. Keine Mailadressen, Konto-UUIDs,
+Passwörter, Bestätigungslinks oder Sitzungstokens in diesem öffentlichen Bericht.
+Keine zusätzlichen automatischen Mails/Resends und keine erneute Migration ausgelöst.
+
+## 9. Merge- und Veröffentlichungsnachweis
+
+Prüfstand 03.11.2026 nach erfolgreicher negativer Auth-API-Abnahme und anschließendem
+**Merge von PR #3 durch den Benutzer um 14:54 UTC und #4 um 15:04 UTC**:
+
+| Pull Request | GitHub-Zustand / Checks | Einordnung |
+|---|---|---|
+| [#3](https://github.com/n00b31/feuerwehr-odenthal-app/pull/3), Grundlage `c024592c514859b8a010230b9c2e14b5a64d1e51` | Vom Benutzer gemergt; Main-Merge-Commit `054bdc27c76e7068fd829915bba16e173767bc00`. | Main-Build/Deploy und Datenbankchecks erfolgreich. Dieser Zwischenstand zeigt weiterhin die lokale Demo-Oberfläche am ursprünglichen App-Pfad. |
+| [#4](https://github.com/n00b31/feuerwehr-odenthal-app/pull/4), `1b473f0b3531a8d32a4b4ab703d5f076fcebc02f` | Vom Benutzer gemergt; Main-Merge-Commit `eab9a90d6ccfa63bf023ab7ee42df064a70cb2cb`, Main-Build/Deploy und DB erfolgreich. | Auth DEV veröffentlicht und kooperativer Zwei-Konten-Abnahmelauf erfolgreich. Ergänzender Dokumentationsnachweis separat im Entwicklungsbranch, noch nicht in Main. |
+
+Der Main-Zwischenstand nach #3 wurde unabhängig von verzögerten PR-Basismetadaten geprüft:
+Sein Quellbaum `f4f4e8e7485bc91bff9a7cfd9ce390ead965e9b4` ist exakt der Quellbaum von #3,
+und dessen Head ist ein Elterncommit des Main-Merge-Commits sowie ein Vorfahr von #4.
+Main enthält damit keine zusätzlichen Quelländerungen, die der geprüfte #4-Stand noch nicht abdeckt.
+Ein Merge von Main in den lokalen Feature-Branch oder ein Rebase war hierfür nicht notwendig
+und wurde nicht ausgeführt.
+
+Der frühere [Pages-Lauf 41656066305](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/41656066305)
+bleibt als fehlgeschlagener Nachweis erhalten: Axe meldete `color-contrast` an `.button` im
+Änderungsprotokoll (`tests/demo.spec.ts:235`). Der Benutzer hat die Ursachenbehebung ausdrücklich
+zurückgestellt und nach dem Merge von #3 einen neuen Test beauftragt. **Keine Regel, kein Test
+und kein Workflow-Gate wurden deaktiviert.** Der Befund trat im folgenden neuen Lauf nicht auf;
+seine Ursache wurde dadurch nicht behoben oder abschließend erklärt.
+
+**Frische Prüfungen auf dem unveränderten #4-Head:**
+
+- [Pages-Lauf 41658448448](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/41658448448):
+  **59/59** Fach-/Konfigurationstests, TypeScript, ESLint, Icons, statische Builds,
+  **19/19** Demo-Browsertests, **6/6** Auth-Browsertests sowie `dev-export` erfolgreich.
+- Der frische DEV-Export enthält die bestätigte tatsächliche Project URL und den aktiven
+  Publishable Key aus den Repository-Variablen. Export-Schutz gegen Secret-Key-Werte und
+  synthetische CI-Konfiguration erfolgreich; `deploy` auf dem Feature-Branch erwartungsgemäß
+  **übersprungen**. Kein Feature-Export veröffentlicht.
+- [DB-Lauf 41658455056](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/41658455056):
+  alle Migrationen und Rollen-/RLS-/RPC-Prüfungen in isoliertem PostgreSQL erfolgreich.
+- Das heruntergeladene `supabase-dev-export`-Artefakt wurde zusätzlich unverändert geprüft:
+  reale URL/aktiver Public Key eingebettet, Manifest `start_url`/`scope` exakt
+  `/feuerwehr-odenthal-app/`, statische Callback-Datei vorhanden, Export-Schutz erneut bestanden.
+  Ein kurzzeitig lokal gestarteter vorhandener Preview-Server liefert Start, Callback,
+  Termine, Dokumente, Statistik, Profil, Administration und Manifest mit **HTTP 200**;
+  alle **11** im Callback eingebundenen JS-/CSS-Dateien ebenfalls HTTP 200.
+  Danach wurde der Preview-Server beendet. Kein echter Login oder neuer Mailtest durchgeführt.
+- Der durch den Benutzermerge ausgelöste [Main-Lauf 41658265089](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/41658265089)
+  hat Build/Deploy erfolgreich abgeschlossen. Diese Veröffentlichung stammt aus #3, nicht #4.
+
+Die vorgeschlagene Reihenfolge **#3 → #4 → Main-Deployment → reale Auth-/Freigabe-Abnahme**
+ist inzwischen durch Benutzermerges und den oben protokollierten Abnahmelauf erledigt.
+Der Agent hat keinen Merge und keine zusätzliche Main-Veröffentlichung ausgelöst.
+Migrationen 001–005 wurden nicht wiederholt; die unabhängige Demo bleibt unverändert.
+Der ergänzende Dokumentationsnachweis wird auf ausdrücklichen Sicherungsauftrag in
+`feature/supabase-auth-dev` versioniert; er ist noch nicht Bestandteil von Main.
+
+### Sicherungsstand vor Terminverwaltung DEV 0.3
+
+Am 03.11.2026 erneut geprüft:
+
+- Aktueller Entwicklungsbranch `feature/supabase-auth-dev`; relevante Änderungen ausschließlich
+  `README.md` und `docs/supabase-dev-setup.md`. Keine Funktion, Migration oder Build-Konfiguration
+  geändert. Eine separate ungetrackte `.github/github-app.yml` ist nicht Bestandteil dieser Sicherung.
+- Der Auth-Quellbaum des bisherigen Branch-Heads `1b473f0b3531a8d32a4b4ab703d5f076fcebc02f`
+  stimmt exakt mit Main `eab9a90d6ccfa63bf023ab7ee42df064a70cb2cb` überein;
+  dieser Head ist außerdem ein Vorfahr von Main. PR #3 und #4 sind gemergt, keine offenen PRs
+  zum Prüfzeitpunkt. Keine Rebase-, Checkout- oder Merge-Operation erforderlich.
+- Beide Main-Actions aus dem oben verlinkten Veröffentlichungsnachweis sind erfolgreich.
+  Die aktive GitHub-Pages-Veröffentlichung zeigt exakt auf diesen Main-Commit;
+  Startseite und `/auth/callback/` erneut HTTP 200.
+- `v0.2-auth-dev` existiert zum Prüfzeitpunkt weder lokal noch auf GitHub und wird **noch nicht
+  erstellt**, weil der ergänzte Abnahmenachweis nur im Entwicklungsbranch gesichert ist.
+  Kein vorhandener Tag wird überschrieben.
+
+**Noch erforderlich für den vollständigen Main-Snapshot:** Den Dokumentationscommit über einen
+separaten Pull Request prüfen und bewusst manuell in Main integrieren. Danach den tatsächlichen
+Main-Commit, erfolgreiche Actions und die weiterhin funktionierende DEV-Anwendung erneut prüfen.
+Erst dann `v0.2-auth-dev` exakt auf den so bestätigten vollständigen Main-Commit setzen und pushen.
+Keinen automatisch gewählten neueren Terminverwaltungsstand oder bloß den damaligen
+Merge-Commit ohne ergänzten Nachweis als vollständige Sicherung markieren.
+
+## 10. Noch offen / nächste Entwicklungsschritte
+
+- Zurückgestellt: Ursache des früheren Kontrastbefunds klären; im neuen unveränderten Lauf
+  bestanden alle Tests. Der konfigurierte DEV-Export ist inzwischen geprüft.
+- Weitere Dashboard-Auth-/Mail-Konfiguration und organisatorische Empfängerliste prüfen.
+  Zwei autorisierte Testadressen, erster verifizierter GLOBAL_ADMIN und reale MEMBER-Freigabe
+  sind abgenommen; umfassende reale Rollen-/Delegations-/JWT-API-Abnahme bleibt offen.
+- Vor künftigen CLI-Migrationen die abweichenden MCP-Historienversionen aus Abschnitt 1 abgleichen.
 - Vollständige Backend-CRUD-/Serien-/Mitgliedschafts-RPCs und dazugehörige UI-Adapter.
 - Vollständige DEV-Anwesenheits-/Delegations- und Antwort-Oberfläche mit vorhandenen RPCs.
 - Passwort-Reset, Admin-MFA, SMTP, Recovery/Backups, Datenschutz/Retention und unabhängige Audit-Aufbewahrung.
