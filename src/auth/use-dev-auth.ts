@@ -24,7 +24,7 @@ function completeCallback(client: SupabaseClient) {
   window.history.replaceState(null, "", publicPath("/auth/callback/"));
   if (!code && !failed) return Promise.resolve();
   callbackExchange = (async () => {
-    if (failed || !code) throw { code: "flow_state_not_found" };
+    if (failed || !code) throw Object.assign(new Error("Bestätigung fehlgeschlagen."), { code: "flow_state_not_found" });
     const { error } = await client.auth.exchangeCodeForSession(code);
     if (error) throw error;
   })();

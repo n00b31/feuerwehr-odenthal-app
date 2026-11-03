@@ -3,9 +3,9 @@ import AxeBuilder from "@axe-core/playwright";
 import { publicPath } from "../src/config/app";
 
 // These are intercepted protocol fixtures, not working accounts, keys or tokens.
-const memberId = "10000000-0000-0000-0000-000000000001";
-const adminId = "10000000-0000-0000-0000-000000000002";
-const unitId = "20000000-0000-0000-0000-000000000001";
+const memberId = "10000000-0000-4000-8000-000000000001";
+const adminId = "10000000-0000-4000-8000-000000000002";
+const unitId = "20000000-0000-4000-8000-000000000001";
 const api = "https://syntheticci.supabase.co";
 const email = "synthetic.member@feuerwehr-odenthal.de";
 const password = "SyntheticOnly!123";
@@ -14,7 +14,7 @@ async function fixture(context: BrowserContext) {
   const state = {
     verified: false, approved: false, suspended: false, missingUnit: false,
     admin: false, broken: false, mailLimited: false, unauthorizedMail: false,
-    protectedReads: [] as string[], signup: null as null | Record<string, unknown>, callbackCalls: 0,
+    protectedReads: [] as string[], signup: null as null | Record<string, unknown>, callbackCalls: 0, signupCalls: 0,
   };
   const user = () => ({
     id: state.admin ? adminId : memberId,
@@ -31,8 +31,13 @@ async function fixture(context: BrowserContext) {
   await context.route(`${api}/**`, async (route) => {
     const request = route.request();
     const url = new URL(request.url());
-    const respond = (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+    const respond = (body: unknown, status = 200) => route.fulfill({
+      status, contentType: "application/json",
+      headers: { "x-supabase-api-version": "2024-01-01" },
+      body: JSON.stringify(body),
+    });
     if (url.pathname === "/auth/v1/signup") {
+      state.signupCalls++;
       state.signup = request.postDataJSON();
       if (state.mailLimited) return respond({ code: "over_email_send_rate_limit", msg: "Synthetic rate limit" }, 429);
       if (state.unauthorizedMail) return respond({ code: "email_address_not_authorized", msg: "Synthetic recipient restriction" }, 403);
@@ -70,7 +75,7 @@ async function fixture(context: BrowserContext) {
       }]);
       if (url.pathname.endsWith("/units")) return respond([{ id: unitId, name: "Scheuren" }]);
       if (url.pathname.endsWith("/events")) return respond([{
-        id: "30000000-0000-0000-0000-000000000001", title: "Synthetic DEV Dienst", description: "Nur Testdaten",
+        id: "30000000-0000-4000-8000-000000000001", title: "Synthetic DEV Dienst", description: "Nur Testdaten",
         event_type: "regular", starts_at: "2026-12-01T18:00:00Z", ends_at: "2026-12-01T20:00:00Z",
         location: "Synthetischer Testort", status: "scheduled",
       }]);
@@ -146,7 +151,7 @@ test("unverified and pending users cannot load protected data, including direct 
   const state = await fixture(context);
   await page.goto(publicPath("/administration"));
   await login(page);
-  await expect(page.getByRole("alert")).toContainText("verifizieren");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("verifizieren");
   expect(state.protectedReads).toEqual([]);
   state.verified = true;
   await login(page);
@@ -183,18 +188,33 @@ test("mail limits and unauthorized recipients are visible; no automatic retry", 
   await page.getByLabel("Feuerwehr-E-Mail").fill(email);
   await page.getByLabel("Passwort", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Registrierung anfordern" }).click();
-  await expect(page.getByRole("alert")).toContainText(/limit/i);
+  await expect(page.getByRole("main").getByRole("alert")).toContainText(/limit/i);
+  expect(state.signupCalls).toBe(1);
   state.mailLimited = false; state.unauthorizedMail = true;
   await page.getByLabel("Passwort", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Registrierung anfordern" }).click();
-  await expect(page.getByRole("alert")).toContainText("nicht autorisiert");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("nicht autorisiert");
+  expect(state.signupCalls).toBe(2);
+  expect(state.protectedReads).toEqual([]);
+});
+
+test("foreign-domain registration is rejected before a network request", async ({ context, page }) => {
+  const state = await fixture(context);
+  await page.goto(publicPath("/"));
+  await page.getByRole("button", { name: "Testkonto registrieren", exact: true }).click();
+  await page.getByLabel("Anzeigename").fill("Synthetic Mitglied");
+  await page.getByLabel("Feuerwehr-E-Mail").fill("synthetic@example.test");
+  await page.getByLabel("Passwort", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "Registrierung anfordern" }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("Nur @feuerwehr-odenthal.de");
+  expect(state.signupCalls).toBe(0);
   expect(state.protectedReads).toEqual([]);
 });
 
 test("callback errors remove URL parameters and allow a fresh login after session removal", async ({ context, page }) => {
   const state = await fixture(context);
   await page.goto(publicPath("/auth/callback/?error=access_denied&error_description=synthetic&next=https://evil.test"));
-  await expect(page.getByRole("alert")).toContainText("Bestätigungslink");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("Bestätigungslink");
   expect(new URL(page.url()).search).toBe("");
   expect(state.protectedReads).toEqual([]);
   await page.getByRole("button", { name: /Abmelden/ }).click();

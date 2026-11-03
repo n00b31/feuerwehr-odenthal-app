@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { authErrorMessage, callbackUrl, emailSchema, registrationSchema } from "./validation";
 import { parseAppMode } from "../config/mode";
+import { accessSchema } from "../data/supabase-repository";
 
 test("DEV is the default and invalid modes never select the demo", () => {
   assert.equal(parseAppMode(), "supabase-dev");
@@ -32,4 +33,16 @@ test("mail limits and unauthorized recipients have actionable errors without ech
   assert.match(authErrorMessage({ code: "email_address_not_authorized" }), /nicht autorisiert/);
   assert.match(authErrorMessage({ code: "email_not_confirmed" }), /verifizieren/);
   assert.doesNotMatch(authErrorMessage(new Error("secret-credentials")), /secret-credentials/);
+});
+test("invalid or inconsistent server access responses do not unlock the UI", () => {
+  const base = {
+    user_id: "10000000-0000-4000-8000-000000000001", display_name: "Synthetic",
+    account_status: "pending", access_granted: false, unit_id: null, unit_name: null, roles: [],
+  };
+  assert.equal(accessSchema.safeParse(base).success, true);
+  assert.equal(accessSchema.safeParse({ ...base, access_granted: true }).success, false);
+  assert.equal(accessSchema.safeParse({ ...base, account_status: "approved", access_granted: true }).success, false);
+  assert.equal(accessSchema.safeParse({ ...base, roles: ["INVENTED_ADMIN"] }).success, false);
+  assert.equal(accessSchema.safeParse({ ...base, account_status: "approved", access_granted: true,
+    unit_id: "20000000-0000-4000-8000-000000000001", unit_name: "Scheuren", roles: ["MEMBER"] }).success, true);
 });

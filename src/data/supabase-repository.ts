@@ -10,10 +10,13 @@ export const accessSchema = z.object({
   unit_id: z.uuid().nullable(),
   unit_name: z.string().nullable(),
   roles: z.array(roleSchema),
-});
+}).refine((value) => !value.access_granted || (
+  value.account_status === "approved" && value.unit_id !== null && value.unit_name !== null
+), "Freigabe erfordert einen genehmigten Account mit Einheit.");
 export type Access = z.infer<typeof accessSchema>;
 const eventSchema = z.object({
-  id: z.uuid(), title: z.string(), description: z.string(), event_type: z.string(),
+  id: z.uuid(), title: z.string(), description: z.string(),
+  event_type: z.enum(["regular", "special", "breathing", "training", "community", "other"]),
   starts_at: z.string(), ends_at: z.string(), location: z.string(),
   status: z.enum(["scheduled", "cancelled"]),
 });
