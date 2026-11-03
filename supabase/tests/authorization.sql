@@ -228,6 +228,28 @@ select pg_temp.expect_denied('select public.ff_pending_registrations()');
 select pg_temp.expect_denied($q$select public.ff_set_role(auth.uid(), 'GLOBAL_ADMIN')$q$);
 reset role;
 
+update public.unit_memberships set valid_until = clock_timestamp() where user_id = '10000000-0000-0000-0000-000000000009' and valid_until is null;
+select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000009', true);
+set local role authenticated;
+select pg_temp.assert_true(not ff_private.is_active(), 'approval without a current unit does not grant access');
+select pg_temp.assert_true((select count(*) = 0 from public.events), 'unit assignment is a live access requirement');
+reset role;
+update public.unit_memberships set valid_until = null where user_id = '10000000-0000-0000-0000-000000000009';
+
+select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001', true);
+set local role authenticated;
+select public.ff_set_role('10000000-0000-0000-0000-000000000004', 'FUNCTION_ADMIN', null, current_setting('ff.test.function')::uuid, false);
+reset role;
+select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000004', true);
+set local role authenticated;
+select pg_temp.assert_true(not ff_private.can_lead_event('30000000-0000-0000-0000-000000000005'), 'role revocation uses live assignments, not existing JWT metadata');
+reset role;
+update auth.users set banned_until = clock_timestamp() + interval '1 hour' where id = '10000000-0000-0000-0000-000000000006';
+select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000006', true);
+set local role authenticated;
+select pg_temp.assert_true((select count(*) = 0 from public.events), 'Auth ban removes organizational access with the same identity');
+reset role;
+
 update auth.users set email = 'changed@feuerwehr-odenthal.de' where id = '10000000-0000-0000-0000-000000000005';
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000005', true);
 set local role authenticated;

@@ -81,7 +81,8 @@ Alle folgenden Punkte sind **Sollwerte / offene Dashboard-Aufgaben**, keine Beha
 
 Der Gatekeeper liest den aktuellen Datenbankzustand und `auth.users`; er vertraut nicht auf
 benutzerveränderbare Metadaten oder veraltete Rollen-Claims im JWT. Ablehnung/Sperrung, Auth-Ban,
-gelöschte Auth-Identität und fehlende Bestätigung sperren geschützte Zugriffe.
+gelöschte Auth-Identität, fehlende Bestätigung und eine fehlende aktuell gültige Einheitszuordnung
+sperren geschützte Zugriffe.
 Eine andere E-Mail als `approved_email` verlangt erneute explizite Freigabe, auch innerhalb der
 richtigen Domain. Das zukünftige UI muss diesen Zustand als „erneute Prüfung nötig“ anzeigen;
 das gespeicherte Profilstatusfeld allein reicht dafür nicht.

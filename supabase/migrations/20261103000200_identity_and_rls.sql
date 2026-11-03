@@ -10,6 +10,8 @@ returns boolean language sql stable security definer set search_path = '' as $$
       and p.approved_email = lower(u.email)
       and not coalesce(u.is_anonymous, false) and u.deleted_at is null
       and (u.banned_until is null or u.banned_until <= statement_timestamp())
+      and exists (select 1 from public.unit_memberships m where m.user_id = p.id
+        and m.valid_from <= statement_timestamp() and (m.valid_until is null or m.valid_until > statement_timestamp()))
   );
 $$;
 create function ff_private.is_active()
