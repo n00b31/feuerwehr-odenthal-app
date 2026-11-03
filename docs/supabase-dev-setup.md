@@ -668,9 +668,16 @@ Light/Dark, Branding und mobile Bottom-Navigation verwenden die bestehenden Them
   mit dem vorhandenen Text-Token und roter Markierung korrigiert. Keine Axe-Regel deaktiviert.
   Die Datenisolationsprüfung kontrolliert exakt Demo-Datenbestand und Demo-Profil; die gemeinsam
   genutzte reine Theme-Einstellung ist kein paralleler Terminbestand.
-- [SQL-Lauf 41673645923](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/41673645923):
-  001–006 und beide vollständigen RLS-/RPC-Testdateien in tatsächlichem PostgreSQL 17 erfolgreich.
-  Der ergänzende Lauf mit 007 wird vor Abschluss ebenfalls geprüft.
+- [SQL-Lauf 41676834098](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/41676834098):
+  001–007 und beide vollständigen RLS-/RPC-Testdateien in tatsächlichem PostgreSQL 17 erfolgreich,
+  einschließlich Reparaturmigration. Der frühere erfolgreiche 006-Lauf bleibt als zusätzlicher
+  Nachweis erhalten.
+- Das unveränderte, konfigurierte Pages-Artefakt wurde heruntergeladen und kurzzeitig lokal
+  geprüft: Start, Termine, Callback, Dokumente, Statistik, Profil, Administration und Manifest
+  jeweils HTTP 200, alle elf eingebundenen Callback-Assets ebenfalls HTTP 200.
+  Browser-Canvas `odenthal-events-dev03-preview` zeigte an der direkten Terminroute die echte
+  DEV-Anmeldung, keine Demo und keine geschützten Termindaten ohne Anmeldung. Keine Passwörter,
+  Mailversandschritte oder echten Kontoanmeldungen durch den Agenten.
 
 **Echte DEV-0.3-Abnahme noch offen:** Nach Migration und bewusster Frontend-Veröffentlichung
 mit den vorhandenen zwei Konten in getrennten Browserprofilen einen ausdrücklich synthetischen
