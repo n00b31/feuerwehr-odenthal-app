@@ -145,10 +145,10 @@ test("full DEV registration, PKCE confirmation, pending approval, admin release 
   await expect(page.getByText(/Demo-Profil wechseln/)).toHaveCount(0);
   expect(await page.evaluate(() => Object.keys(localStorage).some((key) => key.startsWith("ff-odenthal-demo-v1")))).toBe(false);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-  await page.screenshot({ path: "test-results/supabase-dev-member-light.png", fullPage: true });
+  await page.screenshot({ path: "test-results/supabase-dev-member-light.png", fullPage: true, animations: "disabled" });
   await page.getByRole("button", { name: "Farbschema wechseln" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await page.screenshot({ path: "test-results/supabase-dev-member-dark.png", fullPage: true });
+  await page.screenshot({ path: "test-results/supabase-dev-member-dark.png", fullPage: true, animations: "disabled" });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(errors).toEqual([]);
   await context.close();

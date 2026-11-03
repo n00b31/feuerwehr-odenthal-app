@@ -2,6 +2,7 @@
 
 .dev-shell { min-height: 100dvh; }
 .dev-shell .content { max-width: 1180px; margin-inline: auto; }
+.dev-shell .section-card { padding: 24px; }
 .dev-shell .header-brand { display: flex; }
 .dev-navigation, .dev-actions { display: flex; flex-wrap: wrap; gap: 12px; padding: 16px; }
 .dev-navigation { border-bottom: 1px solid var(--cp-border); background: var(--cp-surface); }
