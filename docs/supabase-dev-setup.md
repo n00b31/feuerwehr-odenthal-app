@@ -348,11 +348,11 @@ anfordern. Passwort-Reset, E-Mail-Wechsel-UI und MFA sind in dieser Integrations
 | GLOBAL_ADMIN | Registrierungen prüfen/freigeben, Rollen-/Status-RPCs und alle vorbereiteten Bereichsaktionen. |
 | Termin-Delegation | Teilnehmer/Anwesenheit genau dieser Instanz, keine globalen Rollen oder Unterdelegation. Widerruf wird serverseitig live geprüft. |
 
-**Jetzt im DEV-UI angebunden:** Auth, Pending-/Sperrstatus, Global-Admin-Freigabe mit Einheit,
+**Stand DEV 0.2 (DEV 0.3 siehe Abschnitt 11):** Auth, Pending-/Sperrstatus, Global-Admin-Freigabe mit Einheit,
 sichtbare Termine, Dokumentbereiche, eigene bestätigte Teilnahmen/Stunden und Profil.
 Anwesenheit zählt nur mit Listenbestätigung; unbekannt ist nicht abwesend.
 
-**Noch nicht im DEV-UI angebunden:** vollständige Termin-/Serienverwaltung, Rückmeldungsschaltflächen,
+**In DEV 0.2 noch nicht im DEV-UI angebunden:** vollständige Termin-/Serienverwaltung, Rückmeldungsschaltflächen,
 Anwesenheits-/Delegationsbearbeitung, Rollen-/Mitgliedschafts-/Dokument-CRUD und komplette Statistikexports.
 Teilweise existieren dafür bereits geprüfte RPCs, für CRUD/Serien fehlen noch Serverkommandos.
 Keine breiten DML-Grants oder lokale Demo-Schreiboperationen als Ersatz verwenden.
@@ -594,10 +594,36 @@ nur die öffentlichen geprüften RPCs sind für `authenticated` ausführbar, nie
   verwaltbare Einheiten. Voller Teilnehmerkreis mit Antworten nur für Leitung bzw. bestehende
   organisationsweite Leseaufsicht. MEMBER erhält keine fremden Antwortidentitäten.
 
-**Anwendungsstatus:** 006 ist versioniert vorbereitet, noch nicht am gehosteten Projekt angewendet.
-Zuerst die isolierte PostgreSQL-CI vollständig bestehen lassen, dann den tatsächlichen Remote-Zustand
-mit 001–005 abgleichen und ausschließlich die fehlende 006 kontrolliert anwenden.
-MCP-Historienversion und SQL-Prüfsumme ergänzen. Keine Fixture oder Testdatensuite im DEV-Projekt ausführen.
+**Anwendungsstatus am 03.11.2026:** Das bestehende Projekt wurde erneut geprüft: PostgreSQL 17.11,
+001–005 unverändert vorhanden, null Termine und null Antworten. Nach erfolgreicher isolierter
+SQL-CI und vollständigem Pages-Feature-Lauf wurden ausschließlich additive Änderungen angewendet.
+Beim MCP-Aufruf wurde 006 versehentlich unvollständig übermittelt: die Absagefunktion war falsch,
+zwei RPCs und die abschließenden Rechtebeschränkungen fehlten. Die unmittelbar anschließende
+`20261103000700_complete_single_events.sql` korrigiert dies mit `CREATE OR REPLACE` und
+expliziten Grants/Revokes, ohne Löschung, Kontenänderung oder Testdatenimport.
+Die unvollständige Historie wird nicht verschwiegen, überschrieben oder als identisch mit der
+vollständigen Quelldatei 006 bezeichnet.
+
+| Lokale Quelle / Zweck | Tatsächliche MCP-Historie |
+|---|---|
+| 006 / erste, unvollständige MCP-Übermittlung | `20261103163850`, `ff_006_single_events` |
+| 007 / vollständig übermittelte Reparatur | `20261103163942`, `ff_007_complete_single_events` |
+
+007: SHA-256 `0e11c1550ea764d4964b2a2789e8deb7c9306840f29b2e7b66ed2ad27f87ed20`
+(UTF-8, LF, abschließenden Whitespace entfernen).
+Alle sechs resultierenden Funktionskörper wurden unabhängig aus `pg_proc.prosrc` mit den
+vollständigen, geprüften Quellen 006 verglichen; alle normalisierten MD5-Werte stimmen überein
+(reiner Inhaltsvergleich, kein Sicherheits-Hash). Fünf öffentliche RPCs sind `SECURITY DEFINER`
+mit leerem `search_path`, nur für `authenticated` ausführbar. Der private Validator ist weder
+für `anon` noch `authenticated` ausführbar. Ein zurückgerollter SQL-Diagnoselauf unter
+`authenticated` ohne freigegebene Identität bestätigt für alle fünf RPCs SQLSTATE 42501.
+Das ist ein tatsächlicher Datenbanktest, aber kein echter JWT-/Browser-Zwei-Konten-Abnahmelauf.
+Schlussbestand: null Termine, null Antworten, zwei bestehende Konten und null neue Termin-Audits.
+
+Für eine neue isolierte Datenbank alle Quelldateien 001–007 in Reihenfolge anwenden.
+Im bestehenden Projekt **nicht** 001–006 wiederholen oder MCP-Historien blind auf Dateiversionen
+umstellen. Der Endzustand ist abgeglichen; die Reparatur wird zusätzlich in SQL-CI geprüft.
+Keine Fixture oder Testdatensuite im DEV-Projekt ausführen.
 
 ### Oberfläche und Betrieb
 
@@ -621,7 +647,7 @@ Light/Dark, Branding und mobile Bottom-Navigation verwenden die bestehenden Them
 - Lokal mit vorhandenen Paketen: 65/65 Fach-/Konfigurationstests bestanden, einschließlich
   sechs neuen Terminpayload-/Berliner-Zeit-/Antwortzählungs-/Fehlerfällen.
   Lokaler Typecheck ist wegen fehlendem `@supabase/supabase-js` im vorhandenen `node_modules`
-  blockiert; keine lokale Installation. Vollständige Typen/Build/Lint in GitHub Actions prüfen.
+  blockiert; keine lokale Installation. Vollständige Typen/Build/Lint in GitHub Actions bestanden.
 - `supabase/tests/events.sql`: ausschließlich `ff_dev_ci`, transaktional zurückgerollte
   Auth-/Rollenfixtures. Erstellen, gemeinsamer gespeicherter Termin, eigene Antwortänderung,
   Admin-Übersicht, fremde Einheiten, direkte DML-Sperre, serverseitige Beginnsgrenze,
@@ -634,6 +660,17 @@ Light/Dark, Branding und mobile Bottom-Navigation verwenden die bestehenden Them
   Das ist **kein** Test gegen das echte Supabase-Projekt; SQL-CI prüft die tatsächliche RPC-/RLS-Logik.
 - Bestehende 19 Demo-Browser- und sechs Auth-Szenarien laufen zusätzlich unverändert weiter,
   nur der neue gelesene Termin-RPC-Vertrag wird in den Auth-Fixtures ergänzt.
+- [Pages-Feature-Lauf 41675538534](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/41675538534):
+  65/65 Fachtests, TypeScript, ESLint, Icons, 19/19 Demo- und 9/9 Auth-/Termin-Browsertests,
+  statische Builds und tatsächlich konfigurierter DEV-Export erfolgreich; kein Deployment.
+  Die vorherigen fehlgeschlagenen Läufe bleiben nachvollziehbar: Zwischenfarben während
+  Theme-Übergängen werden vor Axe abgewartet, der echte aktive Dark-Navigationskontrast wurde
+  mit dem vorhandenen Text-Token und roter Markierung korrigiert. Keine Axe-Regel deaktiviert.
+  Die Datenisolationsprüfung kontrolliert exakt Demo-Datenbestand und Demo-Profil; die gemeinsam
+  genutzte reine Theme-Einstellung ist kein paralleler Terminbestand.
+- [SQL-Lauf 41673645923](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/41673645923):
+  001–006 und beide vollständigen RLS-/RPC-Testdateien in tatsächlichem PostgreSQL 17 erfolgreich.
+  Der ergänzende Lauf mit 007 wird vor Abschluss ebenfalls geprüft.
 
 **Echte DEV-0.3-Abnahme noch offen:** Nach Migration und bewusster Frontend-Veröffentlichung
 mit den vorhandenen zwei Konten in getrennten Browserprofilen einen ausdrücklich synthetischen
