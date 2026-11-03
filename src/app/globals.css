@@ -368,6 +368,9 @@ td { color: var(--cp-text-muted); }
 .audit-list article > div { flex: 1; min-width: 0; }
 .audit-list p { color: var(--cp-text-muted); font-size: .875rem; white-space: pre-wrap; overflow-wrap: anywhere; margin: var(--cp-space-2) 0; }
 .audit-list small, .print-heading { color: var(--cp-text-muted); font-size: var(--cp-font-xs); }
+.audit-technical { color: var(--cp-text-muted); font-size: var(--cp-font-xs); }
+.audit-technical summary { cursor: pointer; min-height: 44px; padding: var(--cp-space-3) 0; }
+.audit-technical pre { font-family: var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; padding: var(--cp-space-3); background: var(--cp-surface-soft); border-radius: var(--cp-radius); }
 .recovery { max-width: 650px; margin: 15dvh auto; padding: var(--cp-space-8); }
 .recovery p { margin: var(--cp-space-5) 0; }
 .loading-brand { margin-bottom: var(--cp-space-6); }

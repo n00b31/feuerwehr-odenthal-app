@@ -11,6 +11,12 @@ export function manages(user: User, scope: Scope) {
 export function belongs(user: User, scope: Scope) {
   return scope.kind === "organization" || (scope.kind === "unit" ? user.unitId === scope.id : user.functionIds.includes(scope.id));
 }
+export function isDelegatedOrganizer(user: User, event: Event) {
+  return event.delegatedOrganizerId === user.id && event.roster.some((person) => person.userId === user.id);
+}
+export function canManageAttendance(user: User, event: Event) {
+  return manages(user, event.scope) || isDelegatedOrganizer(user, event);
+}
 export function seesEvent(user: User, event: Event) {
   return belongs(user, event.scope) || manages(user, event.scope) || event.roster.some((p) => p.userId === user.id);
 }

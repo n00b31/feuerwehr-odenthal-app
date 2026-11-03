@@ -51,8 +51,8 @@ export function Dashboard() {
     </div>
     <section className="service-book" aria-label="Persönliches Dienstbuch">
       <div className="section-heading"><h2>Dein Dienstbuch <span className="year-tag">{year}</span></h2><Link href="/statistik" className="text-link">Zur Statistik <ArrowRight size={16} aria-hidden="true" /></Link></div>
-      <dl className="book-metrics"><div><dt>Besuchte Übungen</dt><dd>{stats.attendedPractices}<small> / {stats.practiceCount}</small></dd></div><div><dt>Ausbildungsstunden</dt><dd>{stats.hours.toLocaleString("de-DE", { maximumFractionDigits: 1 })}<small> h</small></dd></div><div><dt>Übungsdienst-Quote</dt><dd>{stats.rate}<small> %</small></dd></div></dl>
-      <p className="muted text-sm">Nur tatsächlich erfasste Anwesenheiten – keine Zusagen. Offene Erfassungen sind vorläufig.</p>
+      <dl className="book-metrics"><div><dt>Besuchte Übungen</dt><dd>{stats.attendedPractices}<small> / {stats.confirmedPracticeCount}</small></dd></div><div><dt>Ausbildungsstunden</dt><dd>{stats.hours.toLocaleString("de-DE", { maximumFractionDigits: 1 })}<small> h</small></dd></div><div><dt>Übungsdienst-Quote</dt><dd>{stats.rate}<small> %</small></dd></div></dl>
+      <p className="muted text-sm">Nur bestätigte Anwesenheiten – keine Zusagen oder Entwürfe. {stats.pendingCount} offene Listen noch nicht berücksichtigt.</p>
     </section>
     <div className="dashboard-lower">
       <section className="card list-card"><div className="section-heading"><h2>Hinweise für deinen Dienst</h2><Info size={19} aria-hidden="true" /></div>

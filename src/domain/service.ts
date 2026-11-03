@@ -1,9 +1,13 @@
-import { documentSchema, eventSchema, roleSchema, type Attendance, type DemoState, type DocumentArea, type EventInput, type Repeat, type Response, type Role, type User } from "./model";
-import { belongs, isGlobalAdmin, manages, responseBlock } from "./permissions";
+import { documentSchema, eventSchema, roleSchema, type Attendance, type AuditEntry, type DemoState, type DocumentArea, type EventInput, type Repeat, type Response, type Role, type User } from "./model";
+import { auditDisplay } from "./audit";
+import { belongs, canManageAttendance, isGlobalAdmin, manages, responseBlock } from "./permissions";
+import { hasManualAttendance, isPractice } from "./statistics";
 import { recurrenceInstant } from "./time";
 
 export type Command =
   | { type: "respond"; eventId: string; response: Response }
+  | { type: "prepareAttendance"; eventId: string }
+  | { type: "assignOrganizer"; eventId: string; userId: string | null }
   | { type: "attendance"; eventId: string; userId: string; value: Attendance; reason: string }
   | { type: "finalize"; eventId: string }
   | { type: "createEvent"; input: EventInput; repeat: Repeat; count: number }
@@ -21,7 +25,7 @@ const requireRule: (condition: unknown, message: string) => asserts condition = 
   if (!condition) throw new Error(message);
 };
 function validateInput(input: EventInput, state: DemoState, actor: User) {
-  eventSchema.omit({ id: true, organizerId: true, status: true, seriesId: true, roster: true, responses: true, attendance: true, finalizedAt: true }).parse(input);
+  eventSchema.pick({ title: true, description: true, type: true, startsAt: true, endsAt: true, location: true, scope: true, deadline: true }).parse(input);
   requireRule(Date.parse(input.endsAt) > Date.parse(input.startsAt), "Das Ende muss nach dem Beginn liegen.");
   requireRule(!input.deadline || Date.parse(input.deadline) <= Date.parse(input.startsAt), "Anmeldeschluss muss vor oder am Beginn liegen.");
   requireRule(input.scope.kind === "organization" || (input.scope.kind === "unit" ? state.units : state.functions).some((s) => input.scope.kind !== "organization" && s.id === input.scope.id), "Unbekannter Bereich.");
@@ -33,9 +37,11 @@ export function execute(state: DemoState, actorId: string, command: Command, now
   const actor = state.users.find((u) => u.id === actorId);
   requireRule(actor, "Demo-Profil nicht gefunden.");
   const next = structuredClone(state);
-  const audit = (action: string, targetId: string, detail: string) => next.audit.unshift({
-    id: crypto.randomUUID(), at: now.toISOString(), actorId, action, targetId, detail,
-  });
+  const audit = (action: string, targetId: string, detail: string) => {
+    const entry: AuditEntry = { id: crypto.randomUUID(), at: now.toISOString(), actorId, action, targetId, detail };
+    entry.display = auditDisplay(next, entry);
+    next.audit.unshift(entry);
+  };
   if ("eventId" in command) {
     const event = next.events.find((e) => e.id === command.eventId);
     requireRule(event, "Termin nicht gefunden.");
@@ -44,15 +50,40 @@ export function execute(state: DemoState, actorId: string, command: Command, now
       event.responses[actor.id] = command.response;
       audit("Rückmeldung", event.id, `${actor.name}: ${command.response}`);
     } else {
-      requireRule(manages(actor, event.scope), "Keine Berechtigung für diesen Termin.");
-      if (command.type === "attendance" || command.type === "finalize") {
+      const attendanceAction = command.type === "prepareAttendance" || command.type === "attendance" || command.type === "finalize";
+      requireRule(attendanceAction ? canManageAttendance(actor, event) : manages(actor, event.scope), "Keine Berechtigung für diesen Termin.");
+      if (command.type === "assignOrganizer") {
+        requireRule(command.userId === null || event.status !== "cancelled", "Für abgesagte Termine kann keine neue Delegation vergeben werden.");
+        requireRule(command.userId === null || (next.users.some((person) => person.id === command.userId) && event.roster.some((person) => person.userId === command.userId)), "Organisatoren müssen zum gespeicherten Teilnehmerkreis dieses Termins gehören.");
+        requireRule((event.delegatedOrganizerId ?? null) !== command.userId, "Diese Delegation ist bereits gespeichert.");
+        const before = event.delegatedOrganizerId ?? "keine Delegation";
+        if (command.userId === null) delete event.delegatedOrganizerId;
+        else event.delegatedOrganizerId = command.userId;
+        audit(command.userId === null ? "Delegation widerrufen" : "Organisator zugewiesen", event.id,
+          `${before} → ${command.userId ?? "keine Delegation"}; nur diese Termininstanz, keine Rollenänderung.`);
+      } else if (command.type === "prepareAttendance" || command.type === "attendance" || command.type === "finalize") {
         requireRule(event.status !== "cancelled", "Für abgesagte Termine ist keine Anwesenheitserfassung möglich.");
         requireRule(now.getTime() >= Date.parse(event.startsAt), "Anwesenheit kann erst ab Dienstbeginn erfasst werden.");
-        if (command.type === "attendance") {
+        if (command.type === "prepareAttendance") {
+          requireRule(isPractice(event), "Die automatische Vorbelegung ist nur für reguläre Übungsdienste und Sonderübungen vorgesehen.");
+          if (event.attendancePreparedAt || event.finalizedAt) return next;
+          const prefilled: Record<string, Attendance> = {};
+          for (const person of event.roster) {
+            if (Object.hasOwn(event.attendance, person.userId)) continue;
+            const response = event.responses[person.userId];
+            prefilled[person.userId] = response === "yes" ? "present" : response === "no" ? "absent" : "unknown";
+          }
+          Object.assign(event.attendance, prefilled);
+          event.attendancePreparedAt = now.toISOString();
+          event.attendancePrefilledIds = Object.keys(prefilled);
+          audit("Anwesenheit vorläufig vorbelegt", event.id,
+            `Nicht bestätigt; vorhandene Ist-Werte unverändert. Vorbelegung: ${JSON.stringify(prefilled)}`);
+        } else if (command.type === "attendance") {
           requireRule(event.roster.some((p) => p.userId === command.userId), "Person nicht in der Teilnehmerliste.");
           requireRule(!event.finalizedAt || command.reason.trim().length >= 5, "Nach Abschluss ist ein Korrekturgrund mit mindestens 5 Zeichen erforderlich.");
           const before = event.attendance[command.userId] ?? "unknown";
           event.attendance[command.userId] = command.value;
+          event.attendancePrefilledIds = event.attendancePrefilledIds?.filter((id) => id !== command.userId);
           audit(event.finalizedAt ? "Anwesenheit korrigiert" : "Anwesenheit erfasst", event.id,
             `${command.userId}: ${before} → ${command.value}${command.reason ? `; Grund: ${command.reason}` : ""}`);
         } else {
@@ -62,7 +93,7 @@ export function execute(state: DemoState, actorId: string, command: Command, now
         }
       } else if (command.type === "cancelEvent") {
         requireRule(command.reason.trim().length >= 5, "Bitte einen Absagegrund mit mindestens 5 Zeichen angeben.");
-        requireRule(!Object.values(event.attendance).some((a) => a !== "unknown") && !event.finalizedAt, "Termine mit erfasster Anwesenheit können nicht abgesagt werden.");
+        requireRule(!hasManualAttendance(event) && !event.finalizedAt, "Termine mit erfasster Anwesenheit können nicht abgesagt werden.");
         requireRule(event.status !== "cancelled", "Termin ist bereits abgesagt.");
         event.status = "cancelled";
         audit("Termin abgesagt", event.id, command.reason);

@@ -1,6 +1,8 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { APP, publicPath } from "../src/config/app";
+import type { DemoState } from "../src/domain/model";
+import { dateLabel } from "../src/domain/time";
 
 const pageErrors = new WeakMap<Page, string[]>();
 test.beforeEach(({ page }) => {
@@ -46,8 +48,9 @@ test("unit administration records, finalizes, corrects and audits actual attenda
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: /Anwesenheit \(/ }).click();
   await dialog.getByLabel("Anwesenheit Anna Berg", { exact: true }).selectOption("present");
-  await expect(dialog.getByText("1 anwesend", { exact: true })).toBeVisible();
-  await dialog.getByRole("button", { name: "Anwesenheitsliste abschließen" }).click();
+  await expect(dialog.getByLabel("Anwesenheit Anna Berg", { exact: true })).toHaveValue("present");
+  await expect(dialog.getByText("Vorläufig · nicht bestätigt", { exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "Anwesenheitsliste bestätigen" }).click();
   await expect(dialog.getByText("Abgeschlossen · Korrekturen möglich")).toBeVisible();
   await dialog.getByLabel(/Korrekturgrund/).fill("Korrigiert nach Prüfung vor Ort");
   await dialog.getByLabel("Anwesenheit Anna Berg", { exact: true }).selectOption("absent");
@@ -55,7 +58,7 @@ test("unit administration records, finalizes, corrects and audits actual attenda
   await page.getByRole("button", { name: "Dialog schließen" }).click();
   await page.getByRole("button", { name: "Änderungsprotokoll" }).click();
   await expect(page.getByText("Anwesenheit korrigiert", { exact: true })).toBeVisible();
-  await expect(page.getByText(/present → absent.*Korrigiert/)).toBeVisible();
+  await expect(page.locator(".audit-detail").filter({ hasText: /Anna Berg: Anwesend → Abwesend.*Korrigiert/ })).toBeVisible();
 });
 test("series creation, instance edit, scoped function admin and global configuration", async ({ page }) => {
   await profile(page, "Lukas Weber");
@@ -195,4 +198,42 @@ test("administration and attendance dialogs are accessible in both themes and on
     await page.getByRole("button", { name: panel, exact: true }).click();
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   }
+});
+
+test("legacy audit shows person names and event title/date, with raw IDs only in technical details", async ({ page }, info) => {
+  await profile(page, "Lukas Weber");
+  await page.goto(publicPath("/administration"));
+  const startsAt = await page.evaluate((key) => {
+    const state: DemoState = JSON.parse(localStorage.getItem(key)!);
+    state.audit.unshift({
+      id: "legacy-readable", at: new Date().toISOString(), actorId: "person-0-1",
+      targetId: "unit-0-live", action: "Anwesenheit korrigiert",
+      detail: "person-0-0: present → absent; Grund: Vor Ort nachgeprüft",
+    });
+    localStorage.setItem(key, JSON.stringify(state));
+    return state.events.find((event) => event.id === "unit-0-live")!.startsAt;
+  }, APP.storageKey);
+  await page.reload();
+  await page.getByRole("button", { name: "Änderungsprotokoll", exact: true }).click();
+  const article = page.locator(".audit-list article").filter({ hasText: "Anwesenheit korrigiert" });
+  await expect(article.locator(".audit-detail")).toHaveText("Anna Berg: Anwesend → Abwesend; Grund: Vor Ort nachgeprüft");
+  await expect(article.locator("small.muted")).toContainText("Von Lukas Weber · Termin: Praxisdienst · Technische Hilfe");
+  await expect(article.locator("small.muted")).toContainText(dateLabel(startsAt, { year: "numeric" }));
+  await expect(article.locator("pre")).not.toBeVisible();
+  const visible = await article.innerText();
+  expect(visible).not.toContain("person-0-0");
+  expect(visible).not.toContain("unit-0-live");
+  await article.getByText("Technische Details", { exact: true }).click();
+  await expect(article.locator("pre")).toBeVisible();
+  await expect(article.locator("pre")).toContainText("person-0-0");
+  await expect(article.locator("pre")).toContainText("unit-0-live");
+  await page.setViewportSize({ width: 320, height: 844 });
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+    expect(results.violations.map((entry) => ({ id: entry.id, nodes: entry.nodes.map((node) => node.target) }))).toEqual([]);
+  }
+  await article.getByText("Technische Details", { exact: true }).click();
+  await page.screenshot({ path: info.outputPath("readable-audit-mobile.png") });
 });
