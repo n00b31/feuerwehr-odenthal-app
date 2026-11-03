@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState, useSyncExternalStore, t
 import { demoRepository, demoStore, publishSnapshot } from "@/data/repository";
 import { execute, type Command } from "@/domain/service";
 import type { DemoState, User } from "@/domain/model";
+import { BrandLogo } from "./branding";
 
 interface DemoContextValue {
   state: DemoState; user: User; now: Date; message: string;
@@ -33,7 +34,7 @@ export function DemoProvider({ children }: { children: ReactNode }) {
     catch (error) { setMessage(`Reset fehlgeschlagen: ${errorText(error)}`); }
   }
   if (stored.error) return <main className="recovery"><h1>Lokaler Speicher nicht verfügbar</h1><p role="alert">{stored.error}</p><p>Vorhandene Daten werden nicht still überschrieben. Ein Reset löscht die lokale Demo.</p><button className="button primary" onClick={reset}>Demo-Speicher zurücksetzen</button><p role="status">{message}</p></main>;
-  if (!snapshot) return <main className="recovery" aria-busy="true"><div className="eyebrow">FEUERWEHR ODENTHAL</div><h1>Dein Dienst. Dein Team.</h1><p>Lokale Demo wird geladen …</p></main>;
+  if (!snapshot) return <main className="recovery" aria-busy="true"><div className="loading-brand"><BrandLogo /></div><h1>Dein Dienst. Dein Team.</h1><p role="status">Lokale Demo wird geladen …</p><div className="loading-line" aria-hidden="true" /></main>;
   const user = snapshot.state.users.find((u) => u.id === snapshot.actorId)!;
   return <Context.Provider value={{
     state: snapshot.state, user, now, message,

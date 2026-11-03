@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import type { Viewport } from "next";
 import { DemoProvider } from "@/components/demo-provider";
 import { Shell } from "@/components/shell";
+import { ThemeProvider } from "@/components/theme-provider";
 import { publicPath } from "@/config/app";
+import { themePreferenceScript } from "@/config/theme";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -12,10 +14,13 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
   appleWebApp: { capable: true, title: "Feuerwehr", statusBarStyle: "default" },
   manifest: publicPath("/manifest.webmanifest"),
-  icons: { icon: publicPath("/icon.svg"), apple: publicPath("/icons/apple-touch-icon.png") },
+  icons: {
+    icon: [{ url: publicPath("/icons/favicon-32.png"), type: "image/png", sizes: "32x32" }],
+    apple: publicPath("/icons/apple-touch-icon.png"),
+  },
 };
 
-export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover" };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", themeColor: "#f7f8fa" };
 const themeScript = `(() => {
   const param = new URLSearchParams(window.location.search).get("scoutTheme");
   const theme =
@@ -26,8 +31,8 @@ const themeScript = `(() => {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="de" suppressHydrationWarning>
-      <head><script dangerouslySetInnerHTML={{ __html: themeScript }} /></head>
-      <body><DemoProvider><Shell>{children}</Shell></DemoProvider></body>
+      <head><script dangerouslySetInnerHTML={{ __html: themeScript + themePreferenceScript }} /></head>
+      <body><ThemeProvider><DemoProvider><Shell>{children}</Shell></DemoProvider></ThemeProvider></body>
     </html>
   );
 }
