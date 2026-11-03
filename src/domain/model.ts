@@ -47,6 +47,7 @@ export const stateSchema = z.object({
   audit: z.array(z.object({
     id: z.string(), at: z.iso.datetime(), actorId: z.string(),
     action: z.string(), targetId: z.string(), detail: z.string(),
+    display: z.object({ actor: z.string(), target: z.string(), detail: z.string() }).optional(),
   })),
 });
 export type Scope = z.infer<typeof scopeSchema>;
@@ -55,6 +56,8 @@ export type User = z.infer<typeof userSchema>;
 export type Event = z.infer<typeof eventSchema>;
 export type DocumentArea = z.infer<typeof documentSchema>;
 export type DemoState = z.infer<typeof stateSchema>;
+export type AuditEntry = DemoState["audit"][number];
+export type AuditDisplay = NonNullable<AuditEntry["display"]>;
 export type Response = Event["responses"][string];
 export type Attendance = Event["attendance"][string];
 export type EventInput = Pick<Event, "title" | "description" | "type" | "startsAt" | "endsAt" | "location" | "scope" | "deadline">;

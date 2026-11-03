@@ -132,6 +132,12 @@ Unter **Termindetails → Organisator zuweisen** wählt die zuständige Einheits
 
 Die neuen Felder sind im bestehenden Version-1-Schema optional. Bisherige lokale Daten bleiben ohne Reset lesbar; es wird keine Delegation aus einem alten `organizerId` abgeleitet. **Diese Fachprüfung ist keine sichere Autorisierung:** Browserdaten und Profilwechsel sind manipulierbar. Erst ein produktives Backend kann jede Lese-/Schreibaktion anhand verifizierter Identität, aktueller Delegation, Serverzeit und atomarer Transaktionen sicher durchsetzen; das spätere Audit muss serverseitig unveränderbar sein.
 
+### Lesbares Änderungsprotokoll
+
+Das Protokoll zeigt betroffene und handelnde Personen mit Namen, Termine mit Titel, Datum, Uhrzeit in Berlin und Bereich. Anwesenheitswerte, Rückmeldungen, Rollen, Einheiten, Sonderfunktionen und Delegationen werden verständlich beschriftet. Vorbelegungen erscheinen als kompakte vorläufige Zusammenfassung statt einer JSON-Liste mit Personen-IDs. Korrekturgründe und andere frei eingegebene Texte bleiben wortgetreu.
+
+Die technischen IDs und ursprünglichen Detaildaten werden nicht ersetzt oder gelöscht; sie stehen bei Bedarf unter **Technische Details**. Neue Einträge speichern zusätzlich einen optionalen `display`-Snapshot mit den damaligen Anzeigenamen und Terminangaben. Spätere Umbenennungen oder Terminänderungen verändern diese Beschriftungen nicht. Bereits vorhandene Einträge ohne Snapshot werden ohne Reset anhand der noch verfügbaren Daten aufbereitet; deren Beschriftungen verwenden den aktuellen Datenbestand. Fehlende Zuordnungen oder nicht lesbare alte Details werden ausdrücklich als solche angezeigt, nicht geraten.
+
 ## Architektur
 
 ```text
@@ -148,6 +154,7 @@ src\components\event-parts.tsx
 src\domain\model.ts        Zod-Schemata und TypeScript-Domänenmodell
 src\domain\permissions.ts  Zentraler Rollen-/Scope- und Sichtbarkeitsdienst
 src\domain\service.ts      Reine, immutable Geschäftsoperationen und Änderungsprotokoll
+src\domain\audit.ts        Lesbare Protokollansicht und kompatible Aufbereitung alter Einträge
 src\domain\statistics.ts   Getrennte Ist-Statistik
 src\domain\time.ts         Europe/Berlin, Grenzzeitpunkte, Serien und DST
 src\domain\export.ts       CSV-Exportaufbereitung
@@ -207,7 +214,7 @@ npm.cmd run test:e2e
 
 Fachtests prüfen unter anderem exakte Beginn-/Anmeldeschlussgrenzen, scoped Rollen, Ist-Statistik ohne Zusagen, Abschluss/Korrekturen, Historie nach Einheitswechsel, unabhängige Serieninstanzen, UTC-/Berliner Jahresgrenzen, Sommer-/Winterzeit und CSV-Zellen. Playwright prüft echte Benutzerabläufe, Persistenz, Rollenansichten, Mitglieds-/Dokumentverwaltung, mobile Viewports, Service Worker und Offline-Fallback. Axe ergänzt automatisierte WCAG-Prüfungen; ersetzt keinen manuellen Screenreader-/Gerätetest.
 
-Der Workflow führt **38 Fachtests und 18 Playwright-Szenarien** aus. Die acht ursprünglichen Funktionsabläufe bleiben erhalten; sechs Redesign-Szenarien ergänzen Ein-Tipp-Rückmeldung ohne Ist-Änderung, Anmeldeschlusssperre, persistentes Theme/Systemwechsel/Tab-Abgleich, sichtbare Theme-Speicherfehler, Original-Branding und Icon-Größen sowie Navigation/Dialogfokus und responsive Layouts bei 320/390/412 Pixeln. Vier weitere Browserabläufe prüfen Vorbelegung/Reload/Bestandserhalt, bestätigte Statistik und CSV, delegierte Leitung/Korrekturgrund, fremde Termine, Widerruf in offener Ansicht sowie Beginn und Speicherfehler mit erneutem Versuch. Die Fachtests decken zusätzlich unabhängige Serieninstanzen, Funktions-/Einheitsgrenzen und vollständig erhaltene Altbestände ab. Axe prüft die Haupt-, Verwaltungs- und delegierten Anwesenheitsansichten in Hell/Dunkel. iPhone-13- und Pixel-7-Profile prüfen Touch-Eingaben in **Chromium-Emulation**, nicht auf echter Hardware oder Safari. Screenshots sind im CI-Artefakt verfügbar. Die tatsächlichen Ergebnisse sind im jeweiligen Actions-Lauf bzw. Pull Request ersichtlich.
+Der Workflow führt **46 Fachtests und 19 Playwright-Szenarien** aus. Die acht ursprünglichen Funktionsabläufe bleiben erhalten; sechs Redesign-Szenarien ergänzen Ein-Tipp-Rückmeldung ohne Ist-Änderung, Anmeldeschlusssperre, persistentes Theme/Systemwechsel/Tab-Abgleich, sichtbare Theme-Speicherfehler, Original-Branding und Icon-Größen sowie Navigation/Dialogfokus und responsive Layouts bei 320/390/412 Pixeln. Vier weitere Browserabläufe prüfen Vorbelegung/Reload/Bestandserhalt, bestätigte Statistik und CSV, delegierte Leitung/Korrekturgrund, fremde Termine, Widerruf in offener Ansicht sowie Beginn und Speicherfehler mit erneutem Versuch. Ein Protokoll-Szenario prüft lesbare Namen und Termindaten für Altbestände, ausklappbare Originaldaten und die schmale Hell-/Dunkel-Ansicht. Die Fachtests decken zusätzlich unabhängige Serieninstanzen, Funktions-/Einheitsgrenzen, erhaltene Altbestände und stabile Protokollbeschriftungen ab. Axe prüft die Haupt-, Verwaltungs-, Protokoll- und delegierten Anwesenheitsansichten in Hell/Dunkel. iPhone-13- und Pixel-7-Profile prüfen Touch-Eingaben in **Chromium-Emulation**, nicht auf echter Hardware oder Safari. Screenshots sind im CI-Artefakt verfügbar. Die tatsächlichen Ergebnisse sind im jeweiligen Actions-Lauf bzw. Pull Request ersichtlich.
 
 Das Modern-Utility-Design und bestehende Daten bleiben erhalten; Vorbelegung, Delegation und ausschließlich bestätigte Statistik erweitern gezielt den Anwesenheitsworkflow. Eine zukünftige fachliche Wehrleiter-Rolle (`FIRE_CHIEF`) ist **nicht implementiert**; insbesondere werden keine zusätzlichen technischen Adminrechte vergeben. Ein separates Mitteilungsmodul ist ebenfalls nicht vorhanden; die Startseite kennzeichnet Hinweise aus bestehenden Termin-/Dokumentdaten ausdrücklich.
 

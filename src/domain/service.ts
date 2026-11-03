@@ -1,4 +1,5 @@
-import { documentSchema, eventSchema, roleSchema, type Attendance, type DemoState, type DocumentArea, type EventInput, type Repeat, type Response, type Role, type User } from "./model";
+import { documentSchema, eventSchema, roleSchema, type Attendance, type AuditEntry, type DemoState, type DocumentArea, type EventInput, type Repeat, type Response, type Role, type User } from "./model";
+import { auditDisplay } from "./audit";
 import { belongs, canManageAttendance, isGlobalAdmin, manages, responseBlock } from "./permissions";
 import { hasManualAttendance, isPractice } from "./statistics";
 import { recurrenceInstant } from "./time";
@@ -36,9 +37,11 @@ export function execute(state: DemoState, actorId: string, command: Command, now
   const actor = state.users.find((u) => u.id === actorId);
   requireRule(actor, "Demo-Profil nicht gefunden.");
   const next = structuredClone(state);
-  const audit = (action: string, targetId: string, detail: string) => next.audit.unshift({
-    id: crypto.randomUUID(), at: now.toISOString(), actorId, action, targetId, detail,
-  });
+  const audit = (action: string, targetId: string, detail: string) => {
+    const entry: AuditEntry = { id: crypto.randomUUID(), at: now.toISOString(), actorId, action, targetId, detail };
+    entry.display = auditDisplay(next, entry);
+    next.audit.unshift(entry);
+  };
   if ("eventId" in command) {
     const event = next.events.find((e) => e.id === command.eventId);
     requireRule(event, "Termin nicht gefunden.");
