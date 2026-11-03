@@ -253,6 +253,7 @@ test("global membership, role, function and status changes are reflected in rene
   await expect(row.getByRole("button",{ name: "Rolle UNIT_ADMIN entziehen" })).toHaveCount(0);
   await memberPage.reload();
   await expect(memberPage.getByRole("link",{ name: "Administration", exact: true })).toHaveCount(0);
+  await expect(memberPage.getByRole("alert")).toContainText("Keine Berechtigung zur Mitgliederverwaltung");
   await row.getByRole("combobox", { name: "Sonderfunktion", exact: true }).selectOption(specialFunction);
   await row.getByRole("button",{ name: "Sonderfunktion zuweisen" }).click();
   await expect(row.getByRole("button",{ name: "Sonderfunktion Synthetic Atemschutz entfernen" })).toBeVisible();
@@ -261,7 +262,8 @@ test("global membership, role, function and status changes are reflected in rene
   await memberPage.reload();
   await expect(memberPage.getByRole("heading",{ name: "Zugang gesperrt" })).toBeVisible();
   await row.getByRole("button",{ name: "Mitglied reaktivieren", exact: true }).click();
-  await memberPage.reload();
+  await expect(row.locator("summary")).toContainText("Freigegeben");
+  await memberPage.goto(publicPath("/termine/"));
   await expect(memberPage.getByRole("heading",{ name: "Hallo Synthetic Member" })).toBeVisible();
   await expect(memberPage.getByRole("navigation",{ name: "Mobile Navigation" })).toBeVisible();
   await expect(memberPage.locator(".sidebar")).toBeHidden();
