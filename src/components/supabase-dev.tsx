@@ -75,7 +75,7 @@ export function SupabaseDev() {
         {client && <button className="button secondary" onClick={() => void signOut()} disabled={busy}><LogOut size={18} />Abmelden / Sitzung entfernen</button>}
       </div>
     </header>
-    <div className="demo-strip"><span className="demo-tag">DEV</span><span>Supabase-Testbetrieb · nur autorisierte Testkonten · kein Demo-Profilwechsel</span></div>
+    <div className="demo-strip" role="region" aria-label="DEV-Testbetrieb"><span className="demo-tag">DEV</span><span>Supabase-Testbetrieb · nur autorisierte Testkonten · kein Demo-Profilwechsel</span></div>
     {screen.phase === "active" && <nav className="dev-navigation" aria-label="Hauptnavigation">
       {links.map(([href, label]) => <Link key={href} href={href} aria-current={pathname === href ? "page" : undefined}>{label}</Link>)}
       {screen.access.roles.includes("GLOBAL_ADMIN") && <Link href="/administration" aria-current={pathname === "/administration" ? "page" : undefined}>Administration</Link>}
