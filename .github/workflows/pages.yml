@@ -1,4 +1,4 @@
-name: Publish demo to GitHub Pages
+name: Validate demo and Supabase DEV / publish Pages
 
 on:
   push:
@@ -17,11 +17,11 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
       NEXT_TELEMETRY_DISABLED: "1"
-      NEXT_PUBLIC_SUPABASE_URL: ${{ vars.SUPABASE_DEV_URL }}
-      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_DEV_PUBLISHABLE_KEY }}
+      NEXT_PUBLIC_APP_MODE: demo
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -59,13 +59,96 @@ jobs:
             out
             test-results
           retention-days: 7
+  auth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_APP_MODE: supabase-dev
+      # Intercepted protocol fixtures ONLY. This export is never published.
+      NEXT_PUBLIC_SUPABASE_URL: https://syntheticci.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_SYNTHETIC_CI_ONLY
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm run check:supabase-config
+      - run: npm run build:pages
+      - run: npx playwright install --with-deps chromium
+      - name: Verify static Auth flow against intercepted synthetic endpoints
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3100
+        run: |
+          set -euo pipefail
+          node scripts/preview-pages.mjs > /tmp/feuerwehr-auth-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill "$PREVIEW_PID"' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent "http://127.0.0.1:3100${NEXT_PUBLIC_BASE_PATH}/auth/callback/" > /dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          npx playwright test --config playwright.auth.config.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: synthetic-auth-test-results
+          path: test-results
+          retention-days: 7
+  dev-export:
+    # Fresh checkout/build: synthetic Auth values and demo output cannot become Pages.
+    needs: [build, auth]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_APP_MODE: supabase-dev
+      NEXT_PUBLIC_SUPABASE_URL: ${{ vars.SUPABASE_DEV_URL }}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_DEV_PUBLISHABLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm run check:supabase-config
+      - run: npm run build:pages
+      - name: Verify only real public configuration or locked setup is publishable
+        run: node scripts/check-dev-export.mjs
+      - name: Verify unconfigured DEV stays locked over HTTP and in browser
+        if: vars.SUPABASE_DEV_URL == '' && vars.SUPABASE_DEV_PUBLISHABLE_KEY == ''
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3100
+        run: |
+          set -euo pipefail
+          npx playwright install --with-deps chromium
+          node scripts/preview-pages.mjs > /tmp/feuerwehr-setup-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill "$PREVIEW_PID"' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent "http://127.0.0.1:3100${NEXT_PUBLIC_BASE_PATH}/" > /dev/null; then break; fi
+            sleep 1
+          done
+          npx playwright test --config playwright.setup.config.ts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: supabase-dev-export
+          path: out
+          retention-days: 7
       - uses: actions/upload-pages-artifact@v3
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         with:
           path: out
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: build
+    needs: dev-export
     runs-on: ubuntu-latest
     permissions:
       pages: write
@@ -74,6 +157,6 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Deploy demo
+      - name: Deploy Supabase DEV frontend (no database mutations)
         id: deployment
         uses: actions/deploy-pages@v4

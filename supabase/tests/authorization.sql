@@ -75,11 +75,15 @@ select pg_temp.expect_denied('select * from public.events');
 select pg_temp.expect_denied('select * from public.profiles');
 select pg_temp.expect_denied('select * from public.confirmed_attendance');
 select pg_temp.expect_denied('select public.ff_pending_registrations()');
+select pg_temp.expect_denied('select public.ff_my_access()');
 reset role;
 
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000007', true);
 set local role authenticated;
 select pg_temp.assert_true((select count(*) = 1 from public.profiles), 'pending user sees own minimal status only');
+select pg_temp.assert_true((select not access_granted and account_status = 'pending'
+  and unit_id is null and unit_name is null and cardinality(roles) = 0
+  and user_id = auth.uid() from public.ff_my_access()), 'client access status exposes no protected pending data');
 select pg_temp.assert_true((select count(*) = 0 from public.units), 'pending cannot read protected lookup data');
 select pg_temp.assert_true((select count(*) = 0 from public.events), 'pending cannot read protected events');
 select pg_temp.assert_true((select count(*) = 0 from public.role_assignments), 'pending cannot read roles');
@@ -97,6 +101,8 @@ select pg_temp.expect_denied($q$select ff_private.bootstrap_global_admin('100000
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001', true);
 set local role authenticated;
 select pg_temp.assert_true((select count(*) = 249 from public.ff_pending_registrations()), 'global administration can review registrations');
+select pg_temp.assert_true((select access_granted and unit_name = 'Scheuren'
+  and 'GLOBAL_ADMIN' = any(roles) from public.ff_my_access()), 'bootstrap admin gets live access and unit');
 select pg_temp.expect_denied($q$select public.ff_approve_member('10000000-0000-0000-0000-000000000008', current_setting('ff.test.unit')::uuid)$q$);
 select public.ff_approve_member('10000000-0000-0000-0000-000000000002', current_setting('ff.test.unit')::uuid);
 select public.ff_approve_member('10000000-0000-0000-0000-000000000003', current_setting('ff.test.unit')::uuid);
@@ -234,6 +240,8 @@ update public.unit_memberships set valid_until = clock_timestamp() where user_id
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000009', true);
 set local role authenticated;
 select pg_temp.assert_true(not ff_private.is_active(), 'approval without a current unit does not grant access');
+select pg_temp.assert_true((select not access_granted and account_status = 'approved'
+  and unit_id is null and cardinality(roles) = 0 from public.ff_my_access()), 'client gate detects missing current unit despite approved profile');
 select pg_temp.assert_true((select count(*) = 0 from public.events), 'unit assignment is a live access requirement');
 reset role;
 update public.unit_memberships set valid_until = null where user_id = '10000000-0000-0000-0000-000000000009';
@@ -250,12 +258,14 @@ update auth.users set banned_until = clock_timestamp() + interval '1 hour' where
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000006', true);
 set local role authenticated;
 select pg_temp.assert_true((select count(*) = 0 from public.events), 'Auth ban removes organizational access with the same identity');
+select pg_temp.assert_true((select not access_granted from public.ff_my_access()), 'client gate respects live Auth ban');
 reset role;
 
 update auth.users set email = 'changed@feuerwehr-odenthal.de' where id = '10000000-0000-0000-0000-000000000005';
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000005', true);
 set local role authenticated;
 select pg_temp.assert_true(not ff_private.is_active(), 'verified email change still requires explicit reapproval');
+select pg_temp.assert_true((select not access_granted and cardinality(roles) = 0 from public.ff_my_access()), 'client gate detects email change with old JWT');
 select pg_temp.assert_true((select count(*) = 0 from public.events), 'email change removes protected access with same JWT');
 reset role;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001', true);
@@ -265,6 +275,8 @@ reset role;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000003', true);
 set local role authenticated;
 select pg_temp.assert_true((select count(*) = 0 from public.confirmed_attendance), 'suspension immediately removes protected reads');
+select pg_temp.assert_true((select not access_granted and account_status = 'suspended'
+  from public.ff_my_access()), 'client gate reports live suspension');
 select pg_temp.expect_denied($q$select public.ff_set_response('30000000-0000-0000-0000-000000000001', 'yes')$q$);
 reset role;
 select pg_temp.expect_denied('update public.audit_entries set reason = ''overwrite''');

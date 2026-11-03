@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import type { Viewport } from "next";
-import { DemoProvider } from "@/components/demo-provider";
-import { Shell } from "@/components/shell";
+import { Application } from "@/components/application";
 import { ThemeProvider } from "@/components/theme-provider";
 import { publicPath } from "@/config/app";
 import { themePreferenceScript } from "@/config/theme";
@@ -9,9 +8,10 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: { default: "Feuerwehr Odenthal · Mein Dienst", template: "%s · Feuerwehr Odenthal" },
-  description: "Lokale Feuerwehr-Demo: Dienste planen, gemeinsam üben, tatsächliche Anwesenheit dokumentieren.",
+  description: "Feuerwehr Odenthal: getrennte lokale Demo und Supabase-DEV-Mitgliederbereich.",
   applicationName: "Feuerwehr Odenthal",
   robots: { index: false, follow: false },
+  referrer: "no-referrer",
   appleWebApp: { capable: true, title: "Feuerwehr", statusBarStyle: "default" },
   manifest: publicPath("/manifest.webmanifest"),
   icons: {
@@ -32,7 +32,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="de" suppressHydrationWarning>
       <head><script dangerouslySetInnerHTML={{ __html: themeScript + themePreferenceScript }} /></head>
-      <body><ThemeProvider><DemoProvider><Shell>{children}</Shell></DemoProvider></ThemeProvider></body>
+      <body><ThemeProvider><Application>{children}</Application></ThemeProvider></body>
     </html>
   );
 }
