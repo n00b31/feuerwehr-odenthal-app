@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      prepare_lock:
+        description: Generate dependency lockfile only (no deployment)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -15,7 +20,22 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  dependency-lock:
+    if: github.event_name == 'workflow_dispatch' && inputs.prepare_lock
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm install --package-lock-only --ignore-scripts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dependency-lock
+          path: package-lock.json
+          retention-days: 1
   build:
+    if: github.event_name != 'workflow_dispatch' || !inputs.prepare_lock
     runs-on: ubuntu-latest
     env:
       NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
