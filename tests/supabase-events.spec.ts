@@ -149,6 +149,8 @@ test("two independent sessions centrally create, respond, change, reload, edit a
   expect((await new AxeBuilder({ page: memberPage }).analyze()).violations).toEqual([]);
   await memberPage.getByRole("button", { name: "Farbschema wechseln" }).click();
   await expect(memberPage.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect.poll(() => memberPage.evaluate(() => document.getAnimations().filter((animation) =>
+    animation.playState === "running" && Number.isFinite(animation.effect?.getComputedTiming().endTime)).length)).toBe(0);
   expect((await new AxeBuilder({ page: memberPage }).analyze()).violations).toEqual([]);
   await memberPage.screenshot({ path: "test-results/dev-events-member-dark.png", fullPage: true });
   await adminPage.screenshot({ path: "test-results/dev-events-admin-light.png", fullPage: true });
