@@ -1,5 +1,6 @@
 import { test, expect, devices } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import sharp from "sharp";
 import { APP, publicPath } from "../src/config/app";
 import { THEME_STORAGE_KEY } from "../src/config/theme";
 
@@ -74,6 +75,17 @@ test("original branding, padded PWA icons and repository paths are valid", async
     const png = await response.body();
     expect(png.subarray(1, 4).toString()).toBe("PNG");
     expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([size, size]);
+    if (file === "maskable-512") {
+      const { data, info } = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+      const background = [data[0], data[1], data[2]];
+      let outside = 0;
+      for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+        const index = (y * size + x) * info.channels;
+        const motif = background.some((value, channel) => Math.abs(data[index + channel] - value) > 20);
+        if (motif && Math.hypot(x - (size - 1) / 2, y - (size - 1) / 2) > size * .4) outside++;
+      }
+      expect(outside, "Original motif must fit inside the maskable 80%-diameter safe circle").toBe(0);
+    }
   }
   await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", publicPath("/icons/favicon-32.png"));
 });

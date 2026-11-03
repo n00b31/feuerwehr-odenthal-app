@@ -161,7 +161,7 @@ Die Systemdarstellung wird automatisch erkannt. Unter **Profil → Darstellung**
 
 - `public\branding\feuerwehr-odenthal-logo.png`: unveränderte Originaldatei, **300 × 100 Pixel**, in Kopfzeile und Ladeansicht. Keine Anmeldeseite ergänzt; die Demo besitzt weiterhin keine Authentifizierung.
 - `public\branding\feuerwehr-odenthal-flamme.png`: unveränderte Originaldatei, **48 × 48 Pixel**, für kleine Markierungen und als Quelle aller App-Icons.
-- `npm.cmd run icons` erzeugt 192/512-Pixel-PNGs, ein maskierbares 512-Pixel-Icon, Apple-Touch-Icon (180 Pixel) und Favicon (32 Pixel). Proportionen und Originalfarben bleiben erhalten; 14 % Rand pro Seite und eine aus der Vorlage abgetastete Hintergrundfarbe schützen das Motiv bei Maskierung.
+- `npm.cmd run icons` erzeugt 192/512-Pixel-PNGs, ein maskierbares 512-Pixel-Icon, Apple-Touch-Icon (180 Pixel) und Favicon (32 Pixel). Proportionen und Originalfarben bleiben erhalten; 14 % Rand pro Seite, beim maskierbaren Icon 16 %, und eine aus der Vorlage abgetastete Hintergrundfarbe schützen das Motiv. Ein Pixeltest prüft, dass das Motiv innerhalb der kreisförmigen Maskable-Safe-Area mit 80 % Durchmesser bleibt.
 
 Die bereitgestellten Grafiken sind laut Auftrag Originalgrafiken der Feuerwehr Odenthal; ihre Verwendung macht den Prototyp nicht zu einer offiziellen App. Keine zusätzliche Lizenz oder allgemeine Weiterverwendungserlaubnis wird hiermit behauptet. **Grenze:** Die Flammenvorlage hat nur 48 Pixel; Hochskalierung erzeugt keine neuen Details. Für ein schärferes großes Installationssymbol wäre eine höher aufgelöste Originalvorlage nötig. Keine nachgezeichneten oder KI-erzeugten Ersatzlogos.
 
