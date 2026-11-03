@@ -46,8 +46,9 @@ test("unit administration records, finalizes, corrects and audits actual attenda
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: /Anwesenheit \(/ }).click();
   await dialog.getByLabel("Anwesenheit Anna Berg", { exact: true }).selectOption("present");
-  await expect(dialog.getByText("1 anwesend", { exact: true })).toBeVisible();
-  await dialog.getByRole("button", { name: "Anwesenheitsliste abschließen" }).click();
+  await expect(dialog.getByLabel("Anwesenheit Anna Berg", { exact: true })).toHaveValue("present");
+  await expect(dialog.getByText("Vorläufig · nicht bestätigt", { exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "Anwesenheitsliste bestätigen" }).click();
   await expect(dialog.getByText("Abgeschlossen · Korrekturen möglich")).toBeVisible();
   await dialog.getByLabel(/Korrekturgrund/).fill("Korrigiert nach Prüfung vor Ort");
   await dialog.getByLabel("Anwesenheit Anna Berg", { exact: true }).selectOption("absent");

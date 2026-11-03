@@ -95,17 +95,19 @@ test("attendance finalization preserves unknown entries, corrections require rea
   assert.equal(state.audit[0].action, "Anwesenheit korrigiert");
   assert.match(state.audit[0].detail, /unknown → present.*Nachweis des Ausbilders/);
 });
-test("planned yes is never counted as actual attendance; present is counted exactly once", () => {
+test("planned yes and manual drafts never count; confirmed present is counted exactly once", () => {
   let state = createSeed(now);
   const initial = personalStatistics(state, member, 2026, now);
   assert.equal(state.events.find((e) => e.id === "unit-0-live")!.responses[member], "yes");
   assert.equal(personalStatistics(state, member, 2026, now).attendanceCount, initial.attendanceCount);
   state = execute(state, unitAdmin, { type: "attendance", eventId: "unit-0-live", userId: member, value: "present", reason: "" }, now);
+  assert.equal(personalStatistics(state, member, 2026, now).attendanceCount, initial.attendanceCount);
+  state = execute(state, unitAdmin, { type: "finalize", eventId: "unit-0-live" }, now);
   const result = personalStatistics(state, member, 2026, now);
   assert.equal(result.attendanceCount, initial.attendanceCount + 1);
   assert.equal(result.hours, initial.hours + 2);
   assert.equal(result.attendedPractices, initial.attendedPractices + 1);
-  state = execute(state, unitAdmin, { type: "attendance", eventId: "unit-0-live", userId: member, value: "absent", reason: "" }, now);
+  state = execute(state, unitAdmin, { type: "attendance", eventId: "unit-0-live", userId: member, value: "absent", reason: "Nach Prüfung korrigiert" }, now);
   assert.equal(personalStatistics(state, member, 2026, now).attendanceCount, initial.attendanceCount);
 });
 test("cancelled events excluded from denominator, future events excluded, Berlin year boundary", () => {

@@ -30,6 +30,9 @@ export const eventSchema = z.object({
   roster: z.array(z.object({ userId: z.string(), unitId: z.string() })),
   responses: z.record(z.string(), z.enum(["yes", "no", "maybe"])),
   attendance: z.record(z.string(), z.enum(["present", "absent", "unknown"])),
+  attendancePreparedAt: z.iso.datetime().optional(),
+  attendancePrefilledIds: z.array(z.string()).optional(),
+  delegatedOrganizerId: z.string().optional(),
   finalizedAt: z.iso.datetime().optional(),
 });
 export const documentSchema = z.object({
