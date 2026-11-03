@@ -15,6 +15,7 @@ Diese Vorbereitung schaltet die öffentliche Demo **nicht** auf echte Benutzer o
 | SMTP / Empfänger / Versandlimits | **Nicht remote geprüft.** Offizielle Dokumentation zum Standardversand gelesen. | Keine Testmail versendet, keine Versandkontingente verbraucht. |
 | API-Schlüssel / exponierte Schemas / Sicherheit | **Nicht remote geprüft.** | Keine Keys erzeugt, gelesen, rotiert oder im Repository hinterlegt. |
 | Bestehende Anwendung | Next.js-Static-Export, Browser-Repository, lokale Rollen und lokale Audit-Einträge; kein Supabase-SDK und keine echte Anmeldung. | Demo bleibt strikt vom zukünftigen Backend getrennt. |
+| GitHub-Actions-Variablen | Über die autorisierte GitHub-Verbindung abgefragt: aktuell keine Repository-Variablen vorhanden. Keine Werte oder Secrets gesetzt. | Die beiden öffentlichen DEV-Variablen nach bestätigter Projektzuordnung konfigurieren. |
 
 **Bereits im Repository vorbereitet:** vier transaktionale SQL-Migrationen, RLS und eingeschränkte RPCs,
 isolierte PostgreSQL-Autorisierungstests, optionale öffentliche Build-Konfiguration, MCP-Beispiel und diese Anleitung.

@@ -11,6 +11,7 @@ $$;
 
 create schema ff_private;
 revoke all on schema ff_private from public, anon, authenticated;
+revoke create on schema public from public, anon, authenticated;
 
 create type public.ff_account_status as enum ('pending', 'approved', 'rejected', 'suspended');
 create type public.ff_role as enum ('MEMBER', 'UNIT_ADMIN', 'FUNCTION_ADMIN', 'FIRE_CHIEF', 'GLOBAL_ADMIN');

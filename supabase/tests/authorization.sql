@@ -24,6 +24,8 @@ $$;
 
 select pg_temp.assert_true((select count(*) = 5 from public.units), 'five configurable units');
 select pg_temp.assert_true((select count(*) = 1 from public.units where pilot and code = 'scheuren'), 'Scheuren pilot only');
+select pg_temp.assert_true(not has_schema_privilege('authenticated', 'public', 'CREATE'), 'authenticated cannot create exposed API objects');
+select pg_temp.assert_true(not has_schema_privilege('anon', 'public', 'CREATE'), 'anonymous cannot create exposed API objects');
 select set_config('ff.test.unit', (select id::text from public.units where code = 'scheuren'), true);
 select set_config('ff.test.other_unit', (select id::text from public.units where code = 'blecher'), true);
 select set_config('ff.test.function', (select id::text from public.special_functions where code = 'breathing'), true);
