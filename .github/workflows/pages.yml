@@ -20,6 +20,8 @@ jobs:
     env:
       NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
       NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_SUPABASE_URL: ${{ vars.SUPABASE_DEV_URL }}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_DEV_PUBLISHABLE_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -28,6 +30,7 @@ jobs:
           cache: npm
       - uses: actions/configure-pages@v5
       - run: npm ci
+      - run: npm run check:supabase-config
       - run: npm test
       - run: npm run typecheck
       - run: npm run lint
