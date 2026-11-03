@@ -1,12 +1,21 @@
 import sharp from "sharp";
-import { readFile, mkdir } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-const source = await readFile(new URL("../public/icon.svg", import.meta.url), "utf8");
-// SVG rasterizers do not universally support CSS custom properties.
-const vars = Object.fromEntries([...source.matchAll(/--(cp-[\w-]+):([^;}]+)/g)].map((match) => [match[1], match[2]]));
-const svg = Buffer.from(source.replace(/var\(--(cp-[\w-]+)\)/g, (_, key) => vars[key]));
+const source = fileURLToPath(new URL("../public/branding/feuerwehr-odenthal-flamme.png", import.meta.url));
+const { data } = await sharp(source).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+const background = { r: data[0], g: data[1], b: data[2], alpha: 1 };
 await mkdir(new URL("../public/icons", import.meta.url), { recursive: true });
-for (const [file, size] of [["icon-192", 192], ["icon-512", 512], ["maskable-512", 512], ["apple-touch-icon", 180]]) {
-  const icon = file.startsWith("maskable") ? Buffer.from(svg.toString().replace('rx="100"', "")) : svg;
-  await sharp(icon).resize(size, size).png().toFile(fileURLToPath(new URL(`../public/icons/${file}.png`, import.meta.url)));
+for (const [file, size] of [["icon-192", 192], ["icon-512", 512], ["maskable-512", 512], ["apple-touch-icon", 180], ["favicon-32", 32]]) {
+  const inset = Math.round(size * (file === "maskable-512" ? .16 : .14));
+  const square = await sharp(source)
+    .resize(size - inset * 2, size - inset * 2, { fit: "contain", background })
+    .extend({ top: inset, bottom: inset, left: inset, right: inset, background })
+    .png()
+    .toBuffer();
+  const icon = sharp(square);
+  if (file.startsWith("icon-") || file === "favicon-32") {
+    const mask = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><rect width="${size}" height="${size}" rx="${size / 8}" fill="white"/></svg>`);
+    icon.composite([{ input: mask, blend: "dest-in" }]);
+  }
+  await icon.png({ compressionLevel: 9 }).toFile(fileURLToPath(new URL(`../public/icons/${file}.png`, import.meta.url)));
 }

@@ -12,15 +12,19 @@ export function PageHeading({ eyebrow, title, description, action }: { eyebrow: 
 export function Metric({ label, value, note, icon }: { label: string; value: ReactNode; note: string; icon: ReactNode }) {
   return <div className="metric card"><div className="metric-top"><span>{label}</span><span className="icon-tile">{icon}</span></div><div className="metric-value">{value}</div><span className="muted text-sm">{note}</span></div>;
 }
-export function Modal({ title, children, close }: { title: string; children: ReactNode; close: () => void }) {
+export function Modal({ title, children, close, className = "" }: { title: string; children: ReactNode; close: () => void; className?: string }) {
   const { message } = useDemo();
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const dialog = ref.current;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     dialog?.showModal();
-    return () => { dialog?.close(); };
+    return () => {
+      dialog?.close();
+      if (previous?.isConnected) previous.focus({ preventScroll: true });
+    };
   }, []);
-  return <dialog ref={ref} className="modal" onCancel={close} onClick={(event) => { if (event.target === event.currentTarget) close(); }} aria-labelledby="modal-title">
+  return <dialog ref={ref} className={`modal ${className}`} onCancel={(event) => { event.preventDefault(); close(); }} onClick={(event) => { if (event.target === event.currentTarget) close(); }} aria-labelledby="modal-title">
     <header className="modal-header"><h2 id="modal-title">{title}</h2><button className="icon-button" onClick={close} aria-label="Dialog schließen"><X size={20} /></button></header>
     <div className="modal-body">{children}{message.startsWith("Nicht gespeichert:") && <p className="error" role="alert">{message}</p>}</div>
   </dialog>;

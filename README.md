@@ -10,7 +10,22 @@ Mobile-first Mitgliederportal mit **Next.js App Router, React, TypeScript und Ta
 
 GitHub Pages stellt ausschließlich den statischen Next.js-Export bereit. Es gibt keinen Datenbankserver, keine gemeinsam gespeicherten Zusagen und keine Anmeldung. Jede Besucherin und jeder Besucher bekommt eigene fiktive Daten und kann alle Demo-Rollen ausprobieren. Änderungen liegen nur im jeweiligen Browser. Die Demo ist per HTTPS öffentlich erreichbar und benötigt keine Zugangsdaten.
 
-Nach jedem Push auf `main` prüft `.github\workflows\pages.yml` die Fachregeln, ESLint, den statischen Build und die acht Browser-Szenarien unter dem Repository-Unterpfad. Erst nach erfolgreicher Prüfung wird das `out`-Artefakt über GitHub Actions nach Pages ausgerollt. Ein manueller Lauf ist über „Actions → Publish demo to GitHub Pages → Run workflow“ möglich. Verwendet werden nur die eingebauten, auf Build/Deployment begrenzten GitHub-Actions-Berechtigungen; keine gespeicherten persönlichen Tokens oder Cloud-Secrets.
+Nach jedem Push auf `main` und für Pull Requests nach `main` prüft `.github\workflows\pages.yml` die Fachregeln, TypeScript, ESLint, die Icon-Erzeugung, den statischen Build und die Browser-Szenarien unter dem Repository-Unterpfad. **Nur ein erfolgreicher Lauf auf `main` veröffentlicht nach Pages.** Pull Requests und manuelle Läufe auf Feature-Branches prüfen ausschließlich und verändern die öffentliche Demo nicht. Ein manueller Lauf ist über „Actions → Publish demo to GitHub Pages → Run workflow“ möglich. Verwendet werden nur die eingebauten, auf Build/Deployment begrenzten GitHub-Actions-Berechtigungen; keine gespeicherten persönlichen Tokens oder Cloud-Secrets.
+
+Der Workflow speichert den statischen Export und Browser-Screenshots/-Fehlertraces sieben Tage im Artefakt **`ui-review`**. Damit ist eine Prüfung ohne npm-Installation auf dem lokalen Rechner möglich. Unternehmensrichtlinien nicht umgehen; Installationen und Builds können vollständig auf GitHub Actions laufen.
+
+### Redesign vor einem Merge ausprobieren
+
+Im Pull Request den erfolgreichen Lauf **Publish demo to GitHub Pages** öffnen, `ui-review` herunterladen und entpacken. Der enthaltene Ordner `out` ist die vollständige statische Vorschau. Die Bilder unter `test-results` zeigen Hell/Dunkel sowie mobile und Desktop-Ansichten.
+
+Mit vorhandenem Node.js im entpackten Artefakt-Verzeichnis (enthält `out`) den vorhandenen Vorschau-Server aus dem Repository ausführen:
+
+```powershell
+Set-Location C:\Vorschau\ui-review
+node C:\Projekte\feuerwehr-odenthal-app\scripts\preview-pages.mjs
+```
+
+Aufruf: `http://localhost:3100/feuerwehr-odenthal-app/`. Dafür sind weder npm-Installation noch lokaler Build nötig; vorhandene Build-Ordner müssen nicht ersetzt werden. Die Vorschau bindet ausschließlich an Loopback; auf dem Smartphone ist dessen `localhost` nicht der Entwicklungsrechner. Ohne Node.js stehen die CI-Screenshots zur Ansicht bereit.
 
 Der Build setzt `NEXT_PUBLIC_BASE_PATH=/feuerwehr-odenthal-app` und `STATIC_EXPORT=true`. Next.js-Verweise, Icons, Manifest, Service-Worker-Scope und Offline-Seite berücksichtigen diesen Unterpfad. Der Browser-Speicherschlüssel ist zusätzlich nach dem Unterpfad getrennt. Das Manifest enthält ein passendes `start_url`/`scope`. Keine clientseitigen Root-Weiterleitungen als Ersatz für echte statische Seiten.
 
@@ -47,7 +62,7 @@ npm.cmd run start -- --hostname 127.0.0.1 --port 3000
 
 Aufrufen: **http://localhost:3000**. Entwicklung: `npm.cmd run dev -- --hostname 127.0.0.1 --port 3000`.
 
-Unter Windows umgehen die `.cmd`-Befehle eine möglicherweise gesperrte PowerShell-Skriptausführung für `npm.ps1`. Es ist keine Änderung der Execution Policy erforderlich. Installation benötigt einmalig Internet für Pakete; laufende Demo und Build benötigen weder Cloud noch Online-Schriften.
+Die `.cmd`-Aufrufe verwenden die Windows-Befehlsshims und ändern keine Execution Policy. Nur verwenden, soweit die Unternehmensrichtlinien dies erlauben. Bei gesperrten Installationen ausschließlich den GitHub-Actions-Build nutzen; keine Sicherheitsrichtlinien umgehen. Eine erlaubte Installation benötigt einmalig Internet für Pakete; laufende Demo und Build benötigen weder Cloud noch Online-Schriften.
 
 Der Server ist bewusst an Loopback gebunden. Auf einem Smartphone ist dessen `localhost` nicht der Entwicklungsrechner. Für einen echten Gerätetest muss ausdrücklich ein vertrauenswürdiger Netzwerkzugang mit HTTPS eingerichtet werden; nicht einfach als öffentliches Mitgliederportal veröffentlichen.
 
@@ -55,7 +70,7 @@ Der Server ist bewusst an Loopback gebunden. Auf einem Smartphone ist dessen `lo
 
 | Bereich | Umsetzung |
 |---|---|
-| Start | Persönliche Begrüßung, Einheit, nächster Dienst, offene Rückmeldungen, Ist-Teilnahmen des laufenden Berliner Jahres, Dokument-Schnellzugriff |
+| Start | Persönliche Begrüßung und Einheit, nächster Übungsdienst (sonst nächster Termin), direkte Zusage/Absage/Vielleicht ohne Dialog, nach Frist priorisierte offene Rückmeldungen, kompaktes Ist-Dienstbuch, aus vorhandenen Daten abgeleitete Hinweise und Dokument-Schnellzugriff |
 | Termine | Alle sechs Dienstarten, Suche, Bereichs-/Typfilter, Zukunft/Historie/offene Rückmeldungen, Beschreibungen, Ort, Organisator, Status und optionaler Anmeldeschluss |
 | Rückmeldung | Zusage, Absage, vielleicht; änderbar bis zum früheren Zeitpunkt aus Dienstbeginn und Anmeldeschluss; Sperre in UI und Fachschicht |
 | Anwesenheit | Separat von Rückmeldung: anwesend, abwesend, nicht festgestellt. Nur zuständige Administration und erst ab Dienstbeginn. Listenabschluss und spätere Korrektur mit Pflichtbegründung |
@@ -64,8 +79,8 @@ Der Server ist bewusst an Loopback gebunden. Auf einem Smartphone ist dessen `lo
 | Exportvorbereitung | UTF-8-CSV für Excel mit Formel-Injection-Schutz und druckbare Browseransicht / „Als PDF speichern“. Kein natives XLSX, keine serverseitige PDF-Engine |
 | Dokumente | Name, Beschreibung, SharePoint-Freigabelink, Einheit/Funktion/Organisation und Mitglieder-/Adminsichtbarkeit; berechtigte Administration legt Bereiche an |
 | Administration | Scoped Termin-/Anwesenheitsverwaltung, Mitgliederzuordnung, Mehrfachfunktionen, Rollenvergabe durch globale Administration, konfigurierbare Einheiten und frei definierbare Funktionen, Änderungsprotokoll |
-| Profil | Demo-Person wählen, Zuordnungen/Rollen/Einheitshistorie ansehen, lokaler Reset mit Bestätigung |
-| PWA-Grundlagen | Manifest, eigene 192/512-Pixel-Icons, maskierbares Icon, Apple-Touch-Icon, Standalone-Darstellung, Service Worker mit Offline-Hinweisseite |
+| Profil | Demo-Person wählen, Zuordnungen/Rollen/Einheitshistorie ansehen, Hell/Dunkel/System dauerhaft auswählen, lokaler Reset mit Bestätigung |
+| PWA-Grundlagen | Manifest, aus dem Original-Flammensymbol erzeugte 192/512-Pixel-Icons, maskierbares Icon, Apple-Touch-Icon, PNG-Favicon, Standalone-Darstellung, Service Worker mit Offline-Hinweisseite |
 | Bedienung | Responsive Seitenleiste / mobile Bottom-Navigation, Hell/Dunkel, native Modal-Fokusführung und Escape, beschriftete Eingaben, Skip-Link, Reduced Motion, große Haupt-Touch-Ziele |
 
 ### Demodaten
@@ -109,6 +124,12 @@ src\app\                  Next.js App Router, Routen, Metadaten, Manifest, globa
 src\components\           UI und interaktive Fachansichten
 src\components\demo-provider.tsx
                           React-Kontext: Profil, Fachbefehle, Takt, sichtbare Fehler
+src\components\theme-provider.tsx
+                          Hell/Dunkel/System, Browser-Persistenz, Tab-/System-Synchronisation
+src\components\response-picker.tsx
+                          Gemeinsame Rückmeldung für Startseite und Termindialog
+src\components\event-parts.tsx
+                          Wiederverwendbare Datums-, Dienstart- und Statusdarstellung
 src\domain\model.ts        Zod-Schemata und TypeScript-Domänenmodell
 src\domain\permissions.ts  Zentraler Rollen-/Scope- und Sichtbarkeitsdienst
 src\domain\service.ts      Reine, immutable Geschäftsoperationen und Änderungsprotokoll
@@ -118,8 +139,10 @@ src\domain\export.ts       CSV-Exportaufbereitung
 src\data\repository.ts     Browser-Repository, Schemavalidierung, React External Store
 src\data\seed.ts           Realistische, ausdrücklich fiktive lokale Ausgangsdaten
 src\config\app.ts          App-Konfiguration, Beschriftungen, Konstanten
-public\                   Icons, Service Worker, Offline-Hinweisseite
-scripts\generate-icons.mjs Reproduzierbare Rasterisierung des selbst erstellten SVG-Icons
+src\config\theme.ts        Theme-Präferenz und Initialisierung vor dem ersten Paint
+public\branding\           Unveränderte, vom Auftraggeber bereitgestellte Original-PNGs
+public\                   Abgeleitete Icons, Service Worker, Offline-Hinweisseite
+scripts\generate-icons.mjs Proportionale Icon-Erzeugung aus dem Original-Flammensymbol
 tests\                    Echte Playwright-Browserabläufe und Accessibility-Prüfung
 ```
 
@@ -137,7 +160,19 @@ Der Profilwechsel ist **vollständig ungeschützt**. Sämtliche Demodaten liegen
 
 ### Theme und PWA
 
-Die Oberfläche verwendet die verpflichtenden Clawpilot-Theme-Variablen (`--cp-*`) mit warmem Weiß, Dunkelgrau und Feuerwehr-naher Crimson-Akzentfarbe. Keine externen Fonts, Bilder oder CDNs. Eine frei gewählte zusätzliche Dunkelblau-Palette würde diese Vorgabe verletzen und wird daher nicht verwendet. App-Icons und Manifest verwenden entsprechende Theme-Farben.
+Das Designsystem liegt zentral in `src\app\globals.css`: gemeinsame `--cp-*`-Tokens für Farben, Schriftgrößen, 4-Pixel-Abstände, Radien, Bewegung und Zustände. Auf den gemeinsamen Basistokens liegt die ausdrücklich angeforderte Odenthal-Palette: Hell `#F7F8FA` / `#FFFFFF` / `#17212B`, Dunkel `#111418` / `#1C2127` / `#F3F5F7`, Akzent `#C62828` beziehungsweise `#EF5350`. Neutrale Oberflächen, wenig Rot, listenbasierte Termine, gemeinsame Status- und Rückmeldekomponenten. Keine externen Fonts, Bilder oder CDNs.
+
+Die Systemdarstellung wird automatisch erkannt. Unter **Profil → Darstellung** lassen sich System/Hell/Dunkel auswählen; am Desktop zusätzlich über den Kopfzeilen-Schalter. Die Auswahl liegt im zum Demo-Ursprung/-Unterpfad gehörenden `-theme`-Schlüssel, unabhängig vom Fachdatenschema und Demo-Profil. Der Initialisierungscode berücksichtigt sie vor dem ersten Paint; System- und Speicherereignisse aktualisieren offene Tabs. Speicherfehler erscheinen sichtbar. `?scoutTheme=light` beziehungsweise `dark` ermöglicht eine temporär vorgegebene Darstellungsprüfung.
+
+### Original-Branding
+
+- `public\branding\feuerwehr-odenthal-logo.png`: unveränderte Originaldatei, **300 × 100 Pixel**, in Kopfzeile und Ladeansicht. Keine Anmeldeseite ergänzt; die Demo besitzt weiterhin keine Authentifizierung.
+- `public\branding\feuerwehr-odenthal-flamme.png`: unveränderte Originaldatei, **48 × 48 Pixel**, für kleine Markierungen und als Quelle aller App-Icons.
+- `npm.cmd run icons` erzeugt 192/512-Pixel-PNGs, ein maskierbares 512-Pixel-Icon, Apple-Touch-Icon (180 Pixel) und Favicon (32 Pixel). Proportionen und Originalfarben bleiben erhalten; 14 % Rand pro Seite, beim maskierbaren Icon 16 %, und eine aus der Vorlage abgetastete Hintergrundfarbe schützen das Motiv. Ein Pixeltest prüft, dass das Motiv innerhalb der kreisförmigen Maskable-Safe-Area mit 80 % Durchmesser bleibt.
+
+Die bereitgestellten Grafiken sind laut Auftrag Originalgrafiken der Feuerwehr Odenthal; ihre Verwendung macht den Prototyp nicht zu einer offiziellen App. Keine zusätzliche Lizenz oder allgemeine Weiterverwendungserlaubnis wird hiermit behauptet. **Grenze:** Die Flammenvorlage hat nur 48 Pixel; Hochskalierung erzeugt keine neuen Details. Für ein schärferes großes Installationssymbol wäre eine höher aufgelöste Originalvorlage nötig. Keine nachgezeichneten oder KI-erzeugten Ersatzlogos.
+
+Logo und Flammensymbol werden in der Oberfläche mit dezentem 6-Pixel-Eckenradius dargestellt; die Original-PNGs bleiben unverändert. Normale App-Icons und Favicon besitzen proportional abgerundete, transparente Ecken. Maskierbares Android-Icon und Apple-Touch-Icon bleiben vollflächig deckend, damit die jeweilige Plattform ihre eigene Form ohne dunkle Transparenzränder anwenden kann.
 
 Installationsangebot ist browser-/plattformabhängig; Manifest und Service Worker benötigen einen sicheren Kontext (localhost oder HTTPS). Auf iOS: Safari → Teilen → Zum Home-Bildschirm. Auf Android: Browser-Menü → App installieren, sofern angeboten.
 
@@ -157,7 +192,9 @@ npm.cmd run test:e2e
 
 Fachtests prüfen unter anderem exakte Beginn-/Anmeldeschlussgrenzen, scoped Rollen, Ist-Statistik ohne Zusagen, Abschluss/Korrekturen, Historie nach Einheitswechsel, unabhängige Serieninstanzen, UTC-/Berliner Jahresgrenzen, Sommer-/Winterzeit und CSV-Zellen. Playwright prüft echte Benutzerabläufe, Persistenz, Rollenansichten, Mitglieds-/Dokumentverwaltung, mobile Viewports, Service Worker und Offline-Fallback. Axe ergänzt automatisierte WCAG-Prüfungen; ersetzt keinen manuellen Screenreader-/Gerätetest.
 
-Abschließend geprüft: **22 Fachtests und 8 Playwright-Szenarien erfolgreich**, TypeScript ohne Fehler, ESLint ohne Befunde und optimierter Produktionsbuild erfolgreich. Die Browserläufe umfassen Axe-Prüfungen der fünf Hauptseiten und der Verwaltungsbereiche in Hell/Dunkel sowie Anwesenheitsdialoge und schmale 320-/390-Pixel-Ansichten. Der Produktionsserver wurde per HTTP-Readiness und vollständigem Browserlauf geprüft.
+Der Workflow führt **22 Fachtests und 14 Playwright-Szenarien** aus. Die acht ursprünglichen Funktionsabläufe bleiben erhalten; sechs Redesign-Szenarien ergänzen Ein-Tipp-Rückmeldung ohne Ist-Änderung, Anmeldeschlusssperre, persistentes Theme/Systemwechsel/Tab-Abgleich, sichtbare Theme-Speicherfehler, Original-Branding und Icon-Größen sowie Navigation/Dialogfokus und responsive Layouts bei 320/390/412 Pixeln. Axe prüft die Haupt- und Verwaltungsansichten in Hell/Dunkel. iPhone-13- und Pixel-7-Profile prüfen Touch-Eingaben in **Chromium-Emulation**, nicht auf echter Hardware oder Safari. Screenshots sind im CI-Artefakt verfügbar. Die tatsächlichen Ergebnisse sind im jeweiligen Actions-Lauf bzw. Pull Request ersichtlich.
+
+Fachmodell, Berechtigungsregeln, Statistikdefinitionen und vorhandene Daten bleiben durch das UI-Redesign unverändert. Eine zukünftige fachliche Wehrleiter-Rolle (`FIRE_CHIEF`) ist **nicht implementiert**; insbesondere werden keine zusätzlichen technischen Adminrechte vergeben. Ein separates Mitteilungsmodul ist ebenfalls nicht vorhanden; die Startseite kennzeichnet Hinweise aus bestehenden Termin-/Dokumentdaten ausdrücklich.
 
 `npm.cmd run icons` erzeugt die PNG-Symbole erneut. Testartefakte liegen in `test-results` und sind in `.gitignore` ausgeschlossen. Playwright-Kontexte sind pro Test isoliert und verändern nicht die Daten des normalen Browserprofils.
 
