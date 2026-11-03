@@ -749,9 +749,16 @@ leerer `search_path`; private Helfer nicht direkt browseraufrufbar.
   Ohne aktuelle Einheit ist kein geschützter Zugriff erlaubt. Historische Event-Roster,
   Teilnahme-/Anwesenheitsdaten und Audit-Snapshots werden nicht verändert.
 
-**Anwendungsstatus:** 008 zunächst vorbereitet, vor gehosteter Anwendung vollständige
-PostgreSQL-CI einschließlich `supabase/tests/members.sql` prüfen. Nur die fehlende 008 anwenden,
-keine alten Migrationen wiederholen oder Testfixtures im DEV-Projekt ausführen.
+**Anwendungsstatus am 03.11.2026:** Nach vollständig erfolgreicher PostgreSQL-/Pages-CI
+ausschließlich die fehlende 008 im bestehenden Projekt angewendet:
+`20261103175317`, `ff_008_member_management`.
+Quell-SHA-256 `922d1f38814ac2eb5257758f5375deeaf0e48ef5b399c06fe0f959d3a82b7e1e`
+(UTF-8, LF, abschließenden Whitespace entfernen).
+Alle sechs tatsächlichen Funktionskörper stimmen nach normalisiertem Inhaltsvergleich mit
+den geprüften Quellen überein. Vier öffentliche RPCs sind nur für `authenticated` ausführbar,
+zwei private Helfer weder für `anon` noch `authenticated`, alle mit leerem `search_path`.
+Keine alten Migrationen wiederholt oder Testfixtures im DEV-Projekt ausgeführt.
+Keine Mail-/Auth-Konfiguration, realen Mitgliedschaften oder Kontostatus verändert.
 
 ### UI und Prüfungen
 
@@ -778,6 +785,27 @@ Gespeicherte Änderung und anschließender Ladefehler werden ausdrücklich getre
   Beobachtungen; daraus wird keine vollständige echte Zwei-Konten-API-Abnahme abgeleitet.
   Mitgliederänderungen gegen reale Konten sind noch nicht abgenommen und werden nicht ohne
   bewusste Auswahl als gehostete Testfixtures ausgeführt.
+
+**Ausgeführte Nachweise:**
+
+- [PostgreSQL-CI 41684810841](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/41684810841):
+  001–008 und sämtliche drei SQL-Testdateien erfolgreich.
+- [Pages-CI 41687595719](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/41687595719):
+  70/70 Fachtests, Typen, ESLint, 19/19 Demo- und 11/11 Auth-/Termin-/Mitglieder-Szenarien,
+  konfigurierte Static Exports erfolgreich. Kein Deployment. Vorherige rote Läufe bleiben
+  nachvollziehbar: exakte `getByLabel`-Auswahl bei verschachtelten Select-Optionen durch die
+  tatsächlich bestätigte Combobox-Rolle ersetzt; Mitglied war nach Rollenentzug noch auf der
+  gesperrten Adminroute; Berechtigungshinweis vom zusätzlichen Next-Routenansager abgegrenzt.
+  Keine Sicherheitsassertion oder Axe-Regel entfernt.
+- Tatsächlicher DEV-Diagnoselauf mit vorhandenen Identitäten: GLOBAL_ADMIN liest zwei Profile,
+  MEMBER-Verwaltungs-RPC wird mit 42501 abgewiesen, Entzug der letzten GLOBAL_ADMIN-Einheit
+  ebenfalls. Ausschließlich temporäre SQL-Identitätskonfiguration, kein echter JWT-Netzwerktest
+  und keine gespeicherte Mitgliederänderung.
+- Während der Benutzerabnahme entstand im DEV ein gespeicherter Termin mit `event_created`-Audit
+  und eine zentrale Antwort von der anderen MEMBER-Identität. MCP bestätigt diesen Bestand
+  ohne Namen/Tokens im öffentlichen Nachweis. Das stützt die Benutzerbestätigung der funktionierenden
+  Erstellung/Antwort; kein unabhängiger Mitschnitt aller Browser-/Edit-/Absageschritte.
+  Der Agent hat diese Daten nicht erzeugt oder verändert.
 
 Nach manueller Veröffentlichung mit vorhandenen privaten Testkonten: gemeinsamer synthetischer
 Termin, Antwortänderung und Reload; MEMBER darf keinen Termin anlegen. Danach gezielt am

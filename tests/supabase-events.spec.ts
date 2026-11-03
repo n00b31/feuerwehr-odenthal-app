@@ -270,7 +270,11 @@ test("global membership, role, function and status changes are reflected in rene
   await expect.poll(() => page.evaluate(() => document.getAnimations().filter((x) => x.playState === "running" &&
     Number.isFinite(x.effect?.getComputedTiming().endTime)).length)).toBe(0);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-  await page.screenshot({ path: "test-results/dev031-members-desktop.png", fullPage: true });
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+  const sidebar = await page.locator(".sidebar").boundingBox();
+  expect(sidebar?.x).toBe(0);
+  expect(sidebar?.y).toBe(0);
+  await page.screenshot({ path: "test-results/dev031-members-desktop.png" });
   await a.close(); await m.close();
 });
 
