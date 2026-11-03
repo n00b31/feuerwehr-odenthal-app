@@ -118,6 +118,7 @@ begin
   perform ff_private.require_rule(ff_private.has_role('GLOBAL_ADMIN'), 'Global administration required');
   perform 1 from public.profiles where id = target_user for update;
   perform ff_private.require_rule(found and assign is not null, 'Existing profile and assignment flag required');
+  perform ff_private.require_rule(wanted_role <> 'MEMBER' or assign, 'Base membership is controlled by account approval');
   perform ff_private.require_rule(
     (wanted_role in ('MEMBER', 'FIRE_CHIEF', 'GLOBAL_ADMIN') and target_unit is null and target_function is null) or
     (wanted_role = 'UNIT_ADMIN' and target_unit is not null and target_function is null) or

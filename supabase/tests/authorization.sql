@@ -105,6 +105,7 @@ select public.ff_approve_member('10000000-0000-0000-0000-000000000009', current_
 select public.ff_set_role('10000000-0000-0000-0000-000000000002', 'UNIT_ADMIN', current_setting('ff.test.unit')::uuid);
 select public.ff_set_role('10000000-0000-0000-0000-000000000004', 'FUNCTION_ADMIN', null, current_setting('ff.test.function')::uuid);
 select public.ff_set_role('10000000-0000-0000-0000-000000000006', 'FIRE_CHIEF');
+select pg_temp.expect_denied($q$select public.ff_set_role('10000000-0000-0000-0000-000000000003', 'MEMBER', null, null, false)$q$);
 select pg_temp.expect_denied($q$select public.ff_set_role(auth.uid(), 'GLOBAL_ADMIN', null, null, false)$q$);
 select pg_temp.expect_denied($q$select public.ff_set_account_status(auth.uid(), 'suspended', 'Test suspension')$q$);
 reset role;

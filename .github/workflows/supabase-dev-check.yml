@@ -25,13 +25,15 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-    env:
-      POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
     steps:
       - uses: actions/checkout@v4
       - name: Create isolated Auth test fixture
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/auth-fixture.sql
       - name: Apply versioned migrations to disposable PostgreSQL
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         shell: bash
         run: |
           set -euo pipefail
@@ -40,4 +42,6 @@ jobs:
             docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < "$migration"
           done
       - name: Verify RLS and server-side authorization
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/authorization.sql

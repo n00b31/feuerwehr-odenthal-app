@@ -101,6 +101,10 @@ des letzten aktiven Global-Admins. Eine außerhalb dieser RPCs gesperrte/gelösc
 Admin-Identität erfordert einen gesonderten, dokumentierten Operator-Recovery-Prozess,
 keine versteckte Selbstfreigabe. Nicht beliebige Feuerwehrmitglieder zu Supabase-Projektadmins machen.
 
+`MEMBER` ist die Basis einer Freigabe und wird nicht isoliert über die Rollen-RPC entzogen.
+Für den Entzug des Mitgliederzugriffs dient der protokollierte Accountstatus, nicht das
+Entfernen eines ansonsten wirkungslosen Basisrollen-Eintrags.
+
 ## 5. E-Mail in DEV
 
 Der integrierte Mailversand ist ausschließlich eine **nicht-produktive Testlösung**.
