@@ -1,290 +1,289 @@
-# Supabase DEV – Bestandsaufnahme und Vorbereitung
+# Supabase DEV – Verbindung, Authentifizierung und Freigabe
 
-Stand: 03.11.2026. Ziel ist das **bereits angelegte** Supabase-Projekt, kein neues Projekt.
-Diese Vorbereitung schaltet die öffentliche Demo **nicht** auf echte Benutzer oder Daten um.
+Stand: 03.11.2026. Nur das **bereits angelegte DEV-Projekt** verwenden.
+Keine produktiven Daten, kein neues Projekt, keine kostenpflichtigen Dienste.
 
-## 1. Konfigurationsbericht: tatsächlich geprüft
+## 1. Bestandsaufnahme und tatsächlich ausgeführte Änderungen
 
-| Prüfpunkt | Feststellung | Konsequenz |
-|---|---|---|
-| Autorisierte Supabase-Integration | In dieser Sitzung keine Supabase-Tools verfügbar. Connector-Suche meldet „unavailable“. | Kein bestätigter Projektzugriff, keine Remote-Änderung. |
-| Alternative Management-Verbindung | Keine Supabase-CLI und kein `SUPABASE_ACCESS_TOKEN` in der Sitzung vorhanden. Es wurden nur Vorhandenseinsprüfungen durchgeführt, keine Schlüssel ausgegeben. | Keine lokale Installation und kein Zugriff mit erfundenen Daten. |
-| Projektidentität / Status / Region / Plan | **Nicht remote geprüft.** Project Ref und URL sind nicht bekannt. „Projekt leer“ ist die Angabe des Auftraggebers, keine eigene Messung. | Vor Anwendung der Migrationen bestehendes DEV-Projekt eindeutig zuordnen. |
-| PostgreSQL / Tabellen / RLS / Grants | **Nicht remote geprüft.** | Datenbankversion, Erreichbarkeit, vorhandene Objekte und Berechtigungen inventarisieren. |
-| Auth / E-Mail-Provider / Verifizierung / Redirects | **Nicht remote geprüft.** | Sollwerte in Abschnitt 3, nicht als bereits aktiviert verstehen. |
-| SMTP / Empfänger / Versandlimits | **Nicht remote geprüft.** Offizielle Dokumentation zum Standardversand gelesen. | Keine Testmail versendet, keine Versandkontingente verbraucht. |
-| API-Schlüssel / exponierte Schemas / Sicherheit | **Nicht remote geprüft.** | Keine Keys erzeugt, gelesen, rotiert oder im Repository hinterlegt. |
-| Bestehende Anwendung | Next.js-Static-Export, Browser-Repository, lokale Rollen und lokale Audit-Einträge; kein Supabase-SDK und keine echte Anmeldung. | Demo bleibt strikt vom zukünftigen Backend getrennt. |
-| GitHub-Actions-Variablen | Über die autorisierte GitHub-Verbindung abgefragt: aktuell keine Repository-Variablen vorhanden. Keine Werte oder Secrets gesetzt. | Die beiden öffentlichen DEV-Variablen nach bestätigter Projektzuordnung konfigurieren. |
-
-**Bereits im Repository vorbereitet:** vier transaktionale SQL-Migrationen, RLS und eingeschränkte RPCs,
-isolierte PostgreSQL-Autorisierungstests, optionale öffentliche Build-Konfiguration, MCP-Beispiel und diese Anleitung.
-**Im vorhandenen Supabase-Projekt durchgeführt: nichts.** Auch keine Ressourcen-, Plan-, SMTP- oder Auth-Änderung.
-
-## 2. Bestehendes Projekt autorisiert verbinden
-
-1. Im Supabase-Dashboard das vorhandene DEV-Projekt öffnen. Project Ref, Region, Status und Plan kontrollieren.
-   Kein „New project“, kein kostenpflichtiges Upgrade.
-2. Der offizielle gehostete MCP-Endpunkt ist `https://mcp.supabase.com/mcp`.
-   `.mcp.json.example` ist **inaktiv** und enthält keine Zugangsdaten. Vor Aktivierung die URL um
-   `&project_ref=` mit dem tatsächlichen Project Ref ergänzen. `read_only=true` zunächst beibehalten.
-   Den Ref aus dem Dashboard verwenden, nicht den GitHub-Repositorynamen.
-3. Die geprüfte Beispieldatei als `.mcp.json` kopieren. Diese lokale Datei ist git-ignoriert.
-   In der Copilot-App unter **Settings → Projekt → Repository customizations → MCP servers**
-   den Server `supabase` prüfen und, sofern angeboten, **Sign in** wählen.
-   OAuth im Browser mit dem berechtigten Supabase-Konto und der passenden Organisation abschließen.
-   Keine PATs, Datenbankpasswörter oder Secret Keys im Chat übermitteln.
-4. Falls die App den Server nicht lädt oder keine Anmeldung anbietet: Dashboard für die manuelle
-   Inventarisierung nutzen bzw. eine unterstützte OAuth-MCP-Verbindung einrichten. Eine Konfigurationsdatei
-   allein bestätigt weder Authentifizierung noch Projektzugriff.
-5. Zuerst lesend Projektidentität, PostgreSQL, Auth-Einstellungen, API-Schemas, Tabellen, Policies,
-   Tabellen-/Funktions-Grants und Security Advisor prüfen. MCP stellt möglicherweise nicht jede
-   Auth-Management-Einstellung bereit; verbleibende Punkte im Dashboard prüfen und belegen.
-6. Erst nach dokumentierter Identitätsprüfung und Review darf ein berechtigter Operator die
-   nicht-destruktiven Migrationen am **bestehenden DEV-Projekt** anwenden. Eine spätere Schreibverbindung
-   bewusst projektgebunden freigeben, nicht stillschweigend den Read-only-Schutz entfernen.
-
-Die Connector-Suche wurde nicht durch eine andere Katalogsuche umgangen. Das MCP-Beispiel folgt
-der offiziellen Supabase-Dokumentation und wird hier nicht automatisch aktiviert.
-
-## 3. Erforderliche Supabase-Einstellungen
-
-Alle folgenden Punkte sind **Sollwerte / offene Dashboard-Aufgaben**, keine Behauptungen über den Ist-Zustand.
-
-| Bereich | DEV-Sollwert und Prüfung |
+| Prüfpunkt | Ergebnis |
 |---|---|
-| Projekt | Vorhandenes Projekt aktiv, Datenbank erreichbar; PostgreSQL mindestens 15 für `security_invoker`-Views. CI prüft PostgreSQL 17; tatsächliche Projektversion noch abgleichen. Free-Plan/Pausierung prüfen, nichts kostenpflichtig aktivieren. |
-| Auth-Provider | E-Mail/Passwort aktiv. Anonyme Anmeldung, Telefon- und nicht benötigte OAuth-Provider aus. Nicht mit dem lokalen Demo-Profilwechsel verbinden. |
-| E-Mail-Verifizierung | „Confirm email“ an; keine automatische Bestätigung. Secure email change an. Auch bei einer Fehlkonfiguration verhindert die Datenbank geschützten Zugriff ohne `email_confirmed_at`. |
-| Domain | Before User Created Hook auf `ff_private.before_user_created` konfigurieren, URI `pg-functions://postgres/ff_private/before_user_created`. Nur exakte Domain `feuerwehr-odenthal.de`, case-insensitiv, Provider `email`, keine anonymen Konten. Hook ist laut Dokumentation im Free-Plan verfügbar; aktuellen Plan prüfen. |
-| Zweite Domain-Schranke | Auth-Insert-Trigger blockiert fremde Domains auch bei deaktiviertem Hook. Der Hook liefert die verständliche Registrierungsablehnung; der Trigger ist die fehlerschließende Rückfallebene. |
-| Site URL | Für die spätere Integration `https://n00b31.github.io/feuerwehr-odenthal-app/`. Noch kein Login-/Callback-UI vorhanden: jetzt keine funktionierende Anmeldung behaupten. |
-| Redirect-Allowlist | Später exakt `https://n00b31.github.io/feuerwehr-odenthal-app/auth/callback/`; nur nach Implementierung dieser statischen Route hinzufügen. Für Passwort-Reset eine eigene tatsächlich implementierte Route. Keine `**`-Wildcard für `github.io`, keine beliebigen `next`-URLs. |
-| Auth-Sicherheit | Passwortlänge, Rate Limits, OTP-/Token-Laufzeiten und verfügbare Passwortschutzoptionen prüfen. Für Admins MFA vor produktivem Betrieb planen. Keine kostenpflichtige Option ungefragt einschalten. |
-| Data API | Nur bewusst benötigte Schemas exponieren. `ff_private`, `auth` und technische Schemas **nicht** exponieren. `public` ist für die vorbereiteten Tabellen/RPCs vorgesehen. Unbenutzte API-/GraphQL-/Realtime-Flächen prüfen, nicht pauschal neue Schemas veröffentlichen. |
-| RLS / Grants | RLS auf allen 15 Anwendungstabellen. Kein `anon`-Zugriff. Authenticated erhält nur definierte SELECT-Spalten/Policies und ausgewählte RPCs, keine direkten DML-/TRUNCATE-/TRIGGER-Rechte. Bestehende Default-Grants und Security Advisor zusätzlich remote prüfen. |
-| Schlüssel | Bestehende Project URL und **Publishable Key** verwenden. Kein Secret-/`service_role`-/Management-Key im Frontend. Keine Schlüsselrotation ohne Anlass. |
-| Ressourcen | Keine Edge Functions, Storage-Buckets, Realtime-Abonnements oder bezahlten Dienste automatisch anlegen. SharePoint-Dateien bleiben außerhalb dieser Datenbank. |
+| Ausgangsbasis | Vorbereitung aus PR #3, Commit `c024592c514859b8a010230b9c2e14b5a64d1e51`, auf separatem Branch `feature/supabase-auth-dev` erweitert. PR #3 bei Prüfung offen, grüne Prüfungen; kein automatischer Merge. |
+| Migrationen/Fremdschlüssel | Vier transaktionale Grundlagenmigrationen geprüft: 15 Tabellen, UUID-FKs, Bereichs-/Zeit-Constraints, Indizes, historische Mitgliedschaften/Roster, getrennte Antworten/Anwesenheit/Bestätigung. Ergänzung 005 liefert den aktuellen eigenen Zugriffsstatus. |
+| RLS und Grants | Alle Anwendungstabellen mit RLS, kein anonymer Datenzugriff, kein direktes Client-DML/TRUNCATE/TRIGGER. Schreiben nur über eingeschränkte RPCs. `confirmed_attendance` verwendet `security_invoker`. Kein Ersatz durch breite Schreib-Policies. |
+| Serverfunktionen | `SECURITY DEFINER` mit leerem `search_path`, explizit entzogenen PUBLIC-Rechten, aktuellen DB-Rollen statt User-Metadaten. Freigabe verlangt verifizierte Feuerwehr-E-Mail plus Einheit. Bootstrap nicht vom Browser aufrufbar. |
+| Autorisierte Supabase-Verbindung | Keine verfügbare Supabase-Integration, CLI oder Management-Token-Umgebungsvariable. Connector-Katalog lieferte eine unpassende Vercel-Integration; nicht angeboten oder verbunden. |
+| Projektstatus/Datenbank/Auth/API | **Nicht remote geprüft.** Project Ref, URL, Schlüssel, tatsächliche PostgreSQL-Version, Tabellenbestand, Hook, Verifizierung, Redirects, Mail-Empfänger/Limits und Security Advisor sind weiterhin offen. |
+| GitHub-Konfiguration | Bei Bestandsaufnahme keine Repository-Variablen vorhanden. Keine Schlüssel/Secrets oder Dashboard-Einstellungen gesetzt. |
+| In diesem Auftrag geändert | Nur dieses Repository/Feature-Branch: SDK, statischer PKCE-Callback, Login/Signup/Pending/Freigabe, RLS-Leseadapter, Migration 005, Preflight, Tests, Actions und Dokumentation. |
+| Im Supabase-Projekt geändert | **Nichts.** Keine Migration, kein Testkonto, keine Mail, kein Bootstrap, keine Planänderung. |
+| Unabhängige Demo | `n00b31/feuerwehr-odenthal-demo` bleibt unverändert. Kein Codeimport, Build-Download, Datenzugriff oder Deployment aus diesem Repository dorthin. |
 
-## 4. Registrierung und Freigabe: serverseitige Grenze
+Die öffentliche DEV-URL wird erst nach einem bewusst freigegebenen Main-Merge neu veröffentlicht.
+Ein Feature-Branch/PR veröffentlicht weder Pages noch Datenbankänderungen.
 
-1. Supabase Auth registriert die Feuerwehr-E-Mail. Hook und Datenbank prüfen die Domain,
-   nicht nur ein Formular im Browser.
-2. Der Auth-Insert-Trigger erzeugt ein Profil mit `status = pending`. Selbst übermittelte
-   `role`, `status`, Einheit und Sonderfunktionen aus `user_metadata` werden ignoriert.
-3. Supabase bestätigt die E-Mail. Das allein erteilt **keinen** Zugriff auf Feuerwehrinhalte.
-4. Eine freigegebene `GLOBAL_ADMIN`-Person sieht die Registrierungen über `ff_pending_registrations()`.
-   Unbestätigte E-Mails werden kenntlich gemacht; sie können nicht freigegeben werden.
-5. `ff_approve_member(user, unit)` prüft Identität, Verifizierung und Domain nochmals,
-   weist die Einheit zu und vergibt nur `MEMBER`. Rollen werden separat kontrolliert vergeben.
-6. Erst danach erlauben RLS und RPCs geschützte Zugriffe. Vorher ist ausschließlich das eigene
-   minimale Profil mit Freigabestatus lesbar, keine Einheiten, Termine, Dokumente, Rollen oder Statistiken.
+## 2. Bestehendes Projekt autorisiert prüfen
 
-Der Gatekeeper liest den aktuellen Datenbankzustand und `auth.users`; er vertraut nicht auf
-benutzerveränderbare Metadaten oder veraltete Rollen-Claims im JWT. Ablehnung/Sperrung, Auth-Ban,
-gelöschte Auth-Identität, fehlende Bestätigung und eine fehlende aktuell gültige Einheitszuordnung
-sperren geschützte Zugriffe.
-Eine andere E-Mail als `approved_email` verlangt erneute explizite Freigabe, auch innerhalb der
-richtigen Domain. Das zukünftige UI muss diesen Zustand als „erneute Prüfung nötig“ anzeigen;
-das gespeicherte Profilstatusfeld allein reicht dafür nicht.
+1. Supabase-Dashboard öffnen, das **vorhandene** DEV-Projekt auswählen. Project Ref, Organisation,
+   Region, Status und Plan festhalten; kein „New project“ und kein Upgrade.
+2. Optional projektgebundenes OAuth-MCP verwenden: `.mcp.json.example` ist inaktiv. Die URL
+   `https://mcp.supabase.com/mcp?read_only=true&project_ref=…` ausschließlich mit dem tatsächlichen
+   Ref ergänzen und als git-ignorierte `.mcp.json` lokal speichern.
+3. In der Copilot-App **Settings → Projekt → Repository customizations → MCP servers → supabase → Sign in**,
+   falls der Server und diese Aktion angeboten werden. Mit dem berechtigten Supabase-Konto anmelden.
+   Wenn nicht verfügbar, den manuellen Dashboard-Weg verwenden. Keine Zugangsdaten im Chat übermitteln.
+4. Projektidentität und PostgreSQL-Version zuerst prüfen. Im SQL Editor den vollständigen Inhalt von
+   `supabase/preflight.sql` ausführen. Er verwendet eine **Read-only-Transaktion** und listet
+   Auth-Benutzeranzahl, Tabellen/Spalten, Constraints/FKs, RLS/Policies, Grants und Serverfunktionen auf.
+   Keine Ergebnisse mit personenbezogenen Inhalten öffentlich an einen PR hängen.
+5. Zusätzlich Dashboard-Einstellungen gemäß Abschnitt 4 prüfen: diese werden durch SQL/MCP nicht
+   notwendigerweise vollständig sichtbar. Ein Public Key bestätigt keine Management-Autorisierung.
 
-### Erster Administrator
+## 3. Migrationen kontrolliert anwenden
 
-Es gibt keinen automatisch freigegebenen Demo-Admin, keine fest eingetragene E-Mail und keine
-Anmeldung per Publishable Key als Administrator.
-Nach echter Registrierung und E-Mail-Verifizierung wählt der berechtigte Datenbankoperator
-die überprüfte Auth-UUID aus und ruft im SQL Editor einmalig
-`ff_private.bootstrap_global_admin(benutzer_uuid, einheits_uuid)` auf.
-Die Einheits-UUID stammt aus `units`, Pilot `code = 'scheuren'`.
-
-Die Bootstrap-Funktion ist für `anon`/`authenticated` gesperrt und verweigert jeden weiteren
-Aufruf, sobald jemals eine globale Rolle angelegt wurde. Normale RPCs verhindern den Entzug
-des letzten aktiven Global-Admins. Eine außerhalb dieser RPCs gesperrte/gelöschte letzte
-Admin-Identität erfordert einen gesonderten, dokumentierten Operator-Recovery-Prozess,
-keine versteckte Selbstfreigabe. Nicht beliebige Feuerwehrmitglieder zu Supabase-Projektadmins machen.
-
-`MEMBER` ist die Basis einer Freigabe und wird nicht isoliert über die Rollen-RPC entzogen.
-Für den Entzug des Mitgliederzugriffs dient der protokollierte Accountstatus, nicht das
-Entfernen eines ansonsten wirkungslosen Basisrollen-Eintrags.
-
-## 5. E-Mail in DEV
-
-Der integrierte Mailversand ist ausschließlich eine **nicht-produktive Testlösung**.
-Laut offizieller Dokumentation dürfen ohne eigenes SMTP nur E-Mail-Adressen aus dem
-Supabase-Organisationsteam angeschrieben werden; das dokumentierte Standardlimit beträgt
-derzeit **2 Nachrichten pro Stunde**, kann sich aber ändern. Tatsächliche Projektlimits sind noch ungeprüft.
-
-Die Testadresse muss gleichzeitig autorisierter Empfänger **und** eine verifizierbare
-`@feuerwehr-odenthal.de`-Adresse sein. Falls keine geeignete Team-Testadresse existiert,
-bleiben echte Versandtests offen. Die Domainregel und E-Mail-Verifizierung nicht lockern
-und normalen Mitgliedern nicht nur wegen der Mailzustellung Control-Plane-Rechte geben.
-Keine Masseneinladungen und keine Testmails an die 250 synthetischen Datensätze.
-
-Fehler „Email address not authorized“ und Rate-Limit-Antworten später sichtbar behandeln;
-keine automatischen Wiederholungsschleifen. Bestätigungs-, Wiederholungs- und Reset-Tests
-wegen des gemeinsamen Kontingents einzeln planen.
-
-Die spätere Umstellung erfolgt **nur im Supabase-Auth-SMTP-Dashboard**: freigegebener Anbieter,
-Absender, SPF/DKIM/DMARC, SMTP-Zugangsdaten ausschließlich dort. Die Anwendung verwendet
-weiter dieselben Supabase-Auth-Methoden; sie enthält keinen eigenen Mailer und braucht deshalb
-für die SMTP-Umstellung keine Änderung. Kein SMTP-Dienst wurde eingerichtet.
-Supabase Auth erfordert keine persönlichen Microsoft-365-Lizenzen; eine tatsächlich erreichbare
-Feuerwehr-Mailbox/Weiterleitung bleibt erforderlich. SharePoint-Gastzugriff und Lizenzen separat klären.
-
-## 6. PostgreSQL-Datenmodell und Migrationen
-
-| Migration | Inhalt |
+| Datei in `supabase/migrations` | Zweck |
 |---|---|
-| `20261103000100_foundation.sql` | 15 Tabellen, Enums, FK-/Scope-/Zeit-Constraints, Indizes; RLS sofort an, Client-Grants entzogen. Bricht bei vorhandenen Auth-Benutzern ab: erst Bestandsaufnahme/Backfill-Plan statt Daten überschreiben. |
-| `20261103000200_identity_and_rls.sql` | Domain-Hook, Pending-Profil-Trigger, live geprüfte Identität/Rollen, SELECT-Policies und `security_invoker`-Statistikview. |
-| `20261103000300_privileged_commands.sql` | Beschränkte Freigabe-/Rollen-/Delegations-/Rückmeldungs-/Anwesenheits-RPCs, geschützter einmaliger Bootstrap, serverseitiges Audit und unveränderbare ursprüngliche Bestätigung. |
-| `20261103000400_reference_data.sql` | Nur fünf Einheiten und drei konfigurierbare Sonderfunktionen. Keine Personen, Auth-Konten, Dokumentlinks, Termine oder produktiven Daten. |
+| `20261103000100_foundation.sql` | Schema `ff_private`, Enums, 15 Tabellen/FKs/Constraints, RLS sofort an, Client-Schreibrechte entzogen. Bricht bei vorhandenen Auth-Benutzern ab. |
+| `20261103000200_identity_and_rls.sql` | Domain-Hook, Pending-Profil-Trigger, live geprüfte Identität/Rollen, SELECT-Policies und bestätigte Statistikview. |
+| `20261103000300_privileged_commands.sql` | Freigabe, Rollen/Status, Delegation, Antworten, Anwesenheit/Bestätigung/Korrektur, atomarer Audit und einmaliger Operator-Bootstrap. |
+| `20261103000400_reference_data.sql` | Fünf konfigurierbare Einheiten, Pilot Scheuren, drei Sonderfunktionen; keine Personen, Auth-Konten oder Termine. |
+| `20261103000500_client_access_status.sql` | `ff_my_access()`: eigene Identität, wirksamer Zugriffsstatus und nur bei Freigabe Einheit/Rollen. Dieselbe aktuelle DB-Regel wie RLS, nicht nur `profiles.status`. |
 
-Tabellen: `profiles`, `units`, `unit_memberships`, `special_functions`, `function_memberships`,
-`role_assignments`, `event_series`, `events`, `event_roster`, `participation_responses`,
-`actual_attendance`, `attendance_confirmations`, `event_delegations`, `document_areas`, `audit_entries`.
+**Bei tatsächlich leerem Projekt:** Preflight reviewen, dann Dateien 001–005 einzeln, vollständig und
+in Reihenfolge im Dashboard-SQL-Editor ausführen. Jede Datei besitzt `BEGIN`/`COMMIT`; bei Fehler
+abbrechen, Ursache prüfen, keine Folgedateien blind ausführen.
 
-UUIDs ersetzen lokale Demo-IDs, ohne automatische Zuordnung oder Übernahme von Browserrollen.
-Eine aktive Einheit je Person, historische Einheitsmitgliedschaften mit Zeiträumen; beliebig viele
-Sonderfunktionen. Teilnehmerkreis mit damaliger Einheit und Namen bleibt pro Instanz gespeichert.
-Rückmeldungen sind keine tatsächliche Anwesenheit.
+**Bei bereits angewandter Vorbereitung:** Ausführungsnachweis und Tabellen/Policies/Funktionen
+mit 001–004 abgleichen und nur die nachweislich fehlende Migration 005 anwenden.
+Bei unbekannten Namenskollisionen, vorhandenen Benutzern oder abweichendem Layout stoppen:
+gezielte Folge-/Backfill-Migration planen, niemals vorhandene Daten überschreiben.
 
-Serien speichern Berliner lokale Startzeit, Zeitzone, Häufigkeit und Anzahl; Instanzen besitzen
-eigene UTC-Zeitpunkte, Teilnehmer, Delegationen und Anwesenheiten. Die spätere Serien-RPC muss
-DST-/Monatsendregeln wie die bestehende Fachschicht serverseitig durchsetzen, **kein** pauschales
-Addieren von UTC-Wochen. Diese Erstellungs-RPC ist noch nicht implementiert.
+Datum, tatsächlichen Project Ref, Dateinamen, Git-Commit und Dateiprüfsummen im privaten
+DEV-Änderungsnachweis festhalten. Falls SQL Editor statt CLI verwendet wird, vor einem späteren
+`supabase db push` die tatsächliche Migrationshistorie kontrolliert abgleichen.
+Keine blinde Wiederanwendung oder `migration repair`.
 
-### RLS-Vorschlag, bereits als SQL vorbereitet
+**Verboten am vorhandenen Projekt:** `db reset`, `DROP`, `TRUNCATE`, Auth-Fixture oder Testdatensuite.
+`supabase/tests/*.sql` ist ausschließlich für die wegwerfbare CI-Datenbank **`ff_dev_ci`** vorgesehen.
+Keine Remote-Migration aus Pull Requests oder Pages-Workflows.
 
-| Rolle | Lesen | Schreiben über RPC |
+Nach Anwendung: alle 15 Tabellen auf RLS prüfen, FK-/Spaltenlayout und Grants erneut inventarisieren,
+`ff_private` darf nicht als Data-API-Schema exponiert sein. Security Advisor prüfen.
+
+## 4. Manuelle Supabase-Dashboard-Einstellungen
+
+Alle Werte in dieser Tabelle sind **erforderliche Sollwerte**, nicht remote bestätigter Ist-Zustand.
+
+| Bereich | Einstellung / Prüfung |
+|---|---|
+| Projekt | Bestehendes DEV-Projekt aktiv; PostgreSQL mindestens 15 (`security_invoker`), CI verwendet 17. Free-Plan/Pausierung prüfen, nichts kostenpflichtig aktivieren. |
+| Auth → Providers | E-Mail/Passwort aktiv, Registrierung für die Testphase zulassen. Anonymous, Telefon und nicht benötigte OAuth-Provider aus. |
+| E-Mail-Verifizierung | **Confirm email an**, keine automatische Verifizierung; Secure email change an. Passwortminimum mindestens 12 Zeichen passend zum Registrierungsformular. Verfügbare weitere Schutzoptionen ohne kostenpflichtige Aktivierung prüfen. |
+| Auth → Hooks | Before User Created auf `ff_private.before_user_created`, URI `pg-functions://postgres/ff_private/before_user_created`. Nur exakte Domain `feuerwehr-odenthal.de`, case-insensitiv, Provider `email`. Die Auth-Insert-Schranke blockiert fremde Domains zusätzlich, ersetzt aber nicht die Hook-Konfiguration. |
+| Auth → URL Configuration → Site URL | Exakt `https://n00b31.github.io/feuerwehr-odenthal-app/` |
+| Redirect URLs | Exakt `https://n00b31.github.io/feuerwehr-odenthal-app/auth/callback/`. Keine Wildcard für `github.io` und keine Demo-URL freischalten. Lokale URLs nur bei tatsächlichem Testbedarf ausdrücklich ergänzen. |
+| E-Mail-Vorlage „Confirm signup“ | Standardlink mit `{{ .ConfirmationURL }}` beibehalten. Nicht den serverseitigen Next.js-SSR-Beispielendpoint `/auth/confirm` übernehmen: Pages hat keinen solchen Server. Der SDK-Redirect führt zum implementierten statischen Callback. |
+| SMTP | Zunächst integrierter DEV-Versand; berechtigte Testempfänger und aktuelle Limits im Dashboard prüfen. Keine echten Mitgliedereinladungen. |
+| Data API | Nur bewusst benötigte Schemas exponieren, für diesen Adapter `public`. `ff_private`, `auth` und technische Schemas nicht exponieren. Nicht benötigte GraphQL-/Realtime-Flächen prüfen, nicht automatisch aktivieren. |
+| Schlüssel | Bestehende Project URL und **Publishable Key** (`sb_publishable_…`) verwenden. Kein Secret-/`service_role`-/Management-Key, DB-Passwort oder alter JWT-Key im Browser. Keine Schlüsselrotation ohne Anlass. |
+| Sicherheit | RLS, Funktions-/Tabellengrants, OTP-/Token-/Sessionlaufzeiten, Rate Limits und Security Advisor prüfen. Admin-MFA, Recovery/Backups und eigenes SMTP vor echter Nutzung ergänzen. |
+
+### Integrierter E-Mail-Versand
+
+Standard-Supabase-Mail ist keine produktive Versandlösung. Laut Supabase-Dokumentation werden
+ohne eigenes SMTP nur Adressen aus dem Supabase-Organisationsteam angeschrieben; das dokumentierte
+Standardlimit liegt bei **2 Nachrichten/Stunde** und kann sich ändern. Die tatsächlichen Limits
+des bestehenden Projekts wurden nicht geprüft.
+
+Benötigt werden zwei ausdrücklich autorisierte DEV-Testadressen (erster Administrator und Mitglied),
+die gleichzeitig unter `@feuerwehr-odenthal.de` erreichbar sind. Keine beliebigen synthetischen
+250 Adressen anschreiben. Normalen Mitgliedern nicht nur für Testmails Supabase-Control-Plane-Rechte
+geben. Gibt es keine geeigneten Testempfänger, bleibt der reale Mailtest blockiert; Domainprüfung
+und Confirm email nicht abschalten.
+
+Die Oberfläche zeigt Empfänger-/Rate-Limit-/Verifizierungsfehler und sendet nicht automatisch erneut.
+„Bestätigung erneut senden“ ist eine bewusste Benutzeraktion. Bei verzögerten Mails zuerst prüfen,
+statt mehrfach zu klicken.
+
+Später SMTP ausschließlich im Supabase-Dashboard umstellen: Anbieter/Absender, SPF/DKIM/DMARC und
+SMTP-Zugangsdaten dort konfigurieren. Die App verwendet weiterhin dieselben Auth-Methoden und
+benötigt für den Transportwechsel keine Codeänderung. Keine persönlichen M365-Lizenzen nötig;
+eine funktionierende Mailbox/Weiterleitung bleibt Voraussetzung. SharePoint-Gastzugriff separat klären.
+
+## 5. Authentifizierung, Freigabe und erster Administrator
+
+1. Testkonto mit Anzeigename, Feuerwehr-E-Mail und Passwort registrieren.
+   Die App übermittelt nur `display_name` als User-Metadatum, keine Rolle/Freigabe/Einheit.
+2. Der serverseitige Hook prüft Domain/Provider. Auth-Insert erzeugt das Profil immer als `pending`.
+3. Bestätigungsmail **im selben Browser** öffnen, in dem registriert wurde. Der SDK verwendet
+   PKCE mit lokal gespeichertem Verifier. Der statische `/auth/callback/` tauscht den Code beim
+   Supabase-Auth-Server, entfernt Query/Fragment und wertet kein fremdes `next`-Ziel aus.
+4. Danach erscheint **„Wartet auf Freigabe“**. Es werden nur Auth-Identität und `ff_my_access()`
+   abgefragt; keine Termine, Dokumente, Einheitenlisten, Rollenlisten oder Statistiken geladen.
+5. Global-Administrator wählt unter Administration für die verifizierte Registrierung bewusst
+   eine Einheit. `ff_approve_member(target_user, target_unit)` prüft alles erneut, vergibt `MEMBER`
+   und protokolliert die Freigabe atomar. Unbestätigte Registrierung ist nicht freigebbar.
+6. Mitglied meldet sich erneut an oder prüft den Freigabestatus. Erst jetzt werden RLS-geschützte
+   DEV-Daten geladen. Eine leere Datenbank bleibt sichtbar leer, ohne Demo-Fallback.
+
+Die Browseroberfläche ist keine Sicherheitsgrenze. RLS/RPCs prüfen den aktuellen Account,
+Verifizierung, Domain, zur Freigabe gehörende E-Mail, aktuelle Einheitszuordnung, Rollen und
+terminbezogene Delegationen unabhängig von der Oberfläche. Alte JWT-Rollen/User-Metadaten
+erteilen keine Rechte. Sperrung, E-Mail-Wechsel oder entfallene Einheit entziehen den Zugriff.
+
+### Einmaliger Bootstrap
+
+Der erste Administrator registriert und verifiziert sein Testkonto zunächst selbst und wartet ebenfalls.
+Ein berechtigter **Datenbankoperator** prüft im Dashboard Auth-UUID, verifizierte Adresse und
+gewünschte Einheit. Dann im SQL Editor (Platzhalter durch die geprüfte UUID ersetzen):
+
+```sql
+select ff_private.bootstrap_global_admin(
+  'REPLACE_WITH_VERIFIED_AUTH_UUID'::uuid,
+  (select id from public.units where code = 'scheuren')
+);
+```
+
+Diese Funktion ist für Browserrollen nicht ausführbar und verweigert Wiederholung, sobald jemals
+eine globale Rolle angelegt wurde. Keine automatische Demo-Admin-Übernahme.
+Rollen-/Status-RPCs schützen den letzten aktiven Global-Admin; ein gelöschter/extern gesperrter
+letzter Administrator benötigt einen dokumentierten Operator-Recovery-Prozess.
+
+### Sitzungen und Grenzen
+
+Offizielles `@supabase/supabase-js` verwaltet Passwortlogin, PKCE, Refresh und lokalen Logout.
+`getUser()` prüft die gespeicherte Identität beim Auth-Server; anschließend entscheidet
+`ff_my_access()` mit derselben live geprüften DB-Bedingung wie RLS.
+
+Der SDK-Speicherschlüssel ist nach **Projekt und App-Unterpfad** getrennt. Keine lokale Demo-Person
+oder Browserrolle wird ins Backend übernommen. Auth-/Datenfehler schließen den Bereich.
+Bei Fokus, Sichtbarkeit, Online/Offline, Auth-Ereignis, manueller Aktualisierung und alle 60 Sekunden
+wird der Status erneut geprüft; angezeigte Daten werden währenddessen entfernt.
+Bereits an einen berechtigten Browser gelieferte Daten lassen sich nicht rückwirkend „zurückholen“.
+RLS prüft jeden neuen Request unabhängig von diesen UI-Aktualisierungen.
+
+Die Sitzung liegt im Browser-LocalStorage, nicht in HttpOnly-Cookies: Pages ist eine öffentliche
+statische Client-App. XSS-/Endgeräteschutz und vorsichtige Drittanbieter-Skripte bleiben wichtig.
+„Abmelden / Sitzung entfernen“ entfernt diese Browser-Sitzung, nicht alle anderen Geräte und
+nicht rückwirkend jeden schon ausgestellten Access Token. Keine Tokens/Passwörter in Logs,
+PR-Kommentaren, Artefakten oder Screenshots echter Accounts speichern.
+Der Service Worker cached keine Supabase-Requests oder geschützten Ansichten; DEV verspricht keinen
+Offline-Zugriff. Code/HTML statischer Seiten ist öffentlich, geschützte Inhalte kommen erst über RLS.
+
+Fremder Browser, abgelaufener/verwendeter Code oder fehlender Verifier erzeugt eine sichtbare
+Fehlermeldung. Nach erfolgreicher E-Mail-Verifizierung erneut anmelden; sonst eine neue Bestätigung
+anfordern. Passwort-Reset, E-Mail-Wechsel-UI und MFA sind in dieser Integrationsstufe noch nicht enthalten.
+
+## 6. Rollen und angebundener Funktionsumfang
+
+| Rolle/Berechtigung | Serverseitiger Umfang |
+|---|---|
+| Nicht freigegeben | Nur eigener minimaler Status, keine Feuerwehrinhalte. |
+| MEMBER | Sichtbare Termine/Dokumentbereiche und eigene bestätigte Anwesenheiten; Rückmeldungs-RPC bis Beginn/Frist. |
+| UNIT_ADMIN | Eigene Einheit; vorbereitete Termin-/Anwesenheits-/Delegations-RPCs, keine globale Registrierungsfreigabe. |
+| FUNCTION_ADMIN | Zugeordnete Funktion, auch Mitglieder anderer Einheiten; keine pauschalen Einheitsrechte. |
+| FIRE_CHIEF | Organisationsweit **lesend**, keine allgemeinen Schreib-/Freigaberechte. Vor produktivem Betrieb fachlich bestätigen. |
+| GLOBAL_ADMIN | Registrierungen prüfen/freigeben, Rollen-/Status-RPCs und alle vorbereiteten Bereichsaktionen. |
+| Termin-Delegation | Teilnehmer/Anwesenheit genau dieser Instanz, keine globalen Rollen oder Unterdelegation. Widerruf wird serverseitig live geprüft. |
+
+**Jetzt im DEV-UI angebunden:** Auth, Pending-/Sperrstatus, Global-Admin-Freigabe mit Einheit,
+sichtbare Termine, Dokumentbereiche, eigene bestätigte Teilnahmen/Stunden und Profil.
+Anwesenheit zählt nur mit Listenbestätigung; unbekannt ist nicht abwesend.
+
+**Noch nicht im DEV-UI angebunden:** vollständige Termin-/Serienverwaltung, Rückmeldungsschaltflächen,
+Anwesenheits-/Delegationsbearbeitung, Rollen-/Mitgliedschafts-/Dokument-CRUD und komplette Statistikexports.
+Teilweise existieren dafür bereits geprüfte RPCs, für CRUD/Serien fehlen noch Serverkommandos.
+Keine breiten DML-Grants oder lokale Demo-Schreiboperationen als Ersatz verwenden.
+Die vollständigen bisherigen Demo-Funktionen bleiben im eigenständigen Demo-Repository erhalten;
+dieses Repository kann sie für Regressionen ausdrücklich im Modus `demo` prüfen.
+
+## 7. GitHub Actions / statisches GitHub Pages
+
+Im **ursprünglichen** Repository Settings → Secrets and variables → Actions → **Variables** setzen,
+erst nachdem das vorhandene Projekt eindeutig geprüft wurde:
+
+| Variable | Wert |
+|---|---|
+| `SUPABASE_DEV_URL` | Tatsächliche HTTPS-Projekt-URL aus Supabase. |
+| `SUPABASE_DEV_PUBLISHABLE_KEY` | Tatsächlicher öffentlicher `sb_publishable_…`-Key desselben Projekts. |
+
+Keine Werte in Git eintragen und keine geheimen Schlüssel an den Build geben. Beide Variablen
+leer: DEV zeigt ausschließlich einen gesperrten Einrichtungshinweis. Nur eine Variable oder
+Secret-/JWT-Key/falsche URL: Build scheitert ausdrücklich.
+`NEXT_PUBLIC_APP_MODE` ist standardmäßig `supabase-dev`; `demo` ist ein expliziter lokaler/CI-Modus,
+kein Login-Fallback und keine veröffentlichte DEV-Ausweichlösung.
+
+`pages.yml` führt getrennt aus:
+
+1. Demo-Regression mit 250 fiktiven Personen, Fachtests, TypeScript, ESLint, Icons und bestehenden Browsertests.
+2. Separater DEV-Testbuild mit **erkennbar synthetischen** Konfigurationswerten und vollständig
+   abgefangenen Auth-/REST-Endpunkten. Keine Mail, kein Zugriff auf ein Supabase-Projekt.
+   Dieses Testbuild wird niemals als Pages-Artefakt hochgeladen.
+3. Frischer DEV-Export mit den tatsächlichen öffentlichen Repository-Variablen oder gesperrter
+   Einrichtung ohne Konfiguration. Prüfung gegen synthetische Test-Keys/Endpunkte und Secret-Key-Präfix.
+   Bei leerer Konfiguration zusätzlicher HTTP-/Browsercheck mehrerer statischer Routen.
+4. Nur erfolgreicher **Main**-Lauf veröffentlicht diesen letzten DEV-Export. PRs/manuelle
+   Feature-Branch-Läufe liefern Vorschauartefakte, kein Deployment.
+
+`supabase-dev-check.yml` wendet alle Migrationen in einer wegwerfbaren PostgreSQL-17-Datenbank an
+und prüft RLS/RPCs/Freigabe/Delegation/Anwesenheit. **Keine Verbindung zum gehosteten Projekt.**
+Der SDK-Lockfile wurde einmalig in GitHub Actions erzeugt; keine lokale Paketinstallation nötig.
+Weitere Builds/Tests ebenfalls ausschließlich in Actions möglich, keine Codespaces vorausgesetzt.
+Das Node-24-CI erfüllt die SDK-Anforderung Node >=22.
+
+Nach Variablenänderung ist ein neuer Build erforderlich; ein bereits veröffentlichter statischer
+Export liest keine Runtime-Environment-Werte. Pages-Quelle bleibt GitHub Actions.
+Keine Redirect-Wildcard, kein Next.js-Server, keine Server Actions oder API-Routen erforderlich.
+Ein SMTP-Wechsel benötigt nur Supabase-Konfiguration.
+
+## 8. Automatisierter und realer Abnahmetest
+
+| Prüfung | Automatisiert | Reale DEV-Abnahme noch erforderlich |
 |---|---|---|
-| Ausgeloggt / nicht freigegeben | Keine geschützten Daten; angemeldete Person nur eigenes minimales Profil. | Keine Feuerwehraktionen. |
-| `MEMBER` | Sichtbare Termine/Dokumentbereiche, eigene Rückmeldungen/Anwesenheiten und bestätigte Statistik. Andere Teilnehmerdaten nicht pauschal öffentlich. | Eigene Rückmeldung bis zum früheren Zeitpunkt aus Beginn und Anmeldeschluss. |
-| `UNIT_ADMIN` | Eigene Einheit, dortige Teilnehmer-/Anwesenheitslisten, Personen und Audit zu diesen Terminen. | Anwesenheit/Bestätigung/Korrektur sowie Delegation im eigenen Terminbereich. Keine Rollen-/organisationsweite Registrierungsfreigabe. |
-| `FUNCTION_ADMIN` | Zugeordnete Funktion, einschließlich zugehöriger Teilnehmer anderer Einheiten. | Dieselben Terminaktionen ausschließlich im Funktionsbereich. |
-| `FIRE_CHIEF` | Organisationsweite **lesende** Übersicht freigegebener Mitglieder, Termine, Teilnehmer und bestätigter Anwesenheit. | Keine Freigaben, Rollenvergabe oder Anwesenheitsverwaltung allein durch diese Rolle. Konservative Ausgangsentscheidung, vor Produktion fachlich bestätigen. |
-| `GLOBAL_ADMIN` | Organisationsweit; zusätzlich Registrierungsprüfung und administratives Audit. | Freigaben, Status und Rollen sowie alle vorbereiteten Termin-RPCs. |
-| Termin-Delegation | Teilnehmer/Antworten/Anwesenheit/Audit genau der delegierten Instanz. | Vorbereiten, erfassen, bestätigen, begründet korrigieren; keine Unterdelegation oder globalen Rechte. |
+| Registrierung | Exakte Domain/Passwort/Name; SDK-Signup-Payload ohne Rollen. | Autorisierte Testadresse, Auth-Hook und echte Mailzustellung. |
+| E-Mail | Synthetischer PKCE-Codeaustausch, Callback statisch erreichbar, URL bereinigt, kein fremdes `next`, Fehler/Wiederholung. | Echter Bestätigungslink im selben Browser, abgelaufener/zweiter Link, anderer Browser. |
+| Pending | Kein geschützter Request vor Freigabe, auch direkte Unterseiten bleiben gesperrt. SQL prüft fehlende Verifizierung und Metadaten-Eskalation. | Echte User-Tokens gegen REST: keine fremden oder geschützten Zeilen. |
+| Freigabe | Global-Admin wählt Einheit, unbestätigt/ohne Auswahl gesperrt; RPC-Argumente geprüft. SQL schützt Rechte und letzten Admin. | Bootstrap und Freigabe durch zwei getrennte echte Testkonten/Browser. |
+| Erneute Anmeldung | Vollständiger Browserablauf Signup → Bestätigung → Pending → Admin → Freigabe → Logout → Mitgliedlogin → RLS-Datenansicht. | Derselbe Ablauf mit echtem Auth-/Mail-/PostgREST-Gateway. |
+| Entzug/Fehler | Sperrung, fehlende Einheit, fehlende Migration, URL-/Mailfehler schließen Zugriff; SQL prüft E-Mailwechsel, Ban, Widerruf mit gleicher Identität. | Token-Refresh, abgelaufene/widerrufene Sitzung, konkurrierende Aktionen und echte Netzwerkfehler. |
+| UI/Build | Statischer Export, Demo-Regression, mobile DEV-Ansicht, Hell/Dunkel und Axe. | Physisches iPhone/Android/Safari, kein Hardware-Nachweis durch Chromium-Emulation. |
 
-Alle Tabellen-DML bleiben auch für Bereichsadmins gesperrt. Noch nicht vorhandene CRUD-RPCs
-(z. B. Termin-/Serienerstellung, Mitgliedschaftswechsel, Funktionseinrichtung und Dokumentverwaltung)
-werden **nicht** durch breite INSERT-/UPDATE-Policies ersetzt. Das ist eine fail-closed DEV-Grundlage,
-keine bereits vollständig angebundene Mehrbenutzeranwendung.
+### Manueller End-to-End-Abnahmelauf (nur Testdaten)
 
-### Anwesenheit, Nebenläufigkeit und Protokoll
+1. Privaten Testnachweis anlegen: Zeitpunkt, Project Ref, eingesetzter Git-Commit; niemals Passwörter/Tokens.
+2. Preflight, Migrationen und Dashboard-Einstellungen aus 2–4 kontrolliert abschließen.
+3. Mit autorisiertem Admin-Testkonto registrieren, echte E-Mail bestätigen und Operator-Bootstrap ausführen.
+4. Zweites autorisiertes Mitglied-Testkonto registrieren, E-Mail bestätigen. Erwartung: „Wartet auf Freigabe“.
+5. Direkte Termin-/Dokument-/Admin-URLs und REST mit dessen eigenem Token prüfen:
+   keine geschützten Daten, keine Selbstfreigabe, keine Möglichkeit fremde Rollen zu setzen.
+6. Im separaten Admin-Browser Registrierung prüfen, bewusst Scheuren auswählen, freigeben.
+   Audit-Eintrag, `MEMBER` und Mitgliedschaft im Dashboard kontrollieren.
+7. Mitglied abmelden, erneut anmelden. Erwartung: eigener Name/Einheit, nur RLS-sichtbare DEV-Inhalte,
+   kein lokaler Profilwechsel. Leere Listen sind zulässig; keine echten Personen/Termine importieren.
+8. Mit separatem synthetischem, nicht letztem Admin-/Mitgliedskonto Sperrung und fehlende Zuordnung
+   kontrolliert prüfen. Neue Requests sofort verweigert; UI spätestens bei Aktualisierung/Fokus gesperrt.
+9. Rate-Limit-/Empfängerfehler nur bewusst und unter Berücksichtigung des Mailkontingents testen.
+   Keine automatische Mailserie, keine Lockerung von RLS/Domain/Verifizierung.
+10. Ergebnis und offene Punkte privat dokumentieren. Nicht behaupten, Fixture-Tests hätten diesen
+    realen Abnahmelauf ersetzt. Keine Testkonten oder Daten destruktiv automatisiert bereinigen.
 
-Rückmeldung und Anwesenheitsaktionen sperren die Terminzeile transaktional. Beginn/Frist werden
-mit der Datenbank-Wanduhr geprüft. Delegationsänderung und Anwesenheitsaktion nutzen dieselbe
-Terminzeilensperre; nach abgeschlossenem Widerruf prüfen weitere Befehle die aktuelle Delegation.
-Auch die aktuellen Account-/Rollenzustände werden bei jeder Aktion geprüft; bereits laufende
-Transaktionen sind keine nachträglich abbrechbaren Browseraktionen.
+## 9. Noch offen / nächste Entwicklungsschritte
 
-Vorbelegung nur einmal für Übungen, `ON CONFLICT DO NOTHING` erhält manuelle Werte einschließlich
-„nicht festgestellt“. `origin = prefill` ist bis zur separaten Listenbestätigung vorläufig.
-Bestätigung erzeugt fehlende Werte als `unknown`, nie als `absent`. `confirmed_attendance` enthält
-ausschließlich bestätigte, begonnene und nicht abgesagte Termine, Berliner Berichtsjahr sowie
-Ausbildungsstunden nur für `present`. Für eine Quote zählt später nur die bestätigte Übungsbasis.
-
-Korrekturen bestätigter Listen verlangen einen Grund von 5–2000 Zeichen. Audit und fachliche
-Änderung werden atomar geschrieben: IDs, Akteur, Zeitpunkt, Alt-/Neuwert, Grund, damalige Namen
-und Termindaten. Die ursprüngliche Bestätigung bleibt als Snapshot erhalten. Member können diesen
-vollständigen Snapshot nicht über SELECT lesen. RLS, fehlende Schreibrechte und Trigger verhindern
-gewöhnliches Überschreiben des Audits; ein Datenbankowner kann Schutzmechanismen administrativ
-ändern. **Keine Behauptung rechtlicher Revisionssicherheit**: unabhängige Aufbewahrung, Export,
-Lösch-/Aufbewahrungskonzept und Betriebsprozesse fehlen noch.
-
-### Anwendung erst nach bestätigter Verbindung
-
-Vorher Status, vorhandene Tabellen/Auth-Benutzer, Schema-Exposition und Grants prüfen.
-Migrationen reviewen und in Dateireihenfolge anwenden, jeweils mit transaktionalem Fehlerabbruch.
-Keine `db reset`-, `DROP`-, `TRUNCATE`- oder automatischen Reparaturbefehle am bestehenden Projekt.
-Bei belegten Namen/vorhandenen Auth-Benutzern stoppen und gezielte Folge-/Backfill-Migration planen.
-Kein `IF NOT EXISTS` zum stillen Übergehen eines unbekannten Tabellenlayouts.
-
-Dateinamen sind die versionierten Quellen. Bei Anwendung über SQL Editor Ausführung und
-Datei-Commit/Prüfsumme im DEV-Änderungsnachweis festhalten. Vor späterem CLI-`db push` muss die
-Supabase-Migrationshistorie mit diesen tatsächlich angewandten Versionen kontrolliert abgeglichen
-werden; keine blinde Wiederanwendung oder `migration repair` ohne diesen Nachweis.
-
-Die Dateien in `supabase/tests` sind **ausschließlich für die wegwerfbare CI-Datenbank**,
-nie für das vorhandene Supabase-Projekt. Sie erzwingen den Test-Datenbanknamen `ff_dev_ci`.
-
-## 7. GitHub Actions / GitHub Pages
-
-Unter Repository **Settings → Secrets and variables → Actions → Variables** nach bestätigter
-Projektzuordnung zwei normale Repository-Variablen setzen:
-
-| Repository-Variable | Next.js-Build-Variable | Inhalt |
-|---|---|---|
-| `SUPABASE_DEV_URL` | `NEXT_PUBLIC_SUPABASE_URL` | Tatsächliche HTTPS-Projekt-URL aus Supabase. |
-| `SUPABASE_DEV_PUBLISHABLE_KEY` | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Tatsächlicher `sb_publishable_…`-Key; ausdrücklich öffentlich. |
-
-Beide dürfen leer bleiben. `npm run check:supabase-config` unterscheidet „nicht konfiguriert“
-von gültiger Konfiguration und schlägt bei Teilkonfiguration, Secret-/JWT-Key oder falscher URL
-ohne Ausgabe des Schlüssels fehl. Unterstützt sind zunächst gehostete `*.supabase.co`-Projekt-URLs,
-keine Custom Domains oder lokale Supabase-Instanzen.
-
-`src/config/supabase.ts` verwendet die von Next.js benötigten statischen `process.env.NEXT_PUBLIC_…`-
-Zugriffe. Nach Variablenänderung ist ein neuer Build erforderlich; ein bereits veröffentlichter
-statischer Export bekommt keine Runtime-Environment-Werte.
-
-**Noch kein SDK, keine Netzwerkverbindung und keine Umschaltung des Demo-Providers.**
-Vorhandene Variablen sind keine Berechtigung und aktivieren keine echte Anmeldung.
-Der zukünftige Adapter darf niemals `demo-provider`-Personen oder Browserrollen als Backend-Identität verwenden.
-
-`pages.yml` behält alle bisherigen Prüfungen und veröffentlicht nur nach erfolgreichem Main-Build.
-Der neue Workflow `supabase-dev-check.yml` prüft die Migrationen auf einem temporären PostgreSQL-17-
-Service ohne veröffentlichte Datenbankports, echte Supabase-Secrets oder Zugriff auf das DEV-Projekt.
-Er simuliert nur die benötigte Auth-Tabellen-/UID-Schnittstelle, **nicht** GoTrue, E-Mail, JWT-Signaturprüfung
-oder den echten PostgREST-Gateway. Die bewusst permissiven Alt-Grants im Fixture testen die expliziten Revokes.
-
-Keine lokale npm-/CLI-Installation, keine Codespaces und kein neuer npm-Paketbedarf.
-Builds/Browserchecks laufen in GitHub Actions. Es gibt absichtlich **keinen** automatisch auf das
-gehostete Projekt angewandten Migrationsworkflow. Für spätere Remote-Automation ein geschütztes
-GitHub-Environment `supabase-dev`, verpflichtende Reviewer und minimale Management-/DB-Secrets
-vorsehen. Diese gehören niemals in den Pages-Job, Pull-Request-Jobs oder öffentliche Artefakte.
-
-## 8. Testplan und Aussagegrenzen
-
-| Test | Automatisiert in diesem Stand | Noch real zu prüfen |
-|---|---|---|
-| Konfiguration | Leer/gültig/teilweise; Secret-/JWT-Key und ungültige URL werden abgelehnt. Bestehende Fachtests, Typen, Lint, statischer Build und Browserdemo bleiben erhalten. | Tatsächliche URL-/Key-Zuordnung, keine Secrets in veröffentlichten Dateien. |
-| Domain | Hook: exakte Domain/Großschreibung erlaubt, Fremd-/Subdomain/anderer Provider/anonym/fehlende Identität abgelehnt. Insert-Trigger als zweite Schranke. | Hook im realen Auth aktiv; direkter Signup per HTTP mit fremder Domain wird abgelehnt. |
-| Registrierung | 250 synthetische Pending-Profile; Metadaten können Freigabe/Rollen nicht vergeben. | Auth-Registrierung mit autorisierter Testadresse, verständliche Rate-Limit-/Empfängerfehler. |
-| Verifizierung/Freigabe | Pending nur eigenes Statusprofil; unbestätigt nicht freigebbar; verifiziert + GLOBAL_ADMIN + Einheit erforderlich. | Bestätigungslink gültig/abgelaufen/wiederverwendet; neues Gerät, erneuter Versand. |
-| Anmeldung | Aktuelle DB-Identität, Freigabe, Domain und E-Mail an Freigabe gebunden. Sperrung/E-Mailwechsel entziehen geschützte Zugriffe. | E-Mail/Passwort, PKCE-Callback, falsches Passwort, Reset, Abmelden, Refresh/Expiry und widerrufene Sitzung im echten Gateway. |
-| RLS/Privilegien | Alle Tabellen RLS, keine Client-DML-/TRUNCATE-Grants, keine anonyme RPC-Ausführung, private Bootstrap-/Auditfunktionen gesperrt, View `security_invoker`. | Wiederholung über REST mit Publishable Key plus echten User-Tokens; exponierte Schemas/GraphQL/Security Advisor. |
-| Rollen/Delegation | Eigene/fremde Einheit, Funktion über Einheiten hinweg, Mehrfachfunktionen, FIRE_CHIEF read-only, exakte Instanz/Seriengeschwister, Widerruf mit gleicher Identität. | Zwei echte Browser/Accounts; konkurrierender Widerruf und Anwesenheit, Rollen-/Statusentzug bei offener Ansicht. |
-| Anwesenheit | Alle Antwortzuordnungen, manueller Bestand, Idempotenz, unbekannt bleibt unbekannt, Entwurf zählt nicht, bestätigte Stunden/Berliner Jahr, begründete Korrektur und Audit. | Fachlicher Pilot in Scheuren mit synthetischen Testterminen, Reconnect und reale API-Fehler. |
-| Historie/Datenschutz | Instanz-Roster und Bestätigungssnapshot bleiben getrennt von aktuellen Zuordnungen; gewöhnliche Mitglieder sehen keine fremden Anwesenheiten. | Spätere Mitgliedschaftswechsel-RPC, Zuständigkeiten/Retention, Auskunft/Löschung, Backups/Wiederherstellung. |
-
-Lokale vorhandene Tools können `npm.cmd test`, `npm.cmd run typecheck`, `npm.cmd run lint` und
-`npm.cmd run check:supabase-config` ausführen. Die Datenbanktests laufen ausschließlich in Actions;
-erfolgreiche PostgreSQL-Tests sind **kein** Nachweis einer geprüften oder geänderten Supabase-Konfiguration.
-
-## 9. Offene Konfiguration und nächste Schritte
-
-1. Autorisierte, projektgebundene Read-only-Verbindung herstellen; offene Ist-Werte aus Abschnitt 1 ersetzen.
-2. DEV-Plan, E-Mail-Testempfänger, tatsächliche PostgreSQL-Version und fehlende Einstellungen bestätigen.
-3. SQL und Rollenmatrix fachlich reviewen; insbesondere FIRE_CHIEF und zentrale Registrierungsfreigabe.
-4. Migrationen kontrolliert im vorhandenen leeren DEV-Projekt anwenden; Hook im Dashboard aktivieren.
-5. Ersten verifizierten Administrator durch berechtigten Operator bootstrappen; RLS über echte API testen.
-6. Separaten, ausdrücklich aktivierten Supabase-Adapter, statische PKCE-Callback-/Login-/Pending-Seiten und
-   echte Session-Verwaltung bauen. Auth-Daten nicht per Service Worker offline zwischenspeichern;
-   bestehende Demo niemals als Fallback für eine fehlgeschlagene echte Anmeldung anzeigen.
-7. Fehlende CRUD-/Serien-/Mitgliedschafts-RPCs, sichere Statistikauswertung, Negativtests und Mehrbrowser-
-   Nebenläufigkeit ergänzen. Domain- und Berechtigungsregeln bleiben serverseitig maßgeblich.
-8. Vor echten Mitgliedern eigener SMTP, Datenschutz-/Aufbewahrungskonzept, Recovery/Backups und
-   Sicherheitsprüfung. Kein Main-Merge und keine produktive Umschaltung durch diesen Setup-Auftrag.
+- Autorisierte Verbindung und echte Projektkonfiguration, kontrollierte Migration, Mail-/API-Abnahme.
+- Vollständige Backend-CRUD-/Serien-/Mitgliedschafts-RPCs und dazugehörige UI-Adapter.
+- Vollständige DEV-Anwesenheits-/Delegations- und Antwort-Oberfläche mit vorhandenen RPCs.
+- Passwort-Reset, Admin-MFA, SMTP, Recovery/Backups, Datenschutz/Retention und unabhängige Audit-Aufbewahrung.
+- Rechtliche Revisionssicherheit wird nicht allein durch SQL-Trigger/RLS garantiert: DB-Owner können
+  administrative Schutzmechanismen ändern. Betriebs- und Aufbewahrungskonzept fehlen.
+- Kein automatischer Merge, keine produktive Freischaltung und kein Eingriff in das unabhängige Demo-Repository.
 
 ## Quellen
 
-Offizielle Dokumentation, am 03.11.2026 für die Vorbereitung gelesen; Dashboard-Istwerte bleiben davon getrennt:
-
-- [Supabase MCP und projektgebundener Read-only-Zugriff](https://supabase.com/docs/guides/ai-tools/mcp)
-- [Auth Hooks: Rechte und Planverfügbarkeit](https://supabase.com/docs/guides/auth/auth-hooks)
-- [Before User Created Hook](https://supabase.com/docs/guides/auth/auth-hooks/before-user-created-hook)
-- [Standardversand und eigenes SMTP](https://supabase.com/docs/guides/auth/auth-smtp)
-- [Publishable und Secret Keys](https://supabase.com/docs/guides/getting-started/api-keys)
-- [Redirect-Allowlist](https://supabase.com/docs/guides/auth/redirect-urls)
-- [Row Level Security, Grants und Views](https://supabase.com/docs/guides/database/postgres/row-level-security)
+- [Supabase Passwortauthentifizierung](https://supabase.com/docs/guides/auth/passwords)
+- [PKCE und gleicher Browser](https://supabase.com/docs/guides/auth/sessions/pkce-flow)
+- [Redirect URLs](https://supabase.com/docs/guides/auth/redirect-urls)
+- [DEV-Mailversand und SMTP](https://supabase.com/docs/guides/auth/auth-smtp)
+- [Auth Hooks](https://supabase.com/docs/guides/auth/auth-hooks)
+- [Before User Created](https://supabase.com/docs/guides/auth/auth-hooks/before-user-created-hook)
+- [Projektgebundenes Read-only-MCP](https://supabase.com/docs/guides/ai-tools/mcp)
+- [API Keys](https://supabase.com/docs/guides/getting-started/api-keys)
+- [RLS](https://supabase.com/docs/guides/database/postgres/row-level-security)

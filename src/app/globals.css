@@ -1,5 +1,18 @@
 @import "tailwindcss";
 
+.dev-shell { min-height: 100dvh; }
+.dev-shell .content { max-width: 1180px; margin-inline: auto; }
+.dev-shell .header-brand { display: flex; }
+.dev-navigation, .dev-actions { display: flex; flex-wrap: wrap; gap: 12px; padding: 16px; }
+.dev-navigation { border-bottom: 1px solid var(--cp-border); background: var(--cp-surface); }
+.dev-navigation a { padding: 12px 16px; border-radius: .625rem; color: var(--cp-text); }
+.dev-navigation a[aria-current="page"] { color: var(--cp-accent); background: var(--cp-accent-soft); }
+.auth-card { max-width: 680px; margin: 24px auto; }
+.dev-approval, .dev-event { padding-block: 20px; border-top: 1px solid var(--cp-border); }
+.dev-approval label { max-width: 480px; margin-bottom: 12px; }
+.dev-shell .topbar { flex-wrap: wrap; gap: 12px; }
+.dev-shell .topbar-actions { flex-wrap: wrap; }
+
 :root {
   color-scheme: light;
   --cp-bg: #f7f4ef;

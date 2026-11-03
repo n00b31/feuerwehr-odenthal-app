@@ -1,24 +1,26 @@
-# Feuerwehr Odenthal · lokale Demo
+# Feuerwehr Odenthal · Supabase DEV und lokale Regression
 
-Mobile-first Mitgliederportal mit **Next.js App Router, React, TypeScript und Tailwind CSS**. Inoffizieller Prototyp mit fiktiven Daten, keine offizielle oder produktive Anwendung der Feuerwehr. Keine produktiven Cloud-Dienste, keine externen Zugangsdaten, keine produktive Authentifizierung. Der ausdrücklich ungeschützte Profilwechsel dient ausschließlich der Demonstration von Berechtigungen. Keine echten personenbezogenen oder einsatzbezogenen Daten eingeben.
+Mobile-first Mitgliederportal mit **Next.js App Router, React, TypeScript und Tailwind CSS**. Inoffizieller DEV-Prototyp, keine produktive Anwendung. Die Supabase-Integration verwendet echte Authentifizierung und serverseitige Freigabe/RLS, aber ausschließlich autorisierte Testkonten und Testdaten. Kein vollständiger produktiver Backend-Funktionsumfang.
 
-## Öffentliche Demo auf GitHub Pages
+## Unabhängige Demo und DEV auf GitHub Pages
 
-**Demo:** https://n00b31.github.io/feuerwehr-odenthal-app/
+**Unveränderte unabhängige Demo:** https://n00b31.github.io/feuerwehr-odenthal-demo/
+
+**DEV-Ziel nach bewusstem Merge:** https://n00b31.github.io/feuerwehr-odenthal-app/
 
 **Quellcode:** https://github.com/n00b31/feuerwehr-odenthal-app
 
-GitHub Pages stellt ausschließlich den statischen Next.js-Export bereit. Es gibt keinen Datenbankserver, keine gemeinsam gespeicherten Zusagen und keine Anmeldung. Jede Besucherin und jeder Besucher bekommt eigene fiktive Daten und kann alle Demo-Rollen ausprobieren. Änderungen liegen nur im jeweiligen Browser. Die Demo ist per HTTPS öffentlich erreichbar und benötigt keine Zugangsdaten.
+GitHub Pages stellt weiterhin ausschließlich statisches HTML/JavaScript bereit. DEV spricht Supabase Auth/Data API direkt an; RLS und RPCs schützen die Daten im Backend. Standardmodus `supabase-dev`: bei fehlenden Variablen gesperrter Einrichtungshinweis, niemals Rückfall auf Demo-Personen. Die öffentliche DEV-Seite ändert sich durch einen PR nicht. Das separate Demo-Repository bleibt ohne Supabase/Anmeldung lauffähig und wird hier weder gebaut noch verändert.
 
-Die **[Supabase-DEV-Vorbereitung](docs/supabase-dev-setup.md)** enthält die Bestandsaufnahme, versionierte SQL-Migrationen mit RLS, eingeschränkte Serverfunktionen und eine Anleitung für Registrierung, Freigabe, E-Mail und GitHub Actions. Ohne autorisierte Projektverbindung wurden keine Supabase-Einstellungen geändert. Die optionalen öffentlichen Build-Variablen schalten die Demo nicht auf echte Authentifizierung oder gemeinsame Daten um.
+Die **[Supabase-DEV-Anleitung](docs/supabase-dev-setup.md)** enthält die geprüfte Grundlage aus PR #3, fünf SQL-Migrationen, RLS/Serverfunktionen, Read-only-Preflight und sämtliche manuellen Dashboard-Schritte. Implementiert: Signup, PKCE-E-Mail-Callback, Login, Warten auf Freigabe, Global-Admin-Freigabe mit Einheit und RLS-geschützte Leseansichten. Vollständiges Backend-CRUD und Anwesenheits-/Delegations-UI folgen separat. Ohne autorisierte Projektverbindung wurden **keine Supabase-Einstellungen oder Daten geändert**; echte Mail-/Gateway-Abnahme bleibt offen.
 
-Nach jedem Push auf `main` und für Pull Requests nach `main` prüft `.github\workflows\pages.yml` die Fachregeln, TypeScript, ESLint, die Icon-Erzeugung, den statischen Build und die Browser-Szenarien unter dem Repository-Unterpfad. **Nur ein erfolgreicher Lauf auf `main` veröffentlicht nach Pages.** Pull Requests und manuelle Läufe auf Feature-Branches prüfen ausschließlich und verändern die öffentliche Demo nicht. Ein manueller Lauf ist über „Actions → Publish demo to GitHub Pages → Run workflow“ möglich. Verwendet werden nur die eingebauten, auf Build/Deployment begrenzten GitHub-Actions-Berechtigungen; keine gespeicherten persönlichen Tokens oder Cloud-Secrets.
+`.github/workflows/pages.yml` prüft Fachregeln, TypeScript, ESLint, Icons und die bisherigen Demo-Szenarien sowie einen separaten statischen Auth-Testbuild mit abgefangenen synthetischen Endpunkten. Ein frischer DEV-Export mit `SUPABASE_DEV_URL` und `SUPABASE_DEV_PUBLISHABLE_KEY` aus Repository-Variablen ist das einzige Pages-Artefakt. **Nur ein erfolgreicher Main-Lauf veröffentlicht.** PRs und manuelle Feature-Branch-Läufe verändern keine öffentliche Veröffentlichung. Actions → **Validate demo and Supabase DEV / publish Pages** → Run workflow. Keine geheimen Supabase-Schlüssel im Build.
 
-Der Workflow speichert den statischen Export und Browser-Screenshots/-Fehlertraces sieben Tage im Artefakt **`ui-review`**. Damit ist eine Prüfung ohne npm-Installation auf dem lokalen Rechner möglich. Unternehmensrichtlinien nicht umgehen; Installationen und Builds können vollständig auf GitHub Actions laufen.
+Artefakte: **`ui-review`** für lokale Demo-Regression, **`synthetic-auth-test-results`** für künstliche Auth-Szenarien und **`supabase-dev-export`** für den eigentlichen statischen DEV-Export. Keine echten Auth-Tokens/Passwörter in Testartefakten. Unternehmensrichtlinien nicht umgehen; Installationen und Builds laufen vollständig in GitHub Actions.
 
 ### Redesign vor einem Merge ausprobieren
 
-Im Pull Request den erfolgreichen Lauf **Publish demo to GitHub Pages** öffnen, `ui-review` herunterladen und entpacken. Der enthaltene Ordner `out` ist die vollständige statische Vorschau. Die Bilder unter `test-results` zeigen Hell/Dunkel sowie mobile und Desktop-Ansichten.
+Im Pull Request den erfolgreichen Pages-Workflow öffnen. Für die Demo-Regression `ui-review`, für DEV `supabase-dev-export` herunterladen und entpacken. Die Demo-Bilder unter `test-results` zeigen Hell/Dunkel sowie mobile und Desktop-Ansichten. Ohne echte Supabase-Konfiguration zeigt der DEV-Export nur den Einrichtungshinweis.
 
 Mit vorhandenem Node.js im entpackten Artefakt-Verzeichnis (enthält `out`) den vorhandenen Vorschau-Server aus dem Repository ausführen:
 
@@ -49,11 +51,11 @@ npm.cmd run test:e2e
 
 Bei anderem Repository-Namen muss `NEXT_PUBLIC_BASE_PATH` beim Bauen und beim Testen entsprechend gesetzt werden. Der Workflow übernimmt den tatsächlichen Repository-Namen automatisch. Für eine Veröffentlichung direkt unter einer eigenen Domain wäre ein erneuter Build mit leerem Base Path erforderlich.
 
-GitHub Pages kann die in `next.config.ts` konfigurierten individuellen HTTP-Header nicht übernehmen; diese gelten nur beim Next.js-Serverbetrieb. Pages verwendet die Header der Hostingplattform. Es gibt bewusst keine Behauptung einer serverseitigen Zugriffssicherung. Für späteren echten Mehrbenutzerbetrieb ist GitHub Pages allein ungeeignet.
+GitHub Pages kann die in `next.config.ts` konfigurierten individuellen HTTP-Header nicht übernehmen; diese gelten nur beim Next.js-Serverbetrieb. Pages verwendet die Header der Hostingplattform. Statische Dateien sind öffentlich; Supabase Auth/RLS/RPCs sichern erst die geschützten Daten. Pages allein ist kein Authentifizierungs- oder Datenbankserver.
 
 ## Lokal starten
 
-Voraussetzung: Node.js 20.9 oder neuer und npm (entwickelt mit Node 24).
+Voraussetzung für erlaubte lokale Ausführung: Node.js mindestens 22 (Supabase-SDK), CI verwendet Node 24. Bei gesperrter npm-Installation ausschließlich Actions verwenden.
 
 ```powershell
 Set-Location C:\Projekte\feuerwehr-odenthal-app
@@ -65,6 +67,13 @@ npm.cmd run start -- --hostname 127.0.0.1 --port 3000
 Aufrufen: **http://localhost:3000**. Entwicklung: `npm.cmd run dev -- --hostname 127.0.0.1 --port 3000`.
 
 Die `.cmd`-Aufrufe verwenden die Windows-Befehlsshims und ändern keine Execution Policy. Nur verwenden, soweit die Unternehmensrichtlinien dies erlauben. Bei gesperrten Installationen ausschließlich den GitHub-Actions-Build nutzen; keine Sicherheitsrichtlinien umgehen. Eine erlaubte Installation benötigt einmalig Internet für Pakete; laufende Demo und Build benötigen weder Cloud noch Online-Schriften.
+
+Für den **ausdrücklichen lokalen Demo-Regressionsmodus** vor dem Build/Start
+`$env:NEXT_PUBLIC_APP_MODE='demo'` setzen. Ohne diese Angabe gilt DEV.
+Die folgenden Funktions-/Architekturabschnitte beschreiben den weiterhin enthaltenen lokalen
+Demo-Modus, **nicht** bereits vollständig angebundenes Supabase-CRUD. Für Auth-/Backend-Verhalten
+ist ausschließlich die [DEV-Anleitung](docs/supabase-dev-setup.md) maßgeblich; insbesondere werden
+DEV-Sitzungen getrennt vom nachfolgend beschriebenen Demo-Speicher verwaltet.
 
 Der Server ist bewusst an Loopback gebunden. Auf einem Smartphone ist dessen `localhost` nicht der Entwicklungsrechner. Für einen echten Gerätetest muss ausdrücklich ein vertrauenswürdiger Netzwerkzugang mit HTTPS eingerichtet werden; nicht einfach als öffentliches Mitgliederportal veröffentlichen.
 
