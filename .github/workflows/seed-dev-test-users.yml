@@ -1,0 +1,56 @@
+name: Manually seed isolated Supabase DEV test users
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Read-only check or create missing DEV test accounts
+        type: choice
+        options: [check, seed]
+        default: check
+        required: true
+      confirm_project:
+        description: Type orxinqhhbtjpkzwlfaxq to confirm the isolated DEV project
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-dev-test-users
+  cancel-in-progress: false
+
+jobs:
+  seed:
+    if: github.repository == 'n00b31/feuerwehr-odenthal-app' && github.ref == 'refs/heads/main'
+    environment: supabase-dev-seed
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Validate or seed fixed test manifest without emails
+        env:
+          SEED_MODE: ${{ inputs.mode }}
+          SUPABASE_DEV_SEED_CONFIRM_PROJECT: ${{ inputs.confirm_project }}
+          SUPABASE_DEV_SEED_ENVIRONMENT: isolated-dev
+          SUPABASE_DEV_URL: ${{ vars.SUPABASE_DEV_URL }}
+          SUPABASE_DEV_PUBLISHABLE_KEY: ${{ vars.SUPABASE_DEV_PUBLISHABLE_KEY }}
+          SUPABASE_DEV_SEED_APPROVER_ID: ${{ vars.SUPABASE_DEV_SEED_APPROVER_ID }}
+          SUPABASE_DEV_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_DEV_SERVICE_ROLE_KEY }}
+          SUPABASE_DEV_TEST_PASSWORD: ${{ secrets.SUPABASE_DEV_TEST_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$SEED_MODE" in
+            check) node scripts/seed-dev-users.mjs --check ;;
+            seed) node scripts/seed-dev-users.mjs --apply ;;
+            *) echo "Invalid seed mode"; exit 1 ;;
+          esac
