@@ -3,22 +3,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
-import { LayoutDashboard, CalendarDays, FolderOpen, ChartNoAxesCombined, UserRound, Settings2, ShieldCheck, Menu, Moon, Sun } from "lucide-react";
+import { Menu, Moon, Sun } from "lucide-react";
 import { useDemo } from "./demo-provider";
 import { isAdmin } from "@/domain/permissions";
 import { ROLE_LABELS } from "@/config/app";
 import { PwaStatus } from "./pwa-status";
-import { BrandFlame, BrandLogo } from "./branding";
+import { BrandLogo } from "./branding";
+import { SidebarNavigation, BottomNavigation } from "./navigation";
 import { useTheme } from "./theme-provider";
 import { Modal } from "./ui";
 
-const navigation = [
-  { href: "/", name: "Start", icon: LayoutDashboard },
-  { href: "/termine", name: "Termine", icon: CalendarDays },
-  { href: "/dokumente", name: "Dokumente", icon: FolderOpen },
-  { href: "/statistik", name: "Statistik", icon: ChartNoAxesCombined },
-  { href: "/profil", name: "Profil", icon: UserRound },
-];
 const normalizedPath = (path: string) => path.replace(/\/+$/, "") || "/";
 export function Shell({ children }: { children: ReactNode }) {
   const { state, user, message } = useDemo();
@@ -51,7 +45,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <main id="main" className="content" tabIndex={-1}><PwaStatus />{error && <p className="notice error" role="alert">{error}</p>}{children}</main>
       <footer className="footer"><span>Feuerwehr Odenthal · Gemeinsam einsatzbereit.</span><span>Lokale Demo · Europe/Berlin</span></footer>
     </div>
-    <nav className="bottom-nav" aria-label="Mobile Navigation">{navigation.map(({ href, name, icon: Icon }) => <Link key={href} href={href} className={pathname === href ? "active" : ""} aria-current={pathname === href ? "page" : undefined}><span className="nav-icon"><Icon size={21} aria-hidden="true" /></span><span>{name}</span></Link>)}</nav>
+    <BottomNavigation pathname={pathname} />
     <div className={`toast ${message ? "visible" : ""}`} role="status" aria-live="polite" key={message}>{message}</div>
   </div>;
 }
@@ -60,12 +54,5 @@ function SidebarContent({ close }: { close?: () => void }) {
   const { state, user } = useDemo();
   const pathname = normalizedPath(usePathname());
   const unit = state.units.find((item) => item.id === user.unitId)!;
-  return <>
-    <Link href="/" className="brand" onClick={close}><BrandFlame /><span><strong>Mein Dienst</strong><small>Feuerwehr Odenthal</small></span></Link>
-    <span className="workspace-label">MITGLIEDERBEREICH</span>
-    <nav aria-label="Hauptnavigation">{navigation.map(({ href, name, icon: Icon }) => <Link key={href} href={href} className={`nav-link ${pathname === href ? "active" : ""}`} onClick={close} aria-current={pathname === href ? "page" : undefined}><Icon size={20} aria-hidden="true" />{name}</Link>)}
-      {isAdmin(user) && <><div className="nav-divider" /><Link href="/administration" onClick={close} aria-current={pathname === "/administration" ? "page" : undefined} className={`nav-link ${pathname === "/administration" ? "active" : ""}`}><Settings2 size={20} aria-hidden="true" />Administration</Link></>}
-    </nav>
-    <div className="sidebar-bottom"><div className="sidebar-unit"><ShieldCheck size={20} aria-hidden="true" /><span>Einheit {unit.name}<small>Freiwillige Feuerwehr</small></span></div><p>Gemeinsam für unsere Gemeinde.</p></div>
-  </>;
+  return <SidebarNavigation pathname={pathname} unitName={unit.name} admin={isAdmin(user)} close={close} />;
 }

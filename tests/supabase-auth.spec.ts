@@ -78,6 +78,9 @@ async function fixture(context: BrowserContext) {
         user_id: memberId, display_name: "Synthetic Mitglied", email, email_verified: state.verified, registered_at: new Date().toISOString(),
       }]);
       if (url.pathname.endsWith("/units")) return respond([{ id: unitId, name: "Scheuren" }]);
+      if (url.pathname.endsWith("/ff_members_workspace")) return respond({
+        global_admin: state.admin, units: [{ id: unitId, name: "Scheuren" }], functions: [], members: [],
+      });
       if (url.pathname.endsWith("/ff_events_workspace")) return respond({
         server_now: new Date().toISOString(), manageable_units: state.admin ? [{ id: unitId, name: "Scheuren" }] : [],
         events: [{

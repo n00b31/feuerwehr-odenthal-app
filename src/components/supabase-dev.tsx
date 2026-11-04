@@ -14,11 +14,8 @@ import { useTheme } from "./theme-provider";
 import { PageHeading } from "./ui";
 import { dateLabel } from "@/domain/time";
 import { SupabaseEvents, type EventEditorState } from "./supabase-events";
-
-const links = [
-  ["/", "Start"], ["/termine", "Termine"], ["/dokumente", "Dokumente"],
-  ["/statistik", "Statistik"], ["/profil", "Profil"],
-] as const;
+import { SupabaseMembers } from "./supabase-members";
+import { SidebarNavigation, BottomNavigation } from "./navigation";
 
 export function SupabaseDev() {
   const [client, setClient] = useState<SupabaseClient | null>(null);
@@ -68,8 +65,13 @@ export function SupabaseDev() {
   }
 
   const access = screen.phase === "active" || screen.phase === "blocked" ? screen.access : null;
-  return <div className="dev-shell">
+  const active = screen.phase === "active";
+  const managesMembers = active && screen.access.roles.some((role) => role === "GLOBAL_ADMIN" || role === "UNIT_ADMIN");
+  return <div className="app-shell dev-shell">
     <a className="skip-link" href="#main">Zum Inhalt springen</a>
+    {active && <aside className="sidebar"><SidebarNavigation pathname={pathname} unitName={screen.access.unit_name ?? ""}
+      admin={managesMembers} logo /></aside>}
+    <div className={active ? "main-shell" : "dev-guest-shell"}>
     <header className="topbar">
       <Link href="/" className="header-brand"><BrandLogo /></Link>
       <div className="topbar-actions">
@@ -78,10 +80,6 @@ export function SupabaseDev() {
       </div>
     </header>
     <div className="demo-strip" role="region" aria-label="DEV-Testbetrieb"><span className="demo-tag">DEV</span><span>Supabase-Testbetrieb · nur autorisierte Testkonten · kein Demo-Profilwechsel</span></div>
-    {screen.phase === "active" && <nav className="dev-navigation" aria-label="Hauptnavigation">
-      {links.map(([href, label]) => <Link key={href} href={href} aria-current={pathname === href ? "page" : undefined}>{label}</Link>)}
-      {screen.access.roles.includes("GLOBAL_ADMIN") && <Link href="/administration" aria-current={pathname === "/administration" ? "page" : undefined}>Administration</Link>}
-    </nav>}
     <main id="main" className="content" tabIndex={-1}>
       {(themeError || operationError) && <p className="notice error" role="alert">{themeError || operationError}</p>}
       {setupError ? <section className="card section-card"><h1>Supabase DEV noch nicht eingerichtet</h1><p>{setupError}</p><p>Kein Zugriff auf Feuerwehrinhalte. Es wird nicht auf lokale Demo-Identitäten zurückgefallen.</p></section>
@@ -98,6 +96,8 @@ export function SupabaseDev() {
         : null}
     </main>
     <footer className="footer"><span>Feuerwehr Odenthal · Supabase DEV</span><span>Keine Offline-Freigabe · Europe/Berlin</span></footer>
+    </div>
+    {active && <BottomNavigation pathname={pathname} admin={managesMembers} />}
   </div>;
 }
 
@@ -176,14 +176,16 @@ function AuthForm({ client, refresh }: { client: SupabaseClient; refresh: () => 
 
 function DevWorkspace({ client, access, data, pathname, refresh, eventEditor, setEventEditor }: { client: SupabaseClient; access: Access; data: DevData; pathname: string; refresh: () => void; eventEditor: EventEditorState | null; setEventEditor: (value: EventEditorState | null) => void }) {
   const globalAdmin = access.roles.includes("GLOBAL_ADMIN");
+  const managesMembers = globalAdmin || access.roles.includes("UNIT_ADMIN");
   const year = Number(new Intl.DateTimeFormat("en", { year: "numeric", timeZone: "Europe/Berlin" }).format(new Date()));
   const ownAttendance = data.attendance.filter((item) => item.report_year === year);
   return <>
-    <PageHeading eyebrow="GESCHÜTZTER DEV-BEREICH" title={pathname === "/administration" ? "Registrierungen freigeben" : `Hallo ${access.display_name}`} description={`${access.unit_name} · ${access.roles.join(", ")} · live durch Supabase geprüft`} action={<button className="button secondary" onClick={refresh}><RefreshCw size={18} />Aktualisieren</button>} />
-    <p className="notice">DEV 0.3: Einzeltermine und Teilnahmeantworten liegen zentral in Supabase. Serienverwaltung, Anwesenheits-, Rollen- und Dokumentbearbeitung folgen separat. Keine Übernahme lokaler Demo-Daten.</p>
-    {pathname === "/administration" ? globalAdmin
-      ? <section className="card section-card"><h2>Wartende Testregistrierungen</h2>{data.registrations.length === 0 && <p>Keine wartenden Registrierungen.</p>}{data.registrations.map((person) => <ApprovalRow key={person.user_id} client={client} person={person} units={data.units} refresh={refresh} />)}</section>
-      : <p className="notice error" role="alert">Nur die globale Administration darf Registrierungen freigeben. Direkte API-Aufrufe werden ebenfalls serverseitig geprüft.</p>
+    <PageHeading eyebrow="GESCHÜTZTER DEV-BEREICH" title={pathname === "/administration" ? "Administration" : `Hallo ${access.display_name}`} description={`${access.unit_name} · ${access.roles.join(", ")} · live durch Supabase geprüft`} action={<button className="button secondary" onClick={refresh}><RefreshCw size={18} />Aktualisieren</button>} />
+    <p className="notice">DEV 0.3.1: Einzeltermine, Teilnahmeantworten und Mitgliederverwaltung liegen zentral in Supabase. Serienverwaltung, Anwesenheits- und Dokumentbearbeitung folgen separat. Keine Übernahme lokaler Demo-Daten.</p>
+    {pathname === "/administration" ? managesMembers
+      ? <>{globalAdmin && <section className="card section-card"><h2>Wartende Testregistrierungen</h2>{data.registrations.length === 0 && <p>Keine wartenden Registrierungen.</p>}{data.registrations.map((person) => <ApprovalRow key={person.user_id} client={client} person={person} units={data.units} refresh={refresh} />)}</section>}
+        <SupabaseMembers client={client} actorId={access.user_id} refreshAccess={refresh} /></>
+      : <p className="notice error" role="alert">Keine Berechtigung zur Mitgliederverwaltung. Direkte API-Aufrufe werden ebenfalls serverseitig geprüft.</p>
     : pathname === "/dokumente" ? <section className="card section-card"><h2>Dokumentenbereiche</h2><p>App-Sichtbarkeit ersetzt keine SharePoint-Berechtigung.</p>{data.documents.length === 0 && <p>Noch keine sichtbaren DEV-Dokumentenbereiche.</p>}{data.documents.map((item) => <article key={item.id}><h3>{item.name}</h3><p>{item.description}</p><a href={item.sharepoint_url} target="_blank" rel="noopener noreferrer">SharePoint öffnen</a></article>)}</section>
     : pathname === "/statistik" ? <section className="card section-card"><h2>Bestätigte eigene Anwesenheiten {year}</h2><p>{ownAttendance.filter((item) => item.status === "present").length} tatsächliche Teilnahmen · {ownAttendance.reduce((sum, item) => sum + item.training_hours, 0).toFixed(1)} Ausbildungsstunden</p><p>Nur serverseitig bestätigte Listen. Zusagen, vorläufige Werte und unbekannte Anwesenheiten zählen nicht als Teilnahme.</p>{ownAttendance.map((item) => <p key={item.event_id}>{item.title} · {dateLabel(item.starts_at)} · {item.status === "present" ? "Anwesend" : item.status === "absent" ? "Abwesend" : "Nicht festgestellt"}</p>)}</section>
     : pathname === "/profil" ? <section className="card section-card"><h2>Verifiziertes DEV-Profil</h2><p>{access.display_name} · Einheit {access.unit_name}</p><p>Status: Freigegeben. Kein Identitäts- oder Rollenwechsel über lokale Demo-Profile.</p><p>Die Sitzung liegt ausschließlich unter einem projekt- und unterpfadbezogenen SDK-Speicherschlüssel in diesem Browser. Zum Entfernen „Abmelden / Sitzung entfernen“ verwenden.</p></section>

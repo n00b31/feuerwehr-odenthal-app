@@ -9,6 +9,7 @@ const otherUnit = "20000000-0000-4000-8000-000000000002";
 const admin = "10000000-0000-4000-8000-000000000001";
 const member = "10000000-0000-4000-8000-000000000002";
 const eventId = "30000000-0000-4000-8000-000000000001";
+const specialFunction = "40000000-0000-4000-8000-000000000001";
 type Response = "yes" | "no" | "maybe";
 type StoredEvent = {
   id: string; title: string; description: string; event_type: string; location: string;
@@ -19,6 +20,7 @@ function store() {
     events: [] as StoredEvent[], answers: new Map<string, Response>(),
     audit: [] as { actor: string; before: Response | undefined; after: Response }[],
     now: Date.now(), broken: false, denyCreation: false,
+    memberUnit: unit, memberAdmin: false, memberSuspended: false, memberFunction: false,
   };
 }
 type Store = ReturnType<typeof store>;
@@ -41,6 +43,7 @@ async function connect(context: BrowserContext, state: Store, actor: string) {
       body: JSON.stringify(body),
     });
     const denied = () => respond({ code: "42501", message: "Synthetische serverseitige Sperre." }, 403);
+    const actorUnit = isAdmin ? unit : state.memberUnit || null;
     if (path === "/auth/v1/token") {
       const payload = Buffer.from(JSON.stringify({ sub: actor, aud: "authenticated", role: "authenticated", exp: Math.floor(Date.now()/1000)+3600 })).toString("base64url");
       return respond({ access_token: `eyJhbGciOiJIUzI1NiJ9.${payload}.synthetic-signature`,
@@ -49,9 +52,61 @@ async function connect(context: BrowserContext, state: Store, actor: string) {
     if (path === "/auth/v1/user") return respond(user());
     if (path === "/auth/v1/logout") return route.fulfill({ status: 204 });
     if (path === "/rest/v1/rpc/ff_my_access") return respond({
-      user_id: actor, display_name: isAdmin ? "Synthetic Admin" : "Synthetic Member", account_status: "approved",
-      access_granted: true, unit_id: unit, unit_name: "Scheuren", roles: isAdmin ? ["MEMBER","GLOBAL_ADMIN"] : ["MEMBER"],
+      user_id: actor, display_name: isAdmin ? "Synthetic Admin" : "Synthetic Member",
+      account_status: !isAdmin && state.memberSuspended ? "suspended" : "approved",
+      access_granted: isAdmin || (!state.memberSuspended && !!actorUnit), unit_id: actorUnit,
+      unit_name: actorUnit === unit ? "Scheuren" : actorUnit ? "Andere Einheit" : null,
+      roles: isAdmin ? ["MEMBER","GLOBAL_ADMIN"] : state.memberAdmin ? ["MEMBER","UNIT_ADMIN"] : ["MEMBER"],
     });
+    if (path === "/rest/v1/rpc/ff_members_workspace") {
+      if (!isAdmin && (!state.memberAdmin || state.memberSuspended)) return denied();
+      const person = (id: string) => {
+        const root = id === admin;
+        const currentUnit = root ? unit : state.memberUnit || null;
+        return {
+          user_id: id, display_name: root ? "Synthetic Admin" : "Synthetic Member",
+          status: !root && state.memberSuspended ? "suspended" : "approved", access_granted: root || (!state.memberSuspended && !!currentUnit),
+          unit_id: currentUnit, unit_name: currentUnit === unit ? "Scheuren" : currentUnit ? "Andere Einheit" : null,
+          can_change_membership: isAdmin,
+          roles: isAdmin ? [{ role: "MEMBER", unit_id: null, function_id: null },
+            ...(root ? [{ role: "GLOBAL_ADMIN", unit_id: null, function_id: null }]
+              : state.memberAdmin ? [{ role: "UNIT_ADMIN", unit_id: currentUnit, function_id: null }] : [])] : [],
+          functions: !root && state.memberFunction ? [{ id: specialFunction, name: "Synthetic Atemschutz" }] : [],
+          unit_history: [{ unit_id: currentUnit ?? unit, unit_name: currentUnit === otherUnit ? "Andere Einheit" : "Scheuren",
+            valid_from: new Date(state.now - 86400000).toISOString(), valid_until: currentUnit ? null : new Date(state.now).toISOString() }],
+        };
+      };
+      return respond({ global_admin: isAdmin,
+        units: isAdmin ? [{ id: unit, name: "Scheuren" }, { id: otherUnit, name: "Andere Einheit" }]
+          : [{ id: state.memberUnit, name: state.memberUnit === unit ? "Scheuren" : "Andere Einheit" }],
+        functions: isAdmin ? [{ id: specialFunction, name: "Synthetic Atemschutz" }] : [],
+        members: (isAdmin ? [admin,member] : [member]).map(person),
+      });
+    }
+    if (path === "/rest/v1/rpc/ff_set_unit_membership") {
+      const input = request.postDataJSON();
+      if (!isAdmin || input.target_user !== member || input.reason.trim().length < 5) return denied();
+      state.memberUnit = input.assign ? input.target_unit : "";
+      return respond(null);
+    }
+    if (path === "/rest/v1/rpc/ff_set_role") {
+      const input = request.postDataJSON();
+      if (!isAdmin || input.target_user !== member || input.wanted_role !== "UNIT_ADMIN") return denied();
+      state.memberAdmin = input.assign;
+      return respond(null);
+    }
+    if (path === "/rest/v1/rpc/ff_set_function_membership") {
+      const input = request.postDataJSON();
+      if (!isAdmin || input.target_user !== member) return denied();
+      state.memberFunction = input.assign;
+      return respond(null);
+    }
+    if (path === "/rest/v1/rpc/ff_set_account_status" || path === "/rest/v1/rpc/ff_reactivate_member") {
+      const input = request.postDataJSON();
+      if (!isAdmin || input.target_user !== member) return denied();
+      state.memberSuspended = path.endsWith("ff_set_account_status");
+      return respond(null);
+    }
     if (path === "/rest/v1/rpc/ff_events_workspace") {
       if (state.broken) return respond({ code: "503", message: "Synthetic outage" }, 503);
       return respond({
@@ -165,6 +220,84 @@ test("two independent sessions centrally create, respond, change, reload, edit a
   await expect(memberPage.getByRole("button", { name: "Vielleicht", exact: true })).toBeDisabled();
   expect(state.answers.get(`${eventId}:${member}`)).toBe("maybe");
   await adminContext.close(); await memberContext.close();
+});
+
+test("global membership, role, function and status changes are reflected in renewed member access", async ({ browser }) => {
+  const state = store();
+  const a = await browser.newContext({ viewport: { width: 1366, height: 900 } });
+  const m = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await connect(a,state,admin); await connect(m,state,member);
+  const page = await a.newPage(); const memberPage = await m.newPage();
+  await login(page,true); await login(memberPage,false);
+  await expect(page.locator(".sidebar")).toBeVisible();
+  await expect(page.getByRole("navigation",{ name: "Mobile Navigation" })).toBeHidden();
+  await page.getByRole("link",{ name: "Administration", exact: true }).click();
+  await expect(page.getByRole("heading",{ name: "Mitgliederverwaltung" })).toBeVisible();
+  const row = page.locator(".dev-member").filter({ has: page.getByText("Synthetic Member", { exact: true }) });
+  await row.locator("summary").click();
+  await row.getByLabel("Änderungsgrund für Synthetic Member", { exact: true }).fill("Synthetic membership test");
+  await row.getByRole("combobox", { name: "Einheit für Synthetic Member", exact: true }).selectOption(otherUnit);
+  await row.getByRole("button",{ name: "Einheitszuordnung speichern" }).click();
+  await expect(row.locator("summary")).toContainText("Andere Einheit");
+  await memberPage.reload();
+  await expect(memberPage.getByText(/Andere Einheit · MEMBER/)).toBeVisible();
+  await row.getByRole("combobox", { name: "Neue Rolle für Synthetic Member", exact: true }).selectOption("UNIT_ADMIN");
+  await row.getByRole("combobox", { name: "Rollenbereich", exact: true }).selectOption(otherUnit);
+  await row.getByRole("button",{ name: "Rolle zuweisen", exact: true }).click();
+  await expect(row.getByRole("button",{ name: "Rolle UNIT_ADMIN entziehen" })).toBeVisible();
+  await memberPage.reload();
+  await memberPage.getByRole("link",{ name: "Administration", exact: true }).click();
+  await expect(memberPage.getByText(/Nur eigene Einheiten/)).toBeVisible();
+  await expect(memberPage.getByRole("button",{ name: "Rolle zuweisen", exact: true })).toHaveCount(0);
+  await row.getByRole("button",{ name: "Rolle UNIT_ADMIN entziehen" }).click();
+  await expect(row.getByRole("button",{ name: "Rolle UNIT_ADMIN entziehen" })).toHaveCount(0);
+  await memberPage.reload();
+  await expect(memberPage.getByRole("link",{ name: "Administration", exact: true })).toHaveCount(0);
+  await expect(memberPage.getByRole("main").getByRole("alert")).toContainText("Keine Berechtigung zur Mitgliederverwaltung");
+  await row.getByRole("combobox", { name: "Sonderfunktion", exact: true }).selectOption(specialFunction);
+  await row.getByRole("button",{ name: "Sonderfunktion zuweisen" }).click();
+  await expect(row.getByRole("button",{ name: "Sonderfunktion Synthetic Atemschutz entfernen" })).toBeVisible();
+  await row.getByRole("button",{ name: "Mitglied deaktivieren", exact: true }).click();
+  await expect(row.locator("summary")).toContainText("Deaktiviert");
+  await memberPage.reload();
+  await expect(memberPage.getByRole("heading",{ name: "Zugang gesperrt" })).toBeVisible();
+  await row.getByRole("button",{ name: "Mitglied reaktivieren", exact: true }).click();
+  await expect(row.locator("summary")).toContainText("Freigegeben");
+  await memberPage.goto(publicPath("/termine/"));
+  await expect(memberPage.getByRole("heading",{ name: "Hallo Synthetic Member" })).toBeVisible();
+  await expect(memberPage.getByRole("navigation",{ name: "Mobile Navigation" })).toBeVisible();
+  await expect(memberPage.locator(".sidebar")).toBeHidden();
+  await expect.poll(() => page.evaluate(() => document.getAnimations().filter((x) => x.playState === "running" &&
+    Number.isFinite(x.effect?.getComputedTiming().endTime)).length)).toBe(0);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+  const sidebar = await page.locator(".sidebar").boundingBox();
+  expect(sidebar?.x).toBe(0);
+  expect(sidebar?.y).toBe(0);
+  await page.screenshot({ path: "test-results/dev031-members-desktop.png" });
+  await a.close(); await m.close();
+});
+
+test("member API cannot change roles or units and responsive navigation survives viewport changes", async ({ context, page }) => {
+  const state = store(); await connect(context,state,member); await login(page,false);
+  await expect(page.getByRole("button",{ name: "Einzeltermin erstellen" })).toHaveCount(0);
+  const statuses = await page.evaluate(async (apiUrl) => {
+    const bodies = [
+      ["ff_members_workspace", {}],
+      ["ff_set_unit_membership", { target_user: "10000000-0000-4000-8000-000000000002", target_unit: "20000000-0000-4000-8000-000000000002", assign: true, reason: "Synthetic self transfer" }],
+      ["ff_set_role", { target_user: "10000000-0000-4000-8000-000000000002", wanted_role: "GLOBAL_ADMIN", assign: true }],
+    ] as const;
+    return Promise.all(bodies.map(async ([name,body]) => (await fetch(`${apiUrl}/rest/v1/rpc/${name}`, {
+      method: "POST",headers: { "Content-Type": "application/json" },body: JSON.stringify(body),
+    })).status));
+  },api);
+  expect(statuses).toEqual([403,403,403]);
+  for (const width of [320,390,960,1366]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(page.locator(".sidebar"))[width > 960 ? "toBeVisible" : "toBeHidden"]();
+    await expect(page.getByRole("navigation",{ name: "Mobile Navigation" }))[width > 960 ? "toBeHidden" : "toBeVisible"]();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
 });
 
 test("foreign events and server-start boundary cannot be bypassed by member API requests", async ({ context, page }) => {
