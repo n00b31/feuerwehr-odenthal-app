@@ -821,7 +821,8 @@ Passwörter oder personenbezogenen Kontodaten in öffentliche Nachweise aufnehme
 Ausgangsbasis: Benutzermerge von [PR #7](https://github.com/n00b31/feuerwehr-odenthal-app/pull/7),
 Main `c573562e0d75bb658417e9671d953ec0d55d136f`, Migrationen 001–008 vorhanden.
 Read-only-Preflight im bestehenden Projekt am 04.11.2026: zwei Auth-Konten,
-keine Kollision mit den ursprünglich angefragten sechs `example.com`-Adressen,
+keine Kollision mit den ursprünglich angefragten `example.com`-Adressen oder den
+anschließend bestätigten sechs Feuerwehr-Testadressen,
 Einheiten Scheuren und Odenthal vorhanden.
 
 Die ursprünglich gewünschten `@example.com`-Konten würden trotz Auth Admin API am
@@ -876,6 +877,20 @@ Einheit, Zusatzrolle, Freigabeverantwortlichen und Run-UUID. Kein fingierter Bro
 Der bestehende gemeinsame Rollen-Lock wird genutzt; kein GLOBAL_ADMIN wird verändert.
 Die Migration legt selbst **keine** Auth-Konten an und ändert keinen bestehenden Datenbestand.
 Nur die fehlende 009 im bestehenden DEV-Projekt anwenden; alte Migrationen nicht wiederholen.
+
+**Bereits angewendet am 04.11.2026:** Nach erfolgreicher
+[PostgreSQL-CI 41794499202](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/41794499202)
+ausschließlich 009 im bestätigten Projekt installiert:
+`20261104074950`, `ff_009_dev_test_members`.
+Quell-SHA-256 `6ad5d84e48b80cac1db3176f014216a9458bdb40b77a9be0d306c832036cf79f`
+(UTF-8, LF, abschließenden Whitespace entfernen).
+Alle vier gehosteten Funktionskörper stimmen normalisiert exakt mit der Quelle überein;
+Grants und leere Suchpfade unabhängig geprüft. Bestand danach unverändert:
+zwei Auth-Konten/zwei Profile, ein Termin/eine Antwort, null Seed-Auditeinträge.
+Der tatsächliche gehostete read-only Report meldet alle sechs Sollkonten als `missing`.
+Dieser Diagnoseaufruf verwendete temporäre SQL-Request-Claims für den Operator-Kontext,
+keinen Secret Key, Auth-Admin-API-Aufruf, Mitgliederlogin oder Seed-Schreibaufruf.
+**009 nicht erneut anwenden.**
 
 ### Einmalige geschützte GitHub-Konfiguration
 
@@ -991,6 +1006,15 @@ letzten aktiven GLOBAL_ADMIN in PostgreSQL 17, ausschließlich in wegwerfbarer `
 Dortige direkte Auth-Fixture-Inserts sind **kein** gehosteter Seed und verweigern andere
 Datenbanknamen. Bestehende Termin-/Antwort-/Beginnsperren- und Browserregressionen bleiben erhalten.
 Diese Prüfungen ersetzen nicht den späteren tatsächlich ausgeführten manuellen DEV-Workflow.
+
+Lokal: 70 bestehende Fachtests plus zehn neue Seed-Tests, Typprüfung, vollständiges ESLint
+und statischer Next.js-Export bestanden. Fehlendes SDK durch Wiederherstellung der gelockten
+Abhängigkeiten behoben, ohne Lockfile-Änderung; eine gesperrte alte SWC-Binärdatei wurde nicht
+gewaltsam entfernt und kein fremder Prozess beendet.
+Die erste PR-Browser-CI meldete einen mehrdeutigen Testselektor: Erfolgsstatus der Erstellung
+und laufender Ladehinweis waren gleichzeitig vorhanden. Der Selektor prüft jetzt gezielt den
+Status mit der konkreten Erfolgsmeldung statt jedes beliebige `role=status`-Element.
+Keine App-Funktion, Sicherheitsassertion, Axe-Regel oder Workflow-Schranke gelockert.
 
 Zum sicheren Entfernen aus dem aktiven Betrieb: GLOBAL_ADMIN deaktiviert jedes ausdrücklich
 identifizierte synthetische Konto über die normale Mitgliederverwaltung mit Grund, entzieht
