@@ -53,3 +53,7 @@ jobs:
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/members.sql
+      - name: Verify server-only DEV seed and seeded role boundaries
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/dev-seed.sql

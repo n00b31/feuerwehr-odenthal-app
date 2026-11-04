@@ -180,7 +180,7 @@ test("two independent sessions centrally create, respond, change, reload, edit a
   const adminPage = await adminContext.newPage(); const memberPage = await memberContext.newPage();
   await login(adminPage, true); await login(memberPage, false);
   await create(adminPage, state);
-  await expect(adminPage.getByRole("status")).toContainText("Termin in Supabase erstellt");
+  await expect(adminPage.getByRole("status").filter({ hasText: "Termin in Supabase erstellt" })).toBeVisible();
   await memberPage.getByRole("button", { name: "Termine aktualisieren" }).click();
   await expect(memberPage.getByRole("heading", { name: "Synthetic gemeinsamer Dienst" })).toBeVisible();
   await memberPage.getByRole("button", { name: "Ich komme", exact: true }).click();

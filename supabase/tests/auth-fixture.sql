@@ -14,6 +14,7 @@ create schema auth;
 create table auth.users (
   id uuid primary key default gen_random_uuid(),
   email text,
+  created_at timestamptz not null default clock_timestamp(),
   email_confirmed_at timestamptz,
   raw_user_meta_data jsonb not null default '{}',
   raw_app_meta_data jsonb not null default '{"provider":"email"}',
@@ -26,6 +27,10 @@ create function auth.uid() returns uuid language sql stable as $$
 $$;
 grant usage on schema auth to anon, authenticated;
 grant execute on function auth.uid() to anon, authenticated;
+create function auth.role() returns text language sql stable as $$
+  select nullif(current_setting('request.jwt.claim.role', true), '');
+$$;
+grant execute on function auth.role() to anon, authenticated;
 -- Reproduce permissive legacy Supabase defaults to prove migrations remove them.
 grant usage, create on schema public to anon, authenticated;
 alter default privileges in schema public grant all on tables to anon, authenticated;

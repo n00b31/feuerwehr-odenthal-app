@@ -814,6 +814,220 @@ ohne den einzigen GLOBAL_ADMIN zu verändern. Deaktivierung sperrt neue Zugriffe
 öffnet nur bei gültiger Einheit/Verifizierung. Desktop/Mobil/Hell/Dunkel prüfen. Keine Tokens,
 Passwörter oder personenbezogenen Kontodaten in öffentliche Nachweise aufnehmen.
 
+## 13. DEV 0.3.2 – manuelle synthetische Testkonten
+
+### Architekturentscheidung und aktueller Status
+
+Ausgangsbasis: Benutzermerge von [PR #7](https://github.com/n00b31/feuerwehr-odenthal-app/pull/7),
+Main `c573562e0d75bb658417e9671d953ec0d55d136f`, Migrationen 001–008 vorhanden.
+Read-only-Preflight im bestehenden Projekt am 04.11.2026: zwei Auth-Konten,
+keine Kollision mit den ursprünglich angefragten `example.com`-Adressen oder den
+anschließend bestätigten sechs Feuerwehr-Testadressen,
+Einheiten Scheuren und Odenthal vorhanden.
+
+Die ursprünglich gewünschten `@example.com`-Konten würden trotz Auth Admin API am
+Profil-Trigger und später an Freigabe, aktiver Identität sowie Anmeldevalidierung scheitern.
+Der Benutzer entschied ausdrücklich: **Feuerwehr-Testadressen statt Domainausnahme**.
+Die bestehende Domainpflicht bleibt unverändert. Kein Hook, keine RLS-Policy und kein
+Anmelde-/Registrierungsschutz werden für Testadressen gelockert.
+
+| Fiktiver Name | Bestätigte Testadresse | Rollen nach Seed | Einheit |
+|---|---|---|---|
+| Max Mustermann | max.test@feuerwehr-odenthal.de | MEMBER + UNIT_ADMIN | Scheuren |
+| Anna Becker | anna.test@feuerwehr-odenthal.de | MEMBER + UNIT_ADMIN | Scheuren |
+| Thomas Weber | thomas.test@feuerwehr-odenthal.de | MEMBER | Scheuren |
+| Lisa Müller | lisa.test@feuerwehr-odenthal.de | MEMBER | Scheuren |
+| Peter Schneider | peter.test@feuerwehr-odenthal.de | MEMBER + UNIT_ADMIN | Odenthal |
+| Sarah Fischer | sarah.test@feuerwehr-odenthal.de | MEMBER | Odenthal |
+
+Alle erhalten ein freigegebenes aktives Profil und genau eine aktuelle Einheitsmitgliedschaft.
+Keine Sonderfunktionen oder GLOBAL_ADMIN-Rechte werden zusätzlich erzeugt.
+**Das ist der Sollbestand, kein Nachweis bereits angelegter Konten.** Der Agent führt den
+Seed nicht vorab aus. Tatsächliche Anlage/Bestand dokumentiert erst der bewusst manuell
+ausgelöste Workflow. Vorhandene Mailadressen gehören niemals automatisch dem Seed:
+Kollisionen werden nicht übernommen, überschrieben, bestätigt oder gelöscht.
+
+### Servergrenze und Migration 009
+
+`20261103000900_dev_test_members.sql` ergänzt ausschließlich:
+
+- Privates festes Manifest und private Operatorprüfung.
+- `ff_dev_seed_report(approver_id)`: read-only Soll-/Ist-Vergleich, einschließlich verifizierter
+  Identität, Profil, genauer Rollen, Einheit und Seed-Herkunft; meldet `missing`, `ready` oder
+  `conflict`. Ein Fingerprint überwacht bestehende GLOBAL_ADMIN-Zuweisungen/Profile/
+  Mitgliedschaften sowie Termine und Antworten während des Laufs.
+- `ff_dev_seed_member(target_user, approver_id, run_id)`: atomare Initialisierung ausschließlich
+  einer höchstens zehn Minuten alten, bestätigten, ungesperrten Auth-Identität aus genau diesem
+  Seed-Lauf. Serverseitig gesetzte `app_metadata.ff_dev_seed` müssen Version `032`, die feste
+  Projekt-ID und Run-UUID exakt enthalten. Profil muss Pending sein und zum Manifest passen;
+  keinerlei bisherige Rollen, Mitgliedschaften, Funktionen oder personenbezogenes Audit.
+  Bereits eingerichtete Konten, alte Teilversuche und gewöhnliche Registrierungen werden abgewiesen.
+
+Beide RPCs sind `SECURITY DEFINER` mit leerem `search_path`, ausschließlich für `service_role`
+ausführbar, niemals für `anon` oder `authenticated`. Zusätzlich prüft der Funktionskörper
+die Service-Rolle ohne Mitglieds-`sub` und einen explizit konfigurierten, tatsächlich aktiven
+GLOBAL_ADMIN als Freigabeverantwortlichen. Keine JWT-Identität wird umgeschrieben oder
+ein bestehender Administrator angemeldet. Der vertrauenswürdige Operator besitzt einen
+privilegierten Schlüssel; das ist **keine** neue Mitglieder-/Browserberechtigung.
+
+`approved_by` und `granted_by` referenzieren den bewusst konfigurierten Freigabeverantwortlichen.
+Auditaktion `dev_test_member_seeded` verwendet den bestehenden Audit-Helfer, Akteur `NULL`
+mit dem sichtbaren Snapshot „Vertrauenswürdige DEV-Einrichtung“, Zielperson, Statuswechsel,
+Einheit, Zusatzrolle, Freigabeverantwortlichen und Run-UUID. Kein fingierter Browserlogin.
+Der bestehende gemeinsame Rollen-Lock wird genutzt; kein GLOBAL_ADMIN wird verändert.
+Die Migration legt selbst **keine** Auth-Konten an und ändert keinen bestehenden Datenbestand.
+Nur die fehlende 009 im bestehenden DEV-Projekt anwenden; alte Migrationen nicht wiederholen.
+
+**Bereits angewendet am 04.11.2026:** Nach erfolgreicher
+[PostgreSQL-CI 41794499202](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/41794499202)
+ausschließlich 009 im bestätigten Projekt installiert:
+`20261104074950`, `ff_009_dev_test_members`.
+Quell-SHA-256 `6ad5d84e48b80cac1db3176f014216a9458bdb40b77a9be0d306c832036cf79f`
+(UTF-8, LF, abschließenden Whitespace entfernen).
+Alle vier gehosteten Funktionskörper stimmen normalisiert exakt mit der Quelle überein;
+Grants und leere Suchpfade unabhängig geprüft. Bestand danach unverändert:
+zwei Auth-Konten/zwei Profile, ein Termin/eine Antwort, null Seed-Auditeinträge.
+Der tatsächliche gehostete read-only Report meldet alle sechs Sollkonten als `missing`.
+Dieser Diagnoseaufruf verwendete temporäre SQL-Request-Claims für den Operator-Kontext,
+keinen Secret Key, Auth-Admin-API-Aufruf, Mitgliederlogin oder Seed-Schreibaufruf.
+**009 nicht erneut anwenden.**
+
+### Einmalige geschützte GitHub-Konfiguration
+
+GitHub-Environment **`supabase-dev-seed`** anlegen und möglichst Required Reviewers sowie
+Deployment-Branch-Regel nur `main` aktivieren. Zugriff auf diese Secrets ist hoch privilegiert.
+Keine Schlüssel in PR-Kommentare, Chat, Workflow-Inputs, CLI-Argumente oder Dateien eintragen.
+
+| Wert | Ablage |
+|---|---|
+| `SUPABASE_DEV_URL` | Vorhandene Repository-/Environment-Variable; exakt `https://orxinqhhbtjpkzwlfaxq.supabase.co` |
+| `SUPABASE_DEV_PUBLISHABLE_KEY` | Vorhandene öffentliche Variable dieses Projekts; nur für anschließende echte Benutzer-RLS-Requests |
+| `SUPABASE_DEV_SEED_APPROVER_ID` | Environment-Variable: UUID des bewusst freigebenden vorhandenen aktiven GLOBAL_ADMIN; privat aus dem Supabase-Dashboard übernehmen |
+| `SUPABASE_DEV_SERVICE_ROLE_KEY` | Environment-**Secret**: serverseitiger Secret Key oder Legacy-Service-Role-Key ausschließlich dieses DEV-Projekts |
+| `SUPABASE_DEV_TEST_PASSWORD` | Environment-**Secret**: gemeinsames selbst gewähltes Testpasswort; 12–128 Zeichen, zusätzlich tatsächliche Supabase-Passwortregeln |
+
+Das Passwort hat **keinen** Default und wird nicht veröffentlicht. Bei strengeren
+projektseitigen Regeln weist Auth die Anlage ausdrücklich ab; diese Regeln nicht abschalten.
+Nur ein Publishable Key genügt nicht für die Auth Admin API. Der privilegierte Schlüssel
+wird ausschließlich im manuellen Node-Schritt verwendet, nie als `NEXT_PUBLIC_*`, nie im
+statischen Build, Browser, Artefakt oder Demo-Repository.
+
+### Workflow nach bewusstem Merge starten
+
+1. Prüfen, dass 009 im bestehenden Projekt installiert und die PR-Prüfungen erfolgreich sind.
+   Das Seed-Skript migriert keine Datenbank und führt kein SQL über die Auth Admin API aus.
+2. Nach manuellem Merge auf GitHub unter **Actions → Manually seed isolated Supabase DEV test users
+   → Run workflow** den Branch **main** auswählen.
+3. Zuerst `mode = check`, Projektbestätigung exakt `orxinqhhbtjpkzwlfaxq`.
+   Dieser Lauf liest ausschließlich; er erzeugt auch keine Login-Sitzungen.
+4. Bei freigegebenem Preflight erneut manuell starten, `mode = seed`, gleiche Projektbestätigung.
+   Geschütztes Environment bewusst freigeben. Erwartung beim ersten vollständigen Lauf:
+   sechs `Auth created`-/Validierungszeilen und `6 created; 0 existing and unchanged`.
+5. Ein späterer Seed-Lauf muss `0 created; 6 existing and unchanged` melden.
+   Bestehende Konten werden dabei **auch nicht angemeldet**, Passwörter werden nicht zurückgesetzt.
+   Ein geändertes Passwort-Secret rotiert daher keine bestehenden Konten.
+
+Kein `push`, `pull_request`, Zeitplan oder Merge löst den Seed aus. GitHub-Läufe nur aus diesem
+Repository/Main; feste Environment-/Projektbestätigung, exakt gepinnter HTTPS-API-Host,
+keine URL-Credentials/Queries/Pfade und keine HTTP-Weiterleitungen. Vor jedem Schreibschritt
+werden die lokale Zielkonfiguration und serverseitig die Freigabe-/Neukonto-Invarianten geprüft.
+Der Report-Projektwert ist eine feste **Policy-Bindung**, kein unabhängiger Management-API-Nachweis:
+das tatsächliche Netzwerkziel wird durch den fest gepinnten Supabase-Projekthost bestimmt.
+Reruns sind serialisiert; bei konkurrierender Kontoanlage wird abgebrochen, nicht übernommen.
+
+`scripts/seed-dev-users.mjs` benutzt ausschließlich die offizielle SDK-Methode
+`auth.admin.createUser({ email_confirm: true, ... })`. Der bestehende Auth-Trigger erzeugt
+das Pending-Profil; das Seed-RPC initialisiert das zugehörige neue Profil, Mitgliedschaft,
+MEMBER und gegebenenfalls scoped UNIT_ADMIN in einer Transaktion.
+Keine SQL-Inserts nach `auth.users`, kein `signUp`, Invite, OTP, Reset oder Mail-Resend.
+Die bestätigte E-Mail ist eine bewusste privilegierte DEV-Anlage, **kein** Nachweis eines
+durchlaufenen Postfach-/Verifizierungsprozesses. Normale Registrierung bleibt unverändert.
+
+Zwischen Anlagen/Neulogins liegt eine kurze Pause. Bei Rate Limit oder anderem Fehler:
+sofortiger Abbruch, keine automatische Wiederholung und keine Ausgabe roher SDK-Fehler,
+Requests, Passwörter, Keys oder Tokens. Auth-Anlage und anschließendes Fach-RPC sind
+**keine verteilte Transaktion**: Schlägt die Initialisierung fehl oder ist der Ausgang unklar,
+kann genau dieses neue Konto Pending bzw. bereits eingerichtet zurückbleiben. Keine automatische
+Löschung, Passwortänderung oder Übernahme beim nächsten Lauf. `check` meldet Konflikte;
+vor Fortsetzung privat prüfen und nötigenfalls ausschließlich dieses neue synthetische Konto
+über die normale GLOBAL_ADMIN-Verwaltung korrekt freigeben/zuordnen. Keine fremden Bestandskonten reparieren.
+
+### Lokaler, wiederholbarer Aufruf
+
+Node 24 und gelockte Abhängigkeiten installieren. Dieselben nicht-geheimen Ziel-/Approver-Variablen
+wie oben lokal setzen, zusätzlich `SUPABASE_DEV_SEED_ENVIRONMENT=isolated-dev` und
+`SUPABASE_DEV_SEED_CONFIRM_PROJECT=orxinqhhbtjpkzwlfaxq`.
+Secrets nur im aktuellen Prozess aus geschützter Eingabe übernehmen, zum Beispiel PowerShell:
+
+```powershell
+$key = Read-Host "DEV server secret key" -AsSecureString
+$env:SUPABASE_DEV_SERVICE_ROLE_KEY = [Net.NetworkCredential]::new("", $key).Password
+try {
+  node scripts\seed-dev-users.mjs --check
+  if ($LASTEXITCODE -ne 0) { throw "Preflight fehlgeschlagen" }
+  $password = Read-Host "Gemeinsames DEV-Testpasswort" -AsSecureString
+  $env:SUPABASE_DEV_TEST_PASSWORD = [Net.NetworkCredential]::new("", $password).Password
+  node scripts\seed-dev-users.mjs --apply
+  if ($LASTEXITCODE -ne 0) { throw "Seed unvollständig; privat prüfen" }
+} finally {
+  Remove-Item Env:\SUPABASE_DEV_SERVICE_ROLE_KEY -ErrorAction SilentlyContinue
+  Remove-Item Env:\SUPABASE_DEV_TEST_PASSWORD -ErrorAction SilentlyContinue
+  if ($key) { $key.Dispose() }
+  if ($password) { $password.Dispose() }
+}
+```
+
+Keine PowerShell-Transkription/Debug-HTTP-Protokollierung verwenden. Passwort nicht als
+Befehlstext oder Default in `.env`, Repository oder Workflow-Input speichern.
+
+### Anmeldung, Prüfung und sichere Außerbetriebnahme
+
+Nach bestätigtem erfolgreichem Seed in der bestehenden DEV-Anwendung mit der jeweiligen
+Feuerwehr-Testadresse aus der Tabelle und dem privat konfigurierten gemeinsamen Passwort
+anmelden. Keine Bestätigungsmail oder zusätzliche Pending-Freigabe erforderlich.
+Diese synthetischen Konten sind für die isolierte DEV-Umgebung bestimmt, niemals Produktion.
+
+Neu angelegte Konten werden im Seed einmal mit **Publishable Key + eigenem echtem Benutzer-JWT**
+angemeldet. Geprüft werden `ff_my_access`, tatsächliches Profil-SELECT unter RLS,
+eigene/fremde Einheiten unter den sechs Testpersonen, MEMBER-Ablehnung bzw. scoped
+UNIT_ADMIN-Zugriff auf `ff_members_workspace` sowie `ff_events_workspace` und verwaltbare
+Einheiten. Danach lokale Abmeldung nur dieser neuen Sitzung. Keine Authentifizierung als
+vorhandener GLOBAL_ADMIN und keine Mutation echter Bestandsmitglieder zu Testzwecken.
+Vorhandene Personen erscheinen in der Administration weiterhin nur nach den bestehenden Regeln.
+
+Bestehende historische Termin-Roster werden **nicht nachträglich erweitert**. Für eine
+gemeinsame Teilnahmeabstimmung mit den neuen Konten einen neuen synthetischen Termin in
+Scheuren anlegen; dessen Snapshot enthält dann die aktuellen freigegebenen Scheurener Mitglieder.
+
+Automatisierung: `npm test` enthält zusätzliche vollständig simulierte Admin-API-/Fehler-/
+Idempotenztests. `supabase/tests/dev-seed.sql` testet die echten Migrationen/RLS/RPCs,
+Unit-Admin-Mitgliedschaftsänderungen, globale Sichtbarkeit und alle drei Schutzpfade des
+letzten aktiven GLOBAL_ADMIN in PostgreSQL 17, ausschließlich in wegwerfbarer `ff_dev_ci`.
+Dortige direkte Auth-Fixture-Inserts sind **kein** gehosteter Seed und verweigern andere
+Datenbanknamen. Bestehende Termin-/Antwort-/Beginnsperren- und Browserregressionen bleiben erhalten.
+Diese Prüfungen ersetzen nicht den späteren tatsächlich ausgeführten manuellen DEV-Workflow.
+
+Lokal: 70 bestehende Fachtests plus zehn neue Seed-Tests, Typprüfung, vollständiges ESLint
+und statischer Next.js-Export bestanden. Fehlendes SDK durch Wiederherstellung der gelockten
+Abhängigkeiten behoben, ohne Lockfile-Änderung; eine gesperrte alte SWC-Binärdatei wurde nicht
+gewaltsam entfernt und kein fremder Prozess beendet.
+Die erste PR-Browser-CI meldete einen mehrdeutigen Testselektor: Erfolgsstatus der Erstellung
+und laufender Ladehinweis waren gleichzeitig vorhanden. Der Selektor prüft jetzt gezielt den
+Status mit der konkreten Erfolgsmeldung statt jedes beliebige `role=status`-Element.
+Keine App-Funktion, Sicherheitsassertion, Axe-Regel oder Workflow-Schranke gelockert.
+
+Zum sicheren Entfernen aus dem aktiven Betrieb: GLOBAL_ADMIN deaktiviert jedes ausdrücklich
+identifizierte synthetische Konto über die normale Mitgliederverwaltung mit Grund, entzieht
+zusätzliche UNIT_ADMIN-/Funktionsrollen und beendet die Einheit; Historie/Audit bleiben erhalten.
+Vorher anhand UUID, Seed-Markierung und Zuordnungen prüfen, nicht allein anhand der E-Mail löschen.
+Falls ein Konto inzwischen GLOBAL_ADMIN wurde, gelten unverändert die letzten-Admin-Schutzregeln.
+Der Seed enthält absichtlich **keinen Löschmodus** und reaktiviert deaktivierte Testpersonen nicht.
+Physische Auth-/Profil-Löschung ist wegen Referenzen/append-only Audit kein sicherer pauschaler
+Cleanup: erst Aufbewahrung/Referenzen und Backup prüfen, gesonderten kontrollierten
+Operatorvorgang planen. Niemals SQL-DML in `auth.users`, breite Löschlisten oder Bestandskonten
+als vermeintliche Fixtures entfernen. Anschließend Seed-Secret/Passwort entfernen, sofern
+keine weiteren Testläufe benötigt werden; ein erneuter Seed behebt keine manuell geänderten Konten.
+
 ## Quellen
 
 - [Supabase Passwortauthentifizierung](https://supabase.com/docs/guides/auth/passwords)
