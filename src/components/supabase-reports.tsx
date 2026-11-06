@@ -61,11 +61,11 @@ export function SupabaseReports({ client, access, personalOnly = false }: {
 
   useEffect(() => {
     let current = true;
-    const request = queryKey === "null" ? null : reportQuerySchema.parse(JSON.parse(queryKey));
     async function load() {
-      if (!request) return;
+      if (queryKey === "null") return;
       setBusy(true); setError("");
       try {
+        const request = reportQuerySchema.parse(JSON.parse(queryKey));
         if (!authorized) throw new Error("Berichtsberechtigung geändert oder kein Bereich gewählt. Bitte einen berechtigten Bereich auswählen.");
         const next = await readYearReport(client, request);
         if (current) setLoaded({ key: queryKey, report: next });

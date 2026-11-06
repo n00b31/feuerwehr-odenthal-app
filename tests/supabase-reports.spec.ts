@@ -21,7 +21,7 @@ const empty: ReportMetrics = { services: 0, practices: 0, training_services: 0, 
 
 // Intercepted protocol fixtures only. PostgreSQL tests separately prove authorization and arithmetic.
 async function connect(page: Page, role: "MEMBER" | "UNIT_ADMIN" | "FIRE_CHIEF" | "GLOBAL_ADMIN") {
-  const state = { allowed: true, fail: false, accessChecks: 0, calls: [] as string[], queries: [] as ReportQuery[] };
+  const state = { allowed: true, fail: false, contextYear: 2026, accessChecks: 0, calls: [] as string[], queries: [] as ReportQuery[] };
   const overseer = role==="FIRE_CHIEF" || role==="GLOBAL_ADMIN";
   const user = { id: actor, aud: "authenticated", role: "authenticated",
     email: "synthetic.report.browser@feuerwehr-odenthal.de", email_confirmed_at: new Date().toISOString(),
@@ -52,7 +52,7 @@ async function connect(page: Page, role: "MEMBER" | "UNIT_ADMIN" | "FIRE_CHIEF" 
     if (pathname.endsWith("/ff_pending_registrations") || pathname.endsWith("/document_areas")) return respond([]);
     if (pathname.endsWith("/units")) return respond(units);
     if (pathname.endsWith("/ff_reports_context")) return respond({
-      current_year: 2026, years: [2026,2025], organization: overseer, configure: role==="GLOBAL_ADMIN",
+      current_year: state.contextYear, years: [state.contextYear,2025], organization: overseer, configure: role==="GLOBAL_ADMIN",
       personal_units: [units[0], units[1]], units: overseer ? units : role==="UNIT_ADMIN" ? [units[0]] : [],
       functions: [], event_types: ["regular","special","breathing","training","community","other"].map((event_type) => ({
         event_type, is_training_relevant: !["community","other"].includes(event_type),
@@ -179,6 +179,11 @@ test("reports stay accessible in light/dark on smartphone and desktop; RPC failu
   await page.getByRole("button", { name: "Bericht aktualisieren" }).click();
   await expect(page.getByRole("alert").filter({ hasText: "Synthetic report unavailable" })).toBeVisible();
   await expect(page.locator(".dutybook-metrics")).toHaveCount(0);
+  state.fail = false;
+  state.contextYear = 1800;
+  await page.getByRole("button", { name: "Bericht aktualisieren" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "Ungültige Berichtsdaten" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Bericht aktualisieren" })).toBeVisible();
 });
 test("revoked export permission blocks the download and clears the previously displayed protected report", async ({ page }) => {
   const state = await connect(page, "UNIT_ADMIN");
