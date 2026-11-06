@@ -1557,6 +1557,51 @@ Fehlt die 0.3.4.1-Versionsanzeige nach dessen Main-Veröffentlichung, zuerst die
 konkreten geladenen Bundle-Namen und den sichtbaren/öffentlichen Build vergleichen,
 nicht erneut Funktionen oder Berechtigungen auf Verdacht verändern.
 
+## 18. DEV 0.3.4.1 – Erfolgreiche manuelle Abnahme
+
+**Vom Projektverantwortlichen manuell bestätigt**, mitgeteilt am 06.11.2026:
+Die reale Browserabnahme der veröffentlichten DEV-Anwendung war erfolgreich.
+Die folgenden Ergebnisse stammen aus dieser Bestätigung, nicht aus zusätzlichen
+vom Agenten behaupteten Tests.
+
+| Test | Ergebnis | Manuell bestätigtes Verhalten |
+|---|---|---|
+| 1 – Anwesenheitsstatus | Erfolgreich | Anwesend grün mit Haken; abwesend rot mit X; korrekte Darstellung in der veröffentlichten Anwendung. |
+| 2 – Hintergrundaktualisierung | Erfolgreich | Kein störender Ansichtsreset; Formulare und Date Picker bleiben geöffnet; Filter und ausgewählte Termine bleiben erhalten. |
+| 3 – Zukünftige Termine | Erfolgreich | Standardmäßig maximal fünf Termine, nächster zuerst; vergangene Termine ausgefiltert. |
+| 4 – Vergangene Termine | Erfolgreich | Separate Auswahl, neueste vergangene Termine zuerst, standardmäßig maximal fünf. |
+| 5 – Monats- und Jahresfilter | Erfolgreich | Monat und Jahr auswählbar, korrekte Terminanzeige; Filter bleiben bei Hintergrundaktualisierung erhalten. |
+
+Abgenommene Version: **DEV 0.3.4.1**, Main-/Merge-Commit von
+[#12](https://github.com/n00b31/feuerwehr-odenthal-app/pull/12):
+`52e60ed097140741735ff4a325d15fa541bc7397`.
+Der [Main-Pages-Lauf 42291097983](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42291097983)
+und der [Main-Datenbanklauf 42291097949](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42291097949)
+sind erfolgreich. GitHub-Pages-Deployment `7610510085` meldet Erfolg am
+06.11.2026 um 20:50:05 UTC und verweist auf genau diesen Commit.
+
+Die erneut geladene öffentliche `release.json` identifiziert denselben sauberen
+DEV-Commit, Lauf `42291097983`/Versuch `1` und Build
+`52e60ed09714-3d675d83-612d-4f4e-b983-6caf53ad1e5a`.
+Erneuter HTTPS-Abgleich aller **72** Dateien mit dem DEV-Export dieses Laufs:
+alle SHA256-identisch, einschließlich `release.json`.
+
+Der annotierte und zu GitHub gepushte Tag **`v0.3.4.1-ux-dev`** zeigt unveränderlich
+auf `52e60ed097140741735ff4a325d15fa541bc7397`. Beschreibung:
+
+> Feuerwehr Odenthal DEV 0.3.4.1 – UX improvements, attendance status, event filters and PWA update handling validated.
+
+Diese nachgelagerte Dokumentation wird auf `docs/dev-0341-acceptance` als
+separater PR gesichert, nicht automatisch gemergt und ist ausdrücklich **nicht**
+nachträglich Teil des getaggten Quellstands. Der Tag wird nicht verschoben.
+
+**Weiterhin offen:** gesonderte reale Gerätetests der installierten iPhone- und
+Android-PWA, insbesondere Update-Bestätigung/Abbrechen mit ungespeicherten
+Eingaben, Safe Areas und nativer Date Picker über zwei Aktualisierungsintervalle.
+Die bestätigte Browserabnahme wird nicht als diese Geräteabnahme ausgegeben.
+Supabase DEV funktioniert weiter; das unabhängige Demo-Repository bleibt
+unverändert.
+
 ## Quellen
 
 - [Supabase Passwortauthentifizierung](https://supabase.com/docs/guides/auth/passwords)
