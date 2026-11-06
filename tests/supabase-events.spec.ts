@@ -240,17 +240,17 @@ test("global membership, role, function and status changes are reflected in rene
   await row.getByRole("button",{ name: "Einheitszuordnung speichern" }).click();
   await expect(row.locator("summary")).toContainText("Andere Einheit");
   await memberPage.reload();
-  await expect(memberPage.getByText(/Andere Einheit · MEMBER/)).toBeVisible();
+  await expect(memberPage.getByText(/Andere Einheit · Mitglied/)).toBeVisible();
   await row.getByRole("combobox", { name: "Neue Rolle für Synthetic Member", exact: true }).selectOption("UNIT_ADMIN");
   await row.getByRole("combobox", { name: "Rollenbereich", exact: true }).selectOption(otherUnit);
   await row.getByRole("button",{ name: "Rolle zuweisen", exact: true }).click();
-  await expect(row.getByRole("button",{ name: "Rolle UNIT_ADMIN entziehen" })).toBeVisible();
+  await expect(row.getByRole("button",{ name: "Rolle Einheitsführer · Andere Einheit entfernen" })).toBeVisible();
   await memberPage.reload();
   await memberPage.getByRole("link",{ name: "Administration", exact: true }).click();
   await expect(memberPage.getByText(/Nur eigene Einheiten/)).toBeVisible();
   await expect(memberPage.getByRole("button",{ name: "Rolle zuweisen", exact: true })).toHaveCount(0);
-  await row.getByRole("button",{ name: "Rolle UNIT_ADMIN entziehen" }).click();
-  await expect(row.getByRole("button",{ name: "Rolle UNIT_ADMIN entziehen" })).toHaveCount(0);
+  await row.getByRole("button",{ name: "Rolle Einheitsführer · Andere Einheit entfernen" }).click();
+  await expect(row.getByRole("button",{ name: "Rolle Einheitsführer · Andere Einheit entfernen" })).toHaveCount(0);
   await memberPage.reload();
   await expect(memberPage.getByRole("link",{ name: "Administration", exact: true })).toHaveCount(0);
   await expect(memberPage.getByRole("main").getByRole("alert")).toContainText("Keine Berechtigung zur Mitgliederverwaltung");
@@ -298,6 +298,71 @@ test("member API cannot change roles or units and responsive navigation survives
     await expect(page.getByRole("navigation",{ name: "Mobile Navigation" }))[width > 960 ? "toBeHidden" : "toBeVisible"]();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
+});
+
+test("role labels and assigned selection stay accessible across themes, scopes and screen sizes without writes", async ({ context, page }) => {
+  const state = store(); state.memberAdmin = true;
+  await connect(context, state, admin);
+  let writes = 0;
+  page.on("request", (request) => {
+    if (/\/rpc\/ff_set_/.test(request.url())) writes++;
+  });
+  await login(page, true);
+  await page.getByRole("link", { name: "Administration", exact: true }).click();
+  const row = page.locator(".dev-member").filter({ has: page.getByText("Synthetic Member", { exact: true }) });
+  await row.locator("summary").click();
+  await expect(page.getByRole("main")).not.toContainText(/GLOBAL_ADMIN|UNIT_ADMIN|MEMBER/);
+  const assigned = row.getByRole("list", { name: "Zugewiesene Rollen für Synthetic Member" });
+  await expect(assigned.getByRole("listitem")).toHaveCount(2);
+  await expect(assigned.getByRole("listitem").filter({ hasText: "Mitglied" })).toContainText("Basisrolle");
+  await expect(assigned.getByRole("button", { name: /Mitglied.*entfernen/ })).toHaveCount(0);
+  const remove = assigned.getByRole("button", { name: "Rolle Einheitsführer · Scheuren entfernen" });
+  await expect(remove).toBeDisabled();
+  await row.getByLabel("Änderungsgrund für Synthetic Member", { exact: true }).fill("Synthetic visual review");
+  await expect(remove).toBeEnabled();
+  const select = row.getByRole("combobox", { name: "Neue Rolle für Synthetic Member", exact: true });
+  await expect(select.getByRole("option", { name: "Globaler Administrator", exact: true })).toHaveAttribute("value", "GLOBAL_ADMIN");
+  await expect(select.getByRole("option", { name: "Einheitsführer", exact: true })).toHaveAttribute("value", "UNIT_ADMIN");
+  const scopeSelect = row.getByRole("combobox", { name: "Rollenbereich", exact: true });
+  const status = row.locator(".member-role-state");
+  await expect(status).toContainText("Rollenbereich auswählen");
+  await scopeSelect.selectOption(unit);
+  await expect(status).toContainText("Einheitsführer · Bereits zugewiesen");
+  await expect(status).toHaveClass(/assigned/);
+  for (const width of [390, 1366]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const theme of ["light", "dark"]) {
+      if (await page.locator("html").getAttribute("data-theme") !== theme) {
+        await page.getByRole("button", { name: "Farbschema wechseln" }).click();
+      }
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+      await expect.poll(() => page.evaluate(() => document.getAnimations().filter((animation) =>
+        animation.playState === "running" && Number.isFinite(animation.effect?.getComputedTiming().endTime)).length)).toBe(0);
+      const colors = await status.evaluate((element) => ({
+        assigned: getComputedStyle(element).backgroundColor,
+        remove: getComputedStyle(element.closest(".dev-member")!.querySelector(".member-role-remove")!).color,
+      }));
+      await scopeSelect.selectOption(otherUnit);
+      await expect(status).toContainText("Einheitsführer · Nicht zugewiesen");
+      await expect(status).not.toHaveClass(/assigned/);
+      const neutral = await status.evaluate((element) => getComputedStyle(element).backgroundColor);
+      expect(neutral).not.toBe(colors.assigned);
+      const rgb = colors.assigned.match(/\d+(?:\.\d+)?/g)!.map(Number);
+      expect(rgb[1]).toBeGreaterThan(rgb[0]);
+      expect(rgb[1]).toBeGreaterThan(rgb[2]);
+      const red = colors.remove.match(/\d+(?:\.\d+)?/g)!.map(Number);
+      expect(red[0]).toBeGreaterThan(red[1]);
+      expect(red[0]).toBeGreaterThan(red[2]);
+      expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await scopeSelect.selectOption(unit);
+      await expect(status).toHaveClass(/assigned/);
+      await status.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: `test-results/dev0321-roles-${width}-${theme}.png` });
+    }
+  }
+  expect(writes).toBe(0);
+  expect(state.memberAdmin).toBe(true);
 });
 
 test("foreign events and server-start boundary cannot be bypassed by member API requests", async ({ context, page }) => {

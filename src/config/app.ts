@@ -27,3 +27,10 @@ export const ROLE_LABELS = {
   FUNCTION_ADMIN: "Funktionsadministration",
   MEMBER: "Mitglied",
 } as const;
+
+export const DEV_ROLE_LABELS = {
+  ...ROLE_LABELS,
+  GLOBAL_ADMIN: "Globaler Administrator",
+  UNIT_ADMIN: "Einheitsführer",
+  FIRE_CHIEF: "Feuerwehrleitung",
+} as const;
