@@ -103,6 +103,8 @@ jobs:
   dev-export:
     # Fresh checkout/build: synthetic Auth values and demo output cannot become Pages.
     needs: [build, auth]
+    outputs:
+      build_id: ${{ steps.release.outputs.build_id }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -120,6 +122,9 @@ jobs:
       - run: npm ci
       - run: npm run check:supabase-config
       - run: npm run build:pages
+      - name: Record this export's release identity
+        id: release
+        run: node -p '"build_id=" + JSON.parse(require("fs").readFileSync("out/release.json")).buildId' >> "$GITHUB_OUTPUT"
       - name: Verify only real public configuration or locked setup is publishable
         run: node scripts/check-dev-export.mjs
       - name: Verify unconfigured DEV stays locked over HTTP and in browser
@@ -150,7 +155,9 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: dev-export
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
+      contents: read
       pages: write
       id-token: write
     environment:
@@ -160,3 +167,17 @@ jobs:
       - name: Deploy Supabase DEV frontend (no database mutations)
         id: deployment
         uses: actions/deploy-pages@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: actions/download-artifact@v4
+        with:
+          name: supabase-dev-export
+          path: deployed-artifact
+      - name: Prove published bytes match this run's DEV artifact
+        env:
+          PAGES_ARTIFACT_DIR: deployed-artifact
+          PAGES_URL: ${{ steps.deployment.outputs.page_url }}
+          EXPECTED_RELEASE_ID: ${{ needs.dev-export.outputs.build_id }}
+        run: node scripts/verify-pages-release.mjs

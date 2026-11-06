@@ -1338,7 +1338,8 @@ ist ebenfalls erfolgreich: 92 Unit-Tests, 19 bestehende Demo-Browserfälle,
 18 synthetische DEV-/Auth-Browserfälle, Typen/Lint und echter konfigurierter
 statischer DEV-Export. Veröffentlichung übersprungen.
 Aktuelle Commit-/CI-Prüfungen: [PR #11](https://github.com/n00b31/feuerwehr-odenthal-app/pull/11).
-Die neue Oberfläche ist noch nicht veröffentlicht. Keine Änderungen am separaten
+Bei dieser Übergabe war die neue Oberfläche noch nicht veröffentlicht; den
+Nachweis nach Benutzermerge enthält Abschnitt 17. Keine Änderungen am separaten
 Demo-Repository. Temporäre lokale Vorschau nach erfolgreicher Prüfung gestoppt.
 
 ### Manuelle Prüfung und Grenzen
@@ -1362,6 +1363,192 @@ Monatsseiten sind Live-Daten, kein transaktionaler Export-Snapshot: parallele
 Terminverschiebungen können Seitenpositionen ändern. Die Hintergrundabfrage baut
 die bereits geladenen Seiten erneut aus stabilen Cursorn auf. Echte iPhone-/Android-
 Abnahme und autorisierte reale Auth-Sitzungen bleiben manuell.
+
+## 17. DEV 0.3.4.1 – Release-Nachweis und kontrollierte Aktualisierung
+
+### Ursache und konkret geprüfte Veröffentlichung
+
+Die Annahme „PR #11 ist nicht auf Pages angekommen“ trifft auf die untersuchte
+öffentliche Veröffentlichung **nicht** zu. Der nachgewiesene Fehler im vorhandenen
+Browserkontext ist eine seit dem 03.11.2026 weiterlaufende Seite mit alten
+JavaScript-Bundles. Ein Serverdeployment ersetzt bereits ausgeführtes JavaScript
+in einem offenen Tab nicht. Diese ältere DEV-Anwendung hat weder eine
+Release-Abfrage noch einen Update-Hinweis. Zusätzlich wurde `PwaStatus` bisher
+nur in der Demo-Shell eingebunden, nicht in `SupabaseDev`; ein früher registrierter
+Worker konnte daher in DEV bestehen bleiben, ohne durch die DEV-Oberfläche
+registriert oder auf Aktualisierungen geprüft zu werden.
+
+| Glied der Kette, Prüfung am 06.11.2026 | Konkreter Nachweis |
+|---|---|
+| PR #11, Benutzermerge 15:06:35 UTC | Head `6b6487f519a374ee74cdc5871e428acc5e3e229f`, Merge `88a10b95d9bb00a14b685404b7b5ccc3252be84a` |
+| `origin/main` | Derselbe Merge-Commit; PR-Head ist Vorfahr, Quellbaum identisch zum geprüften Feature-Head |
+| Main-Push-Workflow | [42239962062](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42239962062), erfolgreich; `dev-export`-Checkout-Log nennt genau `88a10b95…`, Modus `supabase-dev` |
+| Pages-Deployment | ID `7603416192`, SHA `88a10b95…`, Environment `github-pages`, Status erfolgreich um 15:14:02 UTC |
+| Tatsächlich deploytes Artefakt | `github-pages`, Artifact-ID `13514507290`, zugehöriger `workflow_run.head_sha` ebenfalls `88a10b95…` |
+| Kein Demo-/Altartefakt | Entpacktes `github-pages/artifact.tar` und `supabase-dev-export` haben alle 71 Dateien bytegleich; Uploadpfad ist `out` des frischen DEV-Jobs |
+| Öffentliche Dateien | HTML `/termine/`, alle zwölf darin referenzierten JS-Dateien, CSS, Manifest und `sw.js`: 16 von 16 SHA256-Vergleichen stimmen mit dem deployten Artefakt überein |
+| Tatsächlich ausgeführte DEV-Komponenten | Frische Live-Ansicht lädt `0t2hyxbr9poqf.js`, zeigt „DEV 0.3.4“, Monats-/Historiensteuerung und statusbezogene Klassen; echte Anfragen gehen an `orxinqhhbtjpkzwlfaxq.supabase.co` |
+
+GitHub meldet für das **ZIP-Artefakt** den Digest
+`sha256:10f2c353daf6039713d04bc766fb9e7c85ff695346cfd84338477367a694671e`.
+Die daraus extrahierte **Tar-Datei** hat SHA256
+`160c3dd15eb8fb4f1763c7ea757f21a19dd4ff0df0ec8b46e3e7fca2a3e8ed5f`.
+Das sind verschiedene Verpackungen, keine widersprüchlichen Hashes.
+
+Eine Nachweisgrenze des bisherigen Builds ist ausdrücklich vorhanden:
+Im Artefakt selbst steht noch kein eingebetteter Git-SHA. Die Zuordnung gelingt
+über Artifact-/Deployment-Metadaten, Checkout-Log und Live-Bytevergleich,
+nicht über eine Versionsanzeige oder `release.json`. Diese Lücke wird jetzt behoben.
+Für andere, nicht untersuchte Geräte wird kein identischer Cachezustand behauptet.
+
+### Komponenten-, Auth- und Datenbankpfad
+
+`Application` wählt in DEV `SupabaseDev`, nicht die lokale Demo-Terminseite.
+`DevWorkspace` rendert `SupabaseEvents`; dessen Anwesenheitsbereich verwendet
+`SupabaseAttendance`. Die Änderungen aus PR #11 liegen in diesen tatsächlichen
+DEV-Komponenten. Es gibt kein deaktivierendes Feature-Flag und keine alternative
+Static-Export-Route für die neue Terminansicht. CSS verwendet ausdrücklich
+`.attendance-choice.present.selected`, `.absent.selected`, `.unknown.selected`
+und die entsprechenden Status-Badges; kein gemeinsamer grüner Auswahlstil.
+
+Der frische Live-Client verwendet `ff_events_page`. `ff_events_workspace` bleibt
+absichtlich für alte Clients kompatibel, ist aber nicht der Datenpfad der neuen
+Terminliste. Erneuter Read-only-Abgleich im bestehenden DEV-Projekt bestätigt
+die vier in Abschnitt 16 dokumentierten Funktions-MD5s, SECURITY DEFINER und
+Execute-Grants; öffentliche Tabellen behalten RLS. Keine Migration und keine
+Änderung an Konten, Mitgliedschaften, Anwesenheiten oder RPCs für diese Korrektur.
+
+Der alte Remount-Pfad setzte bei jedem 60-Sekunden-Auth-Recheck den Screen auf
+`loading`. PR #11 erhält den aktiven Bereich derselben Identität. Die neue
+Live-Prüfung bestätigt dies über echte Backend-Abfragen. Die Auth-Abonnements,
+Session-Erneuerung, Rollen-/Freigabeprüfungen und fail-closed Entfernung bei
+Sperre, Identitätswechsel oder Auth-Fehler bleiben unverändert.
+
+### Kurzer Implementierungsplan und Umsetzung
+
+1. Merge, Checkout, Artefakt und live ausgelieferte Dateien vergleichen;
+   alten und frischen Browserkontext getrennt untersuchen.
+2. Frischen, vom Benutzer angemeldeten Live-Client ohne Datenwrites prüfen;
+   Formular und offene Bereiche über zwei echte Auth-Intervalle beobachten.
+3. Release-Identität in Build, Browser, Manifest und Worker einbetten;
+   Update nur anzeigen, nie automatisch neu laden.
+4. Nach Main-Deployment die komplette öffentliche Dateimenge gegen genau
+   diesen Workflow-Export prüfen; lokale/synthetische und echte Nachweise trennen.
+
+`build:pages` benötigt einen Git-Checkout. Der Build bindet den vollständigen
+Commit, Modus, Repository, Unterpfad, CI-Lauf/-Versuch und eine eindeutige Build-ID
+in das Client-Bundle und `out/release.json` ein. Unterschiedliche Builds desselben
+Commits erhalten unterschiedliche IDs. Uncommittierte lokale Arbeitsstände sind
+sichtbar markiert; CI verweigert eine nicht zum Checkout passende SHA oder
+uncommittierte Quellen. Das Manifest behält seine stabile PWA-ID, Start-URL und
+Scope; seine Beschreibung trägt den Build-Nachweis. Ein standardisiertes
+Manifest-Feld `version` wird nicht behauptet.
+
+`PwaStatus` wird auch in DEV außerhalb des austauschbaren Auth-Inhalts gerendert.
+Die Versionsdatei wird beim Öffnen/Fokussieren und alle fünf Minuten bei sichtbarer,
+online befindlicher Seite abgefragt: ohne Anmeldeinformationen, mit `no-store`,
+Cache-Buster, Zeitlimit und validiertem Repository/Modus/Unterpfad. Fehler werden
+angezeigt, nicht als Erfolg interpretiert. Unterschiedliche Build-IDs zeigen
+„Neue Version verfügbar“. Hintergrundprüfungen und Worker-Ereignisse lösen
+**keinen Reload** aus. „Jetzt aktualisieren“ verlangt eine zusätzliche Bestätigung
+mit ausdrücklichem Hinweis auf ungespeicherte Eingaben; Abbrechen erhält die
+Ansicht. Nur nach Zustimmung und abgeschlossener Aktivierung eines wartenden
+Workers wird gezielt mit Release-Query neu navigiert. Ein Aktivierungsfehler oder
+Zeitlimit führt zu einer sichtbaren Meldung statt zu einem unkontrollierten Reload.
+Der echte lokale Upgrade-Test deckte eine Race zwischen gleichzeitiger Worker-
+Aktivierung und Navigation auf; das explizite Abwarten behebt diese Ursache.
+
+`sw.js` erhält bei jedem Pages-Build eine neue, scopegebundene Cache-ID statt
+des bisherigen konstanten `v4`. Registrierung verwendet `updateViaCache: "none"`
+und eine releasebezogene Script-URL. Der Worker wartet bei einem Update auf
+`ACTIVATE_UPDATE`; beim Aktivieren entfernt er nur ältere Caches seines eigenen
+App-Unterpfads. Navigation wird revalidiert, nie aus einem App-Shell-Cache bedient.
+Gespeichert werden weiterhin ausschließlich öffentliche Offline-Hinweisseite und
+Icons: keine App-Bundles, Auth-Sitzungen oder Supabase-Daten. Es gibt keine
+Offline-Freigabe für DEV.
+
+Nach `deploy-pages` lädt der Workflow **seinen eigenen** `supabase-dev-export`
+herunter. `verify-pages-release.mjs` prüft erwarteten Commit/Build und vergleicht
+SHA256 jeder exportierten Datei einschließlich aller Routen, Bundles, CSS,
+Manifest, Worker und Versionsnachweis mit HTTPS auf der kanonischen DEV-Adresse.
+Verzögerte CDN-Verfügbarkeit wird begrenzt und mit sichtbaren Fehlermeldungen
+erneut geprüft; bei Abweichung bleibt der Workflow fehlgeschlagen. Ein grüner
+Deployment-Schritt allein genügt nicht mehr. Feature-PRs veröffentlichen weiterhin
+nichts und verändern keine Datenbank.
+
+### Tatsächlich durchgeführte Live-Prüfung und Grenzen
+
+Eine separate Browser-Ansicht `odenthal-dev0341-live` öffnete die öffentliche
+`/termine/`-Route frisch mit den nachgewiesenen PR-11-Bundles. Der Benutzer
+meldete sein vorhandenes GLOBAL_ADMIN-Testkonto privat im Browser an.
+Passwort oder Session-Token wurden weder ausgelesen noch gespeichert.
+
+| Prüfung auf echten Pages-Dateien und tatsächlichem DEV-Backend | Ergebnis |
+|---|---|
+| Anwesend / Abwesend, Light und Dark | Unterschiedliche grüne/rote Hintergründe und Rahmen, Haken bzw. X, korrekte Texte und `aria-pressed`; ausgewähltes Abwesend hat keinen Haken |
+| Nicht festgestellt | Reale neutrale Bedienfläche ohne Haken/X; ein aktiv ausgewählter unbekannter Datensatz wurde nicht durch Veränderung einer bestätigten Liste erzwungen |
+| Offene Anwesenheit, aufgeklappte Teilnehmer, eigener ungespeicherter Terminentwurf | 158,44 echte monotone Sekunden, kein virtueller Clock-Sprung, keine abgetrennten DOM-Knoten, gleicher Dokument-/Eingabe-/Panel-/Details-Knoten; Entwurf und Filterwerte erhalten |
+| Tatsächliche Hintergrundzugriffe während dieser Zeit | 2 `/auth/v1/user`, 4 `ff_my_access`, 16 `ff_attendance_workspace`, 7 `ff_events_page`; beide 60-Sekunden-Prüfintervalle tatsächlich durchlaufen |
+| Native Datumeingabe | `showPicker()` akzeptiert, Datumsknoten und Fokus erhalten; das OS-Popup selbst war über Browserautomation/`:open` nicht zuverlässig beobachtbar, daher **kein vollständiger visueller Picker-Nachweis** |
+| Historienauswahl | Tatsächlicher `ff_events_page(list_view='past')`, HTTP 200, vier reale vergangene Termine in absteigender Startreihenfolge |
+| Monats-/Jahresauswahl | Tatsächliche Monats-RPCs für `2026-11` mit chronologischen Ergebnissen und `2027-01` mit korrekter leerer Ergebnismenge, jeweils HTTP 200; Steuerung sichtbar und bedienbar |
+| Aktuelle/fünfbegrenzte Liste | Echte aktuelle Liste und Reihenfolge geprüft; die vorhandenen aktuellen Daten erreichten die >5-Stressgrenze nicht. Exakte Fünferbegrenzung mit mehr Datensätzen ist separat in synthetischen Browser-/SQL-Fixtures geprüft |
+
+Während der Prüfung konnten unabhängig vorgenommene Änderungen in DEV neue
+Termine sichtbar machen. Unsere Prüfung führte nur Reads und lokale,
+anschließend verworfene Entwürfe aus; keine Termin-/Anwesenheits-/Rollenwrites.
+Keine Behauptung unveränderter Gesamtdaten bei parallel arbeitenden Benutzern.
+Der echte Tokenablauf wurde nicht künstlich vorgezogen; echte SDK-Erneuerung
+bleibt zusätzlich im abgefangenen synthetischen Protokolltest geprüft.
+
+Die neue Update-Logik wird zusätzlich mit Unit-Tests, synthetischen Auth-/RPC-
+Browserfällen und einem echten lokalen Chromium-Service-Worker-Upgrade geprüft:
+wartender Worker, erhaltener Entwurf, abgebrochene Bestätigung und gezielt entfernte
+alte DEV-Caches bei erhaltenem fremdem Demo-Scope. Das ist keine reale
+Supabase-Anmeldung oder installierte iPhone-/Android-PWA-Abnahme. Die neue
+0.3.4.1-Update-Oberfläche und der Nach-Deployment-Check werden erst nach bewusstem
+Benutzermerge öffentlich ausgeführt; PR #11 ist bereits real veröffentlicht geprüft.
+
+Lokal erfolgreich: 99 Unit-Tests, 21 synthetische DEV-/Auth-Browserfälle,
+19 bestehende Demo-Browserfälle, Typecheck, ESLint und beide statischen Exporte.
+Die drei neuen Update-/Worker-Szenarien wurden nach der Race-Korrektur zusätzlich
+dreimal ausgeführt (9 erfolgreiche Wiederholungsfälle). Die Demo-Prüfung betrifft
+nur den lokalen Regressionsmodus dieses Repositories, keine Änderung oder
+Veröffentlichung des separaten Demo-Repositories.
+
+### Einmalige Altclient- und PWA-Abnahme
+
+Bereits ausgeführter Altcode kann den neuen Hinweis nicht rückwirkend anzeigen.
+Deshalb beim ersten Wechsel bewusst vorgehen:
+
+1. Eigene Entwürfe speichern oder bewusst verwerfen. Den alten Tab nicht während
+   einer Eingabe zwangsweise neu laden. Danach `Strg+F5` bzw. `Cmd+Shift+R`
+   ausführen oder den App-Tab schließen und die DEV-Adresse frisch öffnen.
+2. Bei Verdacht auf HTTP-Cache in Desktop-DevTools → Network „Disable cache“
+   aktivieren, DevTools geöffnet lassen und die DEV-Route neu laden. Pages lieferte
+   bei der Diagnose HTML/JS/CSS/Worker mit `Cache-Control: max-age=600`;
+   Next-Server-Header gelten nicht beim Static Export auf Pages.
+3. DevTools → Application → Service Workers: ausschließlich den Scope
+   `https://n00b31.github.io/feuerwehr-odenthal-app/` ansehen, zunächst „Update“
+   verwenden. Zum gezielten Neustart nur diese Registrierung „Unregister“,
+   dann die App neu laden. Unter Cache Storage bei Bedarf nur
+   `feuerwehr-offline:/feuerwehr-odenthal-app/:…` löschen.
+4. **Nicht pauschal alle Site-Daten für `n00b31.github.io` löschen**:
+   das kann Anmeldesitzungen und lokale Daten anderer Repositories/Demo entfernen.
+   Andere Service-Worker-Scopes und Demo-Caches unangetastet lassen.
+5. In einem neuen privaten Browserfenster die DEV-Adresse öffnen, eigenes
+   Testkonto anmelden und den sichtbaren Commit/Build mit `release.json`
+   und dem erfolgreichen Main-Workflow vergleichen. Historie/Monat/Jahr,
+   Anwesenheit und 130 Sekunden Formular-/Details-/Picker-Erhalt erneut prüfen.
+6. Installierte PWA separat über ihr App-Symbol öffnen, nicht nur den Browser-Tab.
+   Versionsanzeige prüfen, auf „Neue Version verfügbar“ erst nach Speichern
+   reagieren. Abbrechen muss Entwürfe erhalten; Zustimmung genau einmal
+   aktualisieren. Den nativen Picker dabei auf dem tatsächlichen iPhone/Android
+   visuell über mindestens 130 Sekunden beobachten, auch in Light/Dark.
+
+Fehlt die 0.3.4.1-Versionsanzeige nach dessen Main-Veröffentlichung, zuerst die
+konkreten geladenen Bundle-Namen und den sichtbaren/öffentlichen Build vergleichen,
+nicht erneut Funktionen oder Berechtigungen auf Verdacht verändern.
 
 ## Quellen
 
