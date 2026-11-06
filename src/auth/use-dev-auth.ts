@@ -35,18 +35,28 @@ export function useDevAuth(client: SupabaseClient | null) {
   const [screen, setScreen] = useState<Screen>({ phase: "loading" });
   const [revision, setRevision] = useState(0);
   const epoch = useRef(0);
+  const identity = useRef<string | null>(null);
   const phase = useRef(screen.phase);
   useEffect(() => { phase.current = screen.phase; }, [screen.phase]);
   const refresh = useCallback(() => {
     epoch.current++;
-    setScreen({ phase: "loading" });
+    // Revalidation must not unmount the authorized, same-user workspace.
+    setScreen((current) => current.phase === "active" || current.phase === "blocked" || current.phase === "signed-out"
+      ? current : { phase: "loading" });
     setRevision((value) => value + 1);
   }, []);
 
   useEffect(() => {
     if (!client) return;
     // Keep callbacks synchronous: awaiting Auth methods here can deadlock the SDK.
-    const { data: subscription } = client.auth.onAuthStateChange(refresh);
+    const { data: subscription } = client.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT" || (session && identity.current !== null && session.user.id !== identity.current)) {
+        epoch.current++;
+        identity.current = null;
+        setScreen({ phase: event === "SIGNED_OUT" ? "signed-out" : "loading" });
+      }
+      refresh();
+    });
     const recheck = () => { if (phase.current !== "signed-out") refresh(); };
     window.addEventListener("focus", recheck);
     window.addEventListener("online", recheck);
@@ -76,7 +86,7 @@ export function useDevAuth(client: SupabaseClient | null) {
         const { data, error } = await connection.auth.getSession();
         if (error) throw error;
         if (!data.session) {
-          if (isCurrent()) setScreen({ phase: "signed-out" });
+          if (isCurrent()) { identity.current = null; setScreen({ phase: "signed-out" }); }
           return;
         }
         const verified = await connection.auth.getUser();
@@ -84,6 +94,7 @@ export function useDevAuth(client: SupabaseClient | null) {
         const access = await readAccess(connection);
         if (!isCurrent()) return;
         if (access.user_id !== verified.data.user.id) throw new Error("Identität stimmt nicht überein.");
+        identity.current = access.user_id;
         if (!access.access_granted) {
           setScreen({ phase: "blocked", access });
           return;
@@ -91,6 +102,7 @@ export function useDevAuth(client: SupabaseClient | null) {
         const protectedData = await readDevData(connection, access);
         // Recheck after the reads; a concurrent suspension must not leave the UI unlocked.
         const latest = await readAccess(connection);
+        if (latest.user_id !== verified.data.user.id) throw new Error("Identität wurde während der Prüfung geändert.");
         if (isCurrent()) setScreen(latest.access_granted
           ? { phase: "active", access: latest, data: protectedData }
           : { phase: "blocked", access: latest });
@@ -102,5 +114,5 @@ export function useDevAuth(client: SupabaseClient | null) {
     return () => { current = false; };
   }, [client, revision]);
 
-  return { screen, refresh, clear: () => { epoch.current++; setScreen({ phase: "loading" }); } };
+  return { screen, refresh, clear: () => { epoch.current++; identity.current = null; setScreen({ phase: "loading" }); } };
 }

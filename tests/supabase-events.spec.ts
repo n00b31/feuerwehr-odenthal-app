@@ -26,7 +26,8 @@ function store() {
   return {
     events: [] as StoredEvent[], answers: new Map<string, Response>(),
     audit: [] as { actor: string; before: Response | undefined; after: Response }[],
-    now: Date.now(), broken: false, denyCreation: false,
+    now: Date.now(), broken: false, denyCreation: false, tokenLifetime: 3600, invalidSession: false,
+    authGrants: [] as string[], accessChecks: 0, queries: [] as Record<string, unknown>[],
     memberUnit: unit, memberAdmin: false, memberSuspended: false, memberFunction: false,
     roster: [admin, member], attendance: new Map<string, Attendance>(), delegates: new Map<string, { user: string; note: string }>(),
     attendanceAudit: [] as { event: string; actor: string; action: string; user?: string; before?: Actual; after?: Actual; reason?: string }[],
@@ -62,13 +63,15 @@ async function connect(context: BrowserContext, state: Store, actor: string) {
     };
     const final = (id: string) => ["COMPLETED","CORRECTED"].includes(attendance(id).state);
     if (path === "/auth/v1/token") {
-      const payload = Buffer.from(JSON.stringify({ sub: actor, aud: "authenticated", role: "authenticated", exp: Math.floor(Date.now()/1000)+3600 })).toString("base64url");
+      state.authGrants.push(new URL(request.url()).searchParams.get("grant_type") ?? "");
+      const payload = Buffer.from(JSON.stringify({ sub: actor, aud: "authenticated", role: "authenticated", exp: Math.floor(Date.now()/1000)+state.tokenLifetime })).toString("base64url");
       return respond({ access_token: `eyJhbGciOiJIUzI1NiJ9.${payload}.synthetic-signature`,
-        refresh_token: "synthetic-only", token_type: "bearer", expires_in: 3600, user: user() });
+        refresh_token: "synthetic-only", token_type: "bearer", expires_in: state.tokenLifetime, user: user() });
     }
-    if (path === "/auth/v1/user") return respond(user());
+    if (path === "/auth/v1/user") return state.invalidSession ? respond({ code: "bad_jwt", message: "Synthetic invalid session" }, 401) : respond(user());
     if (path === "/auth/v1/logout") return route.fulfill({ status: 204 });
     if (path === "/rest/v1/rpc/ff_my_access") return respond({
+      ...(state.accessChecks++, {}),
       user_id: actor, display_name: isAdmin ? "Synthetic Admin" : "Synthetic Member",
       account_status: !isAdmin && state.memberSuspended ? "suspended" : "approved",
       access_granted: isAdmin || (!state.memberSuspended && !!actorUnit), unit_id: actorUnit,
@@ -124,21 +127,32 @@ async function connect(context: BrowserContext, state: Store, actor: string) {
       state.memberSuspended = path.endsWith("ff_set_account_status");
       return respond(null);
     }
-    if (path === "/rest/v1/rpc/ff_events_workspace") {
+    if (path === "/rest/v1/rpc/ff_events_page") {
       if (state.broken) return respond({ code: "503", message: "Synthetic outage" }, 503);
+      const query = request.postDataJSON(); state.queries.push(query);
+      const eligible = state.events.filter((e) => isAdmin || e.unit_id === unit);
+      const sorted = eligible.filter((e) => (query.status_filter === "all" || e.status === query.status_filter)
+        && (query.list_view === "past" ? Date.parse(e.ends_at) <= state.now : query.list_view === "month"
+          ? localInput(e.starts_at).slice(0, 7) === query.month_key : Date.parse(e.ends_at) > state.now))
+        .sort((a, b) => (Date.parse(a.starts_at) - Date.parse(b.starts_at) || a.id.localeCompare(b.id)) * (query.list_view === "past" ? -1 : 1))
+        .filter((e) => !query.after_id || Date.parse(e.starts_at) > Date.parse(query.after_start)
+          || (Date.parse(e.starts_at) === Date.parse(query.after_start) && e.id > query.after_id));
+      const limit = query.list_view === "month" ? 50 : 5;
+      const selected = sorted.slice(0, limit);
+      const retained = eligible.filter((e) => query.retained_ids.includes(e.id) && !selected.some((item) => item.id === e.id));
+      const serialize = (e: StoredEvent) => ({
+        ...e, series_id: null, response_deadline: null, scope_name: e.unit_id === unit ? "Scheuren" : "Andere Einheit",
+        can_manage: isAdmin, can_lead: leader(e.id), can_delegate: isAdmin, can_read_attendance: leader(e.id),
+        attendance_state: attendance(e.id).state, own_attendance: final(e.id) ? attendance(e.id).rows.get(actor)?.status ?? null : null,
+        in_roster: e.unit_id === unit, own_response: state.answers.get(`${e.id}:${actor}`) ?? null,
+        participants: leader(e.id) ? state.roster.map((id) => ({
+          user_id: id, name: name(id), response: state.answers.get(`${e.id}:${id}`) ?? null, updated_at: null,
+        })) : null,
+      });
       return respond({
         server_now: new Date(state.now).toISOString(), manageable_units: isAdmin ? [{ id: unit, name: "Scheuren" }] : [],
-        events: state.events.filter((e) => isAdmin || e.unit_id === unit).map((e) => ({
-          ...e, series_id: null, response_deadline: null, scope_name: e.unit_id === unit ? "Scheuren" : "Andere Einheit",
-          can_manage: isAdmin, can_lead: leader(e.id), can_delegate: isAdmin, can_read_attendance: leader(e.id),
-          attendance_state: attendance(e.id).state, own_attendance: final(e.id) ? attendance(e.id).rows.get(actor)?.status ?? null : null,
-          in_roster: e.unit_id === unit,
-          own_response: state.answers.get(`${e.id}:${actor}`) ?? null,
-          participants: leader(e.id) ? state.roster.map((id) => ({
-            user_id: id, name: name(id),
-            response: state.answers.get(`${e.id}:${id}`) ?? null, updated_at: null,
-          })) : null,
-        })),
+        events: selected.map(serialize), retained_events: retained.map(serialize), has_more: sorted.length > limit,
+        next_cursor: query.list_view === "month" && sorted.length > limit ? { id: selected.at(-1)!.id, starts_at: selected.at(-1)!.starts_at } : null,
       });
     }
     if (path === "/rest/v1/rpc/ff_attendance_workspace") {
@@ -175,7 +189,7 @@ async function connect(context: BrowserContext, state: Store, actor: string) {
         if (a.prepared_at || final(id)) return respond(null);
         for (const user of state.roster) if (!a.rows.has(user)) {
           const response = state.answers.get(`${id}:${user}`) ?? null;
-          a.rows.set(user, { status: response === "yes" ? "present" : response === "no" ? "absent" : "unknown",
+          a.rows.set(user, { status: response === "yes" ? "present" : "absent",
             origin: "prefill", response, recorded_at: stamp });
         }
         a.state = "IN_PROGRESS"; a.prepared_at = stamp; a.initialized_at ??= stamp; a.initialized_by ??= name(actor);
@@ -273,6 +287,11 @@ test("attendance prefill, filters, explicit completion, own final data and reaso
   await expect(panel.getByText("In Bearbeitung", { exact: true })).toBeVisible();
   await expect(panel.getByRole("listitem", { name: "Synthetic Admin" })).toContainText("Anwesend · Vorläufig");
   await expect(panel.getByRole("listitem", { name: "Synthetic Member" })).toContainText("Abwesend · Vorläufig");
+  await expect(panel.getByRole("button", { name: "Liste abschließen" })).toBeEnabled();
+  await expect(panel.getByRole("listitem", { name: "Synthetic Person 3" })).toContainText("Abwesend · Vorläufig");
+  await expect(panel.getByRole("listitem", { name: "Synthetic Person 4" })).toContainText("Abwesend · Vorläufig");
+  await panel.getByRole("listitem", { name: "Synthetic Person 3" }).getByRole("button", { name: "Nicht festgestellt", exact: true }).click();
+  await panel.getByRole("listitem", { name: "Synthetic Person 4" }).getByRole("button", { name: "Nicht festgestellt", exact: true }).click();
   await expect(panel.getByRole("button", { name: "Liste abschließen" })).toBeDisabled();
   await panel.getByRole("combobox", { name: "Anwesenheitsfilter", exact: true }).selectOption("unknown");
   await expect(panel.getByRole("listitem")).toHaveCount(2);
@@ -319,6 +338,15 @@ test("attendance prefill, filters, explicit completion, own final data and reaso
         animation.playState === "running" && Number.isFinite(animation.effect?.getComputedTiming().endTime)).length)).toBe(0);
       expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      const present = panel.getByRole("listitem", { name: "Synthetic Admin" }).getByRole("button", { name: "Anwesend", exact: true });
+      const absent = panel.getByRole("listitem", { name: "Synthetic Person 3" }).getByRole("button", { name: "Abwesend", exact: true });
+      await expect(present.locator("svg.lucide-check")).toHaveCount(1);
+      await expect(absent.locator("svg.lucide-x")).toHaveCount(1);
+      await expect(panel.getByRole("button", { name: "Nicht festgestellt", exact: true }).first().locator("svg")).toHaveCount(0);
+      const green = (await present.evaluate((element) => getComputedStyle(element).backgroundColor)).match(/\d+(?:\.\d+)?/g)!.map(Number);
+      const red = (await absent.evaluate((element) => getComputedStyle(element).backgroundColor)).match(/\d+(?:\.\d+)?/g)!.map(Number);
+      expect(green[1]).toBeGreaterThan(green[0]); expect(green[1]).toBeGreaterThan(green[2]);
+      expect(red[0]).toBeGreaterThan(red[1]); expect(red[0]).toBeGreaterThan(red[2]);
       await panel.scrollIntoViewIfNeeded();
       await page.screenshot({ path: `test-results/dev033-attendance-${width}-${theme}.png` });
     }
@@ -379,6 +407,102 @@ test("a forged browser wall clock unlocks neither attendance UI nor synthetic se
   })).status, { api, id: eventId });
   expect(status).toBe(403);
   expect(state.attendanceAudit).toHaveLength(0);
+});
+
+test("background access checks, real SDK token renewal and page refetch retain dialog, draft, filter and DOM identity", async ({ context, page }) => {
+  const state = store(); state.events = [attendanceEvent(state)]; state.tokenLifetime = 120;
+  await page.clock.install();
+  await connect(context, state, admin); await login(page, true);
+  let documents = 0;
+  page.on("request", (request) => { if (request.isNavigationRequest() && request.frame() === page.mainFrame()) documents++; });
+  await page.getByRole("button", { name: "Einzeltermin erstellen" }).click();
+  const title = page.getByLabel("Titel", { exact: true }); await title.fill("Unfertiger Entwurf bleibt erhalten");
+  const input = await title.elementHandle();
+  await page.getByRole("button", { name: "Anwesenheit öffnen" }).click();
+  const panel = page.getByRole("region", { name: "Tatsächliche Anwesenheit" });
+  await panel.getByLabel("Mitglied suchen", { exact: true }).fill("Member");
+  await panel.getByRole("combobox", { name: "Anwesenheitsfilter", exact: true }).selectOption("absent");
+  const element = await panel.elementHandle();
+  await panel.getByRole("button", { name: "Liste abschließen" }).click();
+  const dialog = page.getByRole("dialog", { name: "Anwesenheitsliste verbindlich abschließen" });
+  const dialogElement = await dialog.elementHandle();
+  const scrollBefore = await page.evaluate(() => scrollY);
+  const previous = state.accessChecks;
+  await page.clock.fastForward(125_000);
+  await expect.poll(() => state.authGrants.includes("refresh_token")).toBe(true);
+  await expect.poll(() => state.accessChecks).toBeGreaterThan(previous);
+  await expect(dialog).toBeVisible();
+  expect(await dialogElement!.evaluate((node) => node.isConnected)).toBe(true);
+  expect(await input!.evaluate((node) => node.isConnected)).toBe(true);
+  expect(await element!.evaluate((node) => node.isConnected)).toBe(true);
+  expect(Math.abs(await page.evaluate(() => scrollY) - scrollBefore)).toBeLessThan(2);
+  await expect(title).toHaveValue("Unfertiger Entwurf bleibt erhalten");
+  await dialog.getByRole("button", { name: "Weiter prüfen" }).click();
+  await expect(panel.getByLabel("Mitglied suchen", { exact: true })).toHaveValue("Member");
+  await expect(panel.getByRole("combobox", { name: "Anwesenheitsfilter", exact: true })).toHaveValue("absent");
+  // Displace the open event from the next bounded page without closing its panel.
+  for (let i=2;i<=6;i++) state.events.push({ ...attendanceEvent(state,-i*1000),
+    id: `30000000-0000-4000-8000-${String(i).padStart(12,"0")}`, title: `Synthetic displaced ${i}` });
+  await page.clock.fastForward(31_000);
+  await expect(page.getByText(/Geöffneter Termin außerhalb/)).toBeVisible();
+  expect(await element!.evaluate((node) => node.isConnected)).toBe(true);
+  await expect(title).toHaveValue("Unfertiger Entwurf bleibt erhalten");
+  expect(documents).toBe(0);
+  state.invalidSession = true;
+  await page.getByRole("button", { name: "Aktualisieren", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "DEV-Zugriff nicht verfügbar" })).toBeVisible();
+  await expect(panel).toHaveCount(0);
+});
+
+test("bounded upcoming/history lists, Berlin month picker and keyset load-more persist through revalidation", async ({ context, page }) => {
+  const state = store(); state.now = Date.parse("2026-11-06T12:00:00Z");
+  const base = attendanceEvent(state, 86400000);
+  state.events = Array.from({ length: 55 }, (_, i) => ({ ...base,
+    id: `31000000-0000-4000-8000-${String(i+1).padStart(12,"0")}`, title: `November ${String(i+1).padStart(2,"0")}`,
+    starts_at: "2026-11-15T12:00:00Z", ends_at: "2026-11-15T14:00:00Z" }));
+  for (let i=1;i<=7;i++) state.events.push({ ...base,
+    id: `32000000-0000-4000-8000-${String(i).padStart(12,"0")}`, title: `Historie ${i}`,
+    starts_at: `2026-11-01T0${i}:00:00Z`, ends_at: `2026-11-01T0${i+1}:00:00Z` });
+  state.events.push({ ...base, title: "Laufender Dienst", starts_at: "2026-11-05T12:00:00Z", ends_at: "2026-11-07T12:00:00Z" },
+    { ...base, id: "33000000-0000-4000-8000-000000000001", title: "Januar 2027",
+      starts_at: "2026-12-31T23:00:00Z", ends_at: "2027-01-01T01:00:00Z" });
+  await page.clock.install(); await connect(context, state, member); await login(page, false);
+  const cards = page.locator(".dev-event h3");
+  await expect(cards).toHaveText(["Laufender Dienst","November 01","November 02","November 03","November 04"]);
+  await page.getByRole("combobox", { name: "Terminansicht", exact: true }).selectOption("past");
+  await expect(cards).toHaveText(["Historie 7","Historie 6","Historie 5","Historie 4","Historie 3"]);
+  await page.getByLabel("Monat und Jahr", { exact: true }).fill("2026-11");
+  await expect(cards).toHaveCount(50);
+  await expect(page.getByText("November 2026 · chronologisch", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "Weitere Termine laden" }).click();
+  await expect(cards).toHaveCount(63);
+  await expect(page.getByRole("button", { name: "Weitere Termine laden" })).toHaveCount(0);
+  const count = state.accessChecks;
+  await page.clock.fastForward(61_000);
+  await expect.poll(() => state.accessChecks).toBeGreaterThan(count);
+  await expect(cards).toHaveCount(63);
+  await expect(page.getByLabel("Monat und Jahr", { exact: true })).toHaveValue("2026-11");
+  await expect(page.getByRole("combobox", { name: "Terminansicht", exact: true })).toHaveValue("month");
+  expect(state.queries.some((query) => query.after_id)).toBe(true);
+  await page.getByLabel("Monat und Jahr", { exact: true }).fill("2027-01");
+  await expect(cards).toHaveText(["Januar 2027"]);
+  await page.getByRole("button", { name: "Standardansicht wiederherstellen" }).click();
+  await expect(cards).toHaveCount(5);
+  await expect(page.getByLabel("Monat und Jahr", { exact: true })).toHaveValue("");
+});
+
+test("unsupported native month picker validates partial text before rendering or requesting a month", async ({ context, page }) => {
+  const state = store(); await connect(context,state,member); await login(page,false);
+  const picker = page.getByLabel("Monat und Jahr", { exact: true });
+  await picker.evaluate((element) => { element.setAttribute("type","text"); });
+  const queries = state.queries.length;
+  await picker.fill("202");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("JJJJ-MM");
+  await expect(page.getByRole("heading", { name: "Sichtbare DEV-Termine" })).toBeVisible();
+  expect(state.queries).toHaveLength(queries);
+  await picker.fill("2027-01");
+  await expect(page.getByText("Januar 2027 · chronologisch", { exact: false })).toBeVisible();
+  await expect.poll(() => state.queries.some((query) => query.month_key === "2027-01")).toBe(true);
 });
 
 test("two independent sessions centrally create, respond, change, reload, edit and cancel one shared event", async ({ browser }) => {

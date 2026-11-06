@@ -15,6 +15,7 @@ import { dateLabel, localInput, timeLabel } from "@/domain/time";
 import { EVENT_TYPES } from "@/config/app";
 import { SupabaseAttendance } from "./supabase-attendance";
 import { attendanceLabels } from "@/domain/dev-attendance";
+import { defaultEventList, monthLabel, monthKeySchema, type EventListQuery } from "@/domain/dev-event-list";
 
 export type EventEditorState = { id?: string; revision: number; draft: DevEventDraft };
 const responses: [DevResponse, string][] = [["yes", "Ich komme"], ["no", "Ich kann nicht"], ["maybe", "Vielleicht"]];
@@ -31,7 +32,11 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
   const [busy, setBusy] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [serverTime, setServerTime] = useState(() => Date.parse(initial.server_now));
-  const [filter, setFilter] = useState("all");
+  const [query, setQuery] = useState<EventListQuery>(defaultEventList);
+  const [monthInput, setMonthInput] = useState("");
+  const previousQuery = useRef(query);
+  const retained = useRef<string[]>([]);
+  const pages = useRef(1);
   const anchor = useRef(0);
   const epoch = useRef({ value: 0 });
   const working = useRef(false);
@@ -41,44 +46,73 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
     const timer = window.setInterval(() => setElapsed(Math.max(0, performance.now() - anchor.current)), 1000);
     return () => { window.clearInterval(timer); lifetime.value++; };
   }, []);
-  const reload = useCallback(async () => {
+  const reload = useCallback(async (pageCount = pages.current) => {
     const version = ++epoch.current.value;
     let result: EventWorkspace;
-    try { result = await readEventWorkspace(client); }
+    try {
+      result = await readEventWorkspace(client, query, null, retained.current);
+      for (let page = 1; page < pageCount && result.next_cursor; page++) {
+        const next = await readEventWorkspace(client, query, result.next_cursor, retained.current);
+        result = { ...next, events: Array.from(new Map([...result.events, ...next.events].map((item) => [item.id, item])).values()) };
+      }
+    }
     catch (cause) {
       // A replaced or unmounted read must not clear a newer authorized snapshot.
       if (version !== epoch.current.value) return;
       throw cause;
     }
     if (version !== epoch.current.value) return;
+    return { result, version };
+  }, [client, query]);
+  const accept = useCallback((snapshot?: { result: EventWorkspace; version: number }) => {
+    if (!snapshot || snapshot.version !== epoch.current.value) return;
     anchor.current = performance.now();
-    setServerTime(Date.parse(result.server_now));
-    setElapsed(0);
-    setWorkspace(result);
-  }, [client]);
+    setServerTime(Date.parse(snapshot.result.server_now));
+    setElapsed(0); setError(""); setWorkspace(snapshot.result);
+  }, []);
   useEffect(() => {
-    if (editor) return;
+    if (previousQuery.current === query) return;
+    previousQuery.current = query;
+    let alive = true;
+    const lifetime = epoch.current;
+    void reload().then(accept).catch((cause: unknown) => {
+      if (alive) { setWorkspace(null); setError(eventErrorMessage(cause)); }
+    }).finally(() => { if (alive && !working.current) setBusy(false); });
+    return () => { alive = false; lifetime.value++; };
+  }, [reload, accept, query]);
+  const keepOpen = useCallback((id: string, open: boolean) => {
+    if (retained.current.includes(id) === open) return;
+    retained.current = open ? [...retained.current, id] : retained.current.filter((value) => value !== id);
+    epoch.current.value++;
+  }, []);
+  function changeQuery(next: EventListQuery) {
+    pages.current = 1; epoch.current.value++;
+    setMonthInput(next.view === "month" ? next.month : "");
+    setError(""); setBusy(true); setQuery(next);
+  }
+  useEffect(() => {
     const timer = window.setInterval(() => {
       if (document.hidden || working.current) return;
-      void reload().catch((cause: unknown) => {
+      void reload().then(accept).catch((cause: unknown) => {
         setWorkspace(null); setError(eventErrorMessage(cause));
       });
     }, 30_000);
     return () => window.clearInterval(timer);
-  }, [reload, editor]);
+  }, [reload, accept]);
   // Elapsed monotonic time from the server snapshot, never the device wall clock.
   const serverNow = serverTime + elapsed;
 
   async function run(operation: () => Promise<void>, success: string) {
     if (working.current) return;
     working.current = true;
+    epoch.current.value++;
     setBusy(true); setError(""); setMessage("");
     let committed = false;
     try {
       await operation();
       committed = true;
       setMessage(success);
-      await reload();
+      accept(await reload());
     } catch (cause) {
       if (committed) setWorkspace(null);
       setError(`${committed ? "Änderung gespeichert, erneutes Laden fehlgeschlagen: " : ""}${eventErrorMessage(cause)}`);
@@ -86,10 +120,16 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
   }
   async function refresh() {
     setBusy(true); setError("");
-    try { await reload(); }
+    try { accept(await reload()); }
     catch (cause) { setWorkspace(null); setError(eventErrorMessage(cause)); }
     finally { setBusy(false); }
   }
+  async function loadMore() {
+    if (busy || !workspace?.next_cursor) return;
+    pages.current++;
+    await refresh();
+  }
+  const listed = workspace ? [...workspace.events, ...workspace.retained_events.filter((item) => !workspace.events.some((row) => row.id === item.id))] : [];
   function edit(item?: DevEvent) {
     setMessage(""); setError("");
     setEditor(item ? {
@@ -108,7 +148,7 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
       <button className="button secondary" disabled={busy} onClick={() => void refresh()}><RefreshCw size={18} />Termine aktualisieren</button>
       {!!workspace?.manageable_units.length && !editor && <button className="button" disabled={busy} onClick={() => edit()}><CalendarPlus size={18} />Einzeltermin erstellen</button>}
     </div></div>
-    <p className="muted text-sm">Zentrale Supabase-Daten · Aktualisierung spätestens alle 30 Sekunden bei geöffneter Ansicht. Rückmeldungen sind Planung, keine tatsächliche Anwesenheit.</p>
+    <p className="muted text-sm">Zentrale Supabase-Daten · Hintergrundaktualisierung ohne Ansichtswechsel. Rückmeldungen sind Planung, keine tatsächliche Anwesenheit.</p>
     {message && <p className="notice" role="status">{message}</p>}
     {error && <p className="notice error" role="alert">{error}</p>}
     {busy && <p role="status">Supabase-Anfrage läuft …</p>}
@@ -117,15 +157,39 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
         await saveSingleEvent(client, eventPayload(editor.draft), editor.id ? { id: editor.id, revision: editor.revision } : undefined);
         setEditor(null);
       }, editor.id ? "Termin in Supabase geändert." : "Termin in Supabase erstellt.")} />}
-    {workspace && <><label className="dev-event-filter">Terminstatus<select value={filter} onChange={(event) => setFilter(event.target.value)}>
-      <option value="all">Alle sichtbaren Termine</option><option value="scheduled">Geplant</option><option value="cancelled">Abgesagt</option>
-    </select></label>
+    <div className="form-grid dev-list-filters">
+      <label>Terminansicht<select value={query.view} disabled={busy} onChange={(event) => changeQuery({ ...query,
+        view: event.target.value === "past" ? "past" : event.target.value === "month" ? "month" : "upcoming",
+        month: event.target.value === "month" ? query.month || localInput(initial.server_now).slice(0, 7) : "" })}>
+        <option value="upcoming">Aktuelle und zukünftige Termine</option><option value="past">Vergangene Termine</option><option value="month">Monatsansicht</option>
+      </select></label>
+      <label>Monat und Jahr<input type="month" min="2000-01" max="9998-12" placeholder="JJJJ-MM" disabled={busy} value={monthInput}
+        onChange={(event) => {
+          const value = event.target.value;
+          setMonthInput(value);
+          if (!value) changeQuery({ ...query, month: "", view: "upcoming" });
+          else if (monthKeySchema.safeParse(value).success) changeQuery({ ...query, month: value, view: "month" });
+          else setError("Bitte einen gültigen Monat im Format JJJJ-MM wählen (Jahr 2000–9998).");
+        }} /></label>
+      <label>Terminstatus<select value={query.status} disabled={busy} onChange={(event) => changeQuery({ ...query,
+        status: event.target.value === "scheduled" ? "scheduled" : event.target.value === "cancelled" ? "cancelled" : "all" })}>
+        <option value="all">Alle sichtbaren Termine</option><option value="scheduled">Geplant</option><option value="cancelled">Abgesagt</option>
+      </select></label>
+      <button className="button secondary" disabled={busy} onClick={() => changeQuery({ ...defaultEventList })}>Standardansicht wiederherstellen</button>
+    </div>
+    <p className="muted text-sm">{query.view === "month" ? `${monthLabel(query.month)} · chronologisch · 50 Termine pro Seite`
+      : query.view === "past" ? "Vergangene Termine · neueste zuerst · maximal fünf"
+      : "Aktuelle und zukünftige Termine · nächste zuerst · maximal fünf"} · Europe/Berlin · Einordnung nach geplantem Ende</p>
+    {workspace && <>
     {workspace.events.length === 0 && <p>Noch keine sichtbaren DEV-Termine. Es werden keine Demo-Daten übernommen.</p>}
-    {workspace.events.filter((item) => filter === "all" || item.status === filter).map((item) =>
-      <EventCard key={item.id} client={client} changed={reload} item={item} serverNow={serverNow} busy={busy} edit={() => edit(item)}
+    {listed.map((item) =>
+      <EventCard key={item.id} client={client} changed={async () => { accept(await reload()); }} keepOpen={keepOpen}
+        retained={!workspace.events.some((row) => row.id === item.id)} item={item} serverNow={serverNow} busy={busy} edit={() => edit(item)}
         reply={(answer) => run(() => setEventResponse(client, item.id, answer), "Rückmeldung in Supabase gespeichert.")}
         cancel={(reason) => run(() => cancelSingleEvent(client, item, reason), "Termin in Supabase abgesagt. Rückmeldungen und Historie bleiben erhalten.")}
         correct={(user, answer, reason) => run(() => correctEventResponse(client, item.id, user, answer, reason), "Rückmeldung mit Korrekturgrund protokolliert.")} />)}
+    {query.view === "month" && workspace.next_cursor && <button className="button secondary" disabled={busy} onClick={() => void loadMore()}>Weitere Termine laden</button>}
+    {query.view !== "month" && workspace.has_more && <p className="muted text-sm">Weitere Termine sind über die Monatsansicht zugänglich.</p>}
     </>}
   </section>;
 }
@@ -159,11 +223,12 @@ function EventForm({ editor, units, busy, change, close, submit }: {
   </section>;
 }
 
-function EventCard({ client, changed, item, serverNow, busy, edit, reply, cancel, correct }: {
+function EventCard({ client, changed, item, serverNow, busy, edit, reply, cancel, correct, keepOpen, retained }: {
   client: SupabaseClient; changed: () => Promise<void>;
   item: DevEvent; serverNow: number; busy: boolean; edit: () => void;
   reply: (response: DevResponse) => Promise<void>; cancel: (reason: string) => Promise<void>;
   correct: (user: string, answer: DevResponse, reason: string) => Promise<void>;
+  keepOpen: (id: string, open: boolean) => void; retained: boolean;
 }) {
   const [cancelling, setCancelling] = useState(false);
   const [reason, setReason] = useState("");
@@ -171,10 +236,14 @@ function EventCard({ client, changed, item, serverNow, busy, edit, reply, cancel
   const [answer, setAnswer] = useState<DevResponse>("yes");
   const [correction, setCorrection] = useState("");
   const [attendanceMode, setAttendanceMode] = useState<"attendance" | "organizer" | null>(null);
+  const [participantsOpen, setParticipantsOpen] = useState(false);
+  const open = cancelling || participantsOpen || attendanceMode !== null;
+  useEffect(() => { keepOpen(item.id, open); return () => keepOpen(item.id, false); }, [keepOpen, item.id, open]);
   const planned = item.status === "scheduled";
   const unlocked = serverNow < Date.parse(item.starts_at) && (!item.response_deadline || serverNow < Date.parse(item.response_deadline));
   const counts = item.participants ? responseCounts(item.participants) : null;
   return <article className="dev-event" aria-labelledby={`event-${item.id}`}>
+    {retained && <p className="notice">Geöffneter Termin außerhalb der aktuellen Ergebnisliste · Berechtigung weiterhin live geprüft</p>}
     <div className="event-card-top"><h3 id={`event-${item.id}`}>{item.title}</h3><span className={`badge ${planned ? "" : "muted"}`}>{planned ? "Geplant" : "Abgesagt"}</span></div>
     <p>{dateLabel(item.starts_at, { year: "numeric" })} · {timeLabel(item.starts_at)} – {dateLabel(item.ends_at)} {timeLabel(item.ends_at)} · {item.location}</p>
     <p className="muted text-sm">{item.scope_name} · {EVENT_TYPES[item.event_type]}{item.series_id && " · Serieninstanz (keine Serienbearbeitung)"}</p>
@@ -197,7 +266,7 @@ function EventCard({ client, changed, item, serverNow, busy, edit, reply, cancel
       {attendanceMode && <SupabaseAttendance key={`${item.id}-${attendanceMode}`} client={client} eventId={item.id} mode={attendanceMode}
         close={() => setAttendanceMode(null)} changed={changed} />}
     </>}
-    {counts && <details className="dev-participants">
+    {counts && <details className="dev-participants" open={participantsOpen} onToggle={(event) => setParticipantsOpen(event.currentTarget.open)}>
       <summary>Teilnehmerübersicht · {counts.yes} Zusagen · {counts.no} Absagen · {counts.maybe} Vielleicht · {counts.unanswered} ohne Rückmeldung</summary>
       <ul>{item.participants?.map((person) => <li key={person.user_id}><span>{person.name}</span><strong>{person.response ? responseNames[person.response] : "Ohne Rückmeldung"}</strong></li>)}</ul>
       {item.can_lead && planned && <form className="form-grid soft-panel" onSubmit={(event: FormEvent) => {

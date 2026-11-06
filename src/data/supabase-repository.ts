@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { devResponseSchema, devEventTypeSchema, devEventPayloadSchema, type DevEventPayload, type DevResponse } from "@/domain/dev-events";
 import { memberRoleSchema, membersWorkspaceSchema, memberRoleInputSchema, memberReasonSchema } from "@/domain/dev-members";
 import { attendanceWorkspaceSchema, attendanceStateSchema, attendanceStatusSchema, type AttendanceStatus } from "@/domain/dev-attendance";
+import { eventCursorSchema, eventListParameters, type EventListQuery, type EventCursor } from "@/domain/dev-event-list";
 
 const roleSchema = memberRoleSchema;
 export const accessSchema = z.object({
@@ -39,6 +40,9 @@ export const eventWorkspaceSchema = z.object({
   server_now: z.iso.datetime({ offset: true }),
   manageable_units: z.array(z.object({ id: z.uuid(), name: z.string() })),
   events: z.array(devEventSchema),
+  retained_events: z.array(devEventSchema),
+  has_more: z.boolean(),
+  next_cursor: eventCursorSchema.nullable(),
 });
 export type EventWorkspace = z.infer<typeof eventWorkspaceSchema>;
 const documentSchema = z.object({
@@ -91,8 +95,8 @@ export async function readDevData(client: SupabaseClient, access: Access): Promi
   };
 }
 
-export async function readEventWorkspace(client: SupabaseClient): Promise<EventWorkspace> {
-  return eventWorkspaceSchema.parse(checked(await client.rpc("ff_events_workspace")));
+export async function readEventWorkspace(client: SupabaseClient, query?: EventListQuery, cursor: EventCursor | null = null, retained: string[] = []): Promise<EventWorkspace> {
+  return eventWorkspaceSchema.parse(checked(await client.rpc("ff_events_page", eventListParameters(query, cursor, retained))));
 }
 export async function readAttendanceWorkspace(client: SupabaseClient, eventId: string) {
   return attendanceWorkspaceSchema.parse(checked(await client.rpc("ff_attendance_workspace", { target_event: z.uuid().parse(eventId) })));

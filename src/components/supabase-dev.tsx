@@ -182,7 +182,7 @@ function DevWorkspace({ client, access, data, pathname, refresh, eventEditor, se
   const ownAttendance = data.attendance.filter((item) => item.report_year === year);
   return <>
     <PageHeading eyebrow="GESCHÜTZTER DEV-BEREICH" title={pathname === "/administration" ? "Administration" : `Hallo ${access.display_name}`} description={`${access.unit_name} · ${access.roles.map((role) => DEV_ROLE_LABELS[role]).join(", ")} · live durch Supabase geprüft`} action={<button className="button secondary" onClick={refresh}><RefreshCw size={18} />Aktualisieren</button>} />
-    <p className="notice">DEV 0.3.1: Einzeltermine, Teilnahmeantworten und Mitgliederverwaltung liegen zentral in Supabase. Serienverwaltung, Anwesenheits- und Dokumentbearbeitung folgen separat. Keine Übernahme lokaler Demo-Daten.</p>
+    <p className="notice">DEV 0.3.4: Termine, Teilnahme, Anwesenheit und Mitgliederverwaltung liegen zentral in Supabase. Hintergrundprüfungen erhalten die Arbeitsansicht. Keine Übernahme lokaler Demo-Daten.</p>
     {pathname === "/administration" ? managesMembers
       ? <>{globalAdmin && <section className="card section-card"><h2>Wartende Testregistrierungen</h2>{data.registrations.length === 0 && <p>Keine wartenden Registrierungen.</p>}{data.registrations.map((person) => <ApprovalRow key={person.user_id} client={client} person={person} units={data.units} refresh={refresh} />)}</section>}
         <SupabaseMembers client={client} actorId={access.user_id} refreshAccess={refresh} /></>
