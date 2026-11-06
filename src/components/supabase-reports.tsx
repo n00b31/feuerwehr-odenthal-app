@@ -93,7 +93,7 @@ export function SupabaseReports({ client, access, personalOnly = false }: {
       const link = document.createElement("a");
       link.href = url; link.download = `feuerwehr-dienstbuch-${current.scope}-${current.year}-${kind}.csv`; link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (reason) { setError(reportError(reason)); }
+    } catch (reason) { setLoaded(null); setError(reportError(reason)); }
     finally { setExporting(false); }
   }
 
@@ -162,7 +162,7 @@ export function SupabaseReports({ client, access, personalOnly = false }: {
         <p className="muted text-sm">UTF-8-CSV mit Excel-Trennzeichen, deutschen Zahlen und Zeiten in Europe/Berlin. Der Export lädt alle berechtigten Dienste des gewählten Jahres/Filters erneut serverseitig, nicht nur diese Seite.</p>
         {report.units.length>0 && <section className="card section-card"><h3>Einheiten im Vergleich</h3><div className="table-scroll"><table>
           <caption className="sr-only">Einheitsvergleich {report.year}</caption><thead><tr><th>Einheit</th><th>Mitglieder</th><th>Ausbildungen</th><th>Quote</th><th>Teilnehmerstunden</th></tr></thead>
-          <tbody>{report.units.map((unit) => <tr key={unit.id}><th>{unit.name}</th><td>{unit.members}</td><td>{unit.metrics.training_services}</td>
+          <tbody>{report.units.map((unit) => <tr key={unit.id}><th scope="row">{unit.name}</th><td>{unit.members}</td><td>{unit.metrics.training_services}</td>
             <td>{reportRate(unit.metrics.rate)}{unit.metrics.rate !== null && <div className="bar-track" aria-hidden="true"><i style={{ width: `${unit.metrics.rate}%` }} /></div>}</td>
             <td>{reportNumber(unit.metrics.participant_hours)} h</td></tr>)}</tbody></table></div></section>}
         {["unit","function"].includes(filters.scope) && <section className="card section-card"><h3>Mitgliederübersicht</h3>
@@ -172,7 +172,7 @@ export function SupabaseReports({ client, access, personalOnly = false }: {
             </select></label></div>
           <div className="table-scroll"><table><caption className="sr-only">Berechtigte Mitglieder im Bericht {report.year}</caption>
             <thead><tr><th>Name</th><th>Relevante Dienste</th><th>Teilnahmen</th><th>Fehlzeiten</th><th>Quote</th><th>Ausbildungsstunden</th></tr></thead>
-            <tbody>{members.map((member) => <tr key={member.user_id}><th>{member.name}</th><td>{member.metrics.training_services}</td>
+            <tbody>{members.map((member) => <tr key={member.user_id}><th scope="row">{member.name}</th><td>{member.metrics.training_services}</td>
               <td>{member.metrics.training_present}</td><td>{member.metrics.training_absent}</td><td>{reportRate(member.metrics.rate)}</td><td>{reportNumber(member.metrics.training_hours)} h</td></tr>)}</tbody>
           </table></div>{members.length===0 && <p>Keine passenden Mitglieder im gewählten Zeitraum.</p>}
         </section>}
@@ -182,7 +182,7 @@ export function SupabaseReports({ client, access, personalOnly = false }: {
             Es wird keine Anwesenheitsquote erfunden. Ein anderes Berichtsjahr oder einen anderen Filter auswählen.
           </Empty> : <div className="table-scroll"><table><caption className="sr-only">Bestätigte Dienste, neueste zuerst</caption>
             <thead><tr><th>Datum / Dienst</th><th>Einheit / Bereich</th><th>Dauer</th><th>{filters.scope === "personal" ? "Eigener Status" : "Anwesend / Abwesend"}</th><th>Details</th></tr></thead>
-            <tbody>{report.events.map((event) => <tr key={event.event_id}><th>{dateLabel(event.starts_at, { year: "numeric" })}<small>{event.title} · {EVENT_TYPES[event.event_type]}</small></th>
+            <tbody>{report.events.map((event) => <tr key={event.event_id}><th scope="row">{dateLabel(event.starts_at, { year: "numeric" })}<small>{event.title} · {EVENT_TYPES[event.event_type]}</small></th>
               <td>{event.unit_name}</td><td>{event.hours === null ? "Ungültige Zeit" : `${reportNumber(event.hours)} h`}</td>
               <td>{filters.scope === "personal" ? <AttendanceLabel event={event} /> : `${event.metrics.present} / ${event.metrics.absent}`}</td>
               <td><button className="button secondary" aria-label={`Dienst öffnen: ${event.title}`} onClick={() => setSelectedId(event.event_id)}>Öffnen</button></td></tr>)}</tbody>
@@ -224,7 +224,7 @@ function ReportCards({ report }: { report: YearReport }) {
     <Metric label={personal ? "Relevante abgeschlossene Dienste" : "Ausbildungsrelevante Dienste"} value={s.training_services} note="Nur bestätigte Ausbildungslisten" icon={<CalendarDays size={20} />} />
     {personal && <Metric label="Besuchte Ausbildungsdienste" value={s.training_present} note="Tatsächlich bestätigt anwesend" icon={<Check size={20} />} />}
     {personal && <Metric label="Nicht besuchte Ausbildungsdienste" value={s.training_absent} note="Bestätigt abwesend, nicht unbekannt" icon={<X size={20} />} />}
-    {!personal && <Metric label="Ø Anwesende je Dienst" value={s.services ? reportNumber(s.present/s.services) : "—"} note={`${s.services} abgeschlossene Dienste aller Arten`} icon={<Users size={20} />} />}
+    {!personal && <Metric label="Ø Anwesende je Dienst" value={s.average_attendance === null ? "—" : reportNumber(s.average_attendance)} note={`${s.services} abgeschlossene Dienste aller Arten`} icon={<Users size={20} />} />}
     <Metric label="Ausbildungsquote" value={s.rate === null ? "—" : reportRate(s.rate)} note={s.rate === null ? "Keine verlässliche Quote / keine Daten" : `${s.training_present} von ${s.eligible} relevanten Personen-Diensten`} icon={<Percent size={20} />} />
     <Metric label="Ausbildungsstunden" value={`${reportNumber(personal ? s.training_hours : s.service_hours)} h`} note={personal ? "Eigene bestätigte Ausbildungszeit" : "Summe der angebotenen Dienstdauern"} icon={<Clock3 size={20} />} />
     <Metric label={personal ? "Dokumentierte Dienststunden" : "Gesamte Teilnehmerstunden"} value={`${reportNumber(s.participant_hours)} h`} note="Alle bestätigten Dienstarten, nur Anwesende" icon={<BookOpen size={20} />} />

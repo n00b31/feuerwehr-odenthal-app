@@ -64,9 +64,13 @@ begin
       from public.events e where ff_private.is_overseer()
         or ff_private.manages_scope(e.scope_kind,e.unit_id,e.function_id)
         or exists(select 1 from public.event_roster r where r.event_id=e.id and r.user_id=auth.uid())
-        or (e.scope_kind='unit' and exists(select 1 from public.unit_memberships m
-          where m.user_id=auth.uid() and m.unit_id=e.unit_id and m.valid_from<=e.starts_at
-          and (m.valid_until is null or m.valid_until>e.starts_at)))
+        or exists(select 1 from public.unit_memberships m
+          where m.user_id=auth.uid() and m.valid_from<=e.starts_at
+          and (m.valid_until is null or m.valid_until>e.starts_at)
+          and (e.scope_kind='organization' or (e.scope_kind='unit' and m.unit_id=e.unit_id)
+            or (e.scope_kind='function' and exists(select 1 from public.function_memberships f
+              where f.user_id=m.user_id and f.function_id=e.function_id and f.valid_from<=e.starts_at
+                and (f.valid_until is null or f.valid_until>e.starts_at)))))
     ) years),
     'personal_units',coalesce((select jsonb_agg(jsonb_build_object('id',u.id,'name',u.name) order by u.name)
       from public.units u where exists(select 1 from public.unit_memberships m where m.user_id=auth.uid() and m.unit_id=u.id)
@@ -135,7 +139,7 @@ create function ff_private.empty_report_metrics()
 returns jsonb language sql immutable set search_path='' as $$
   select '{"services":0,"practices":0,"training_services":0,"eligible":0,"present":0,"absent":0,
     "training_present":0,"training_absent":0,"unknown":0,"training_hours":0,"service_hours":0,
-    "participant_hours":0,"rate":null,"pending":0,"excluded":0,"missing_roster":0}'::jsonb;
+    "participant_hours":0,"rate":null,"average_attendance":null,"pending":0,"excluded":0,"missing_roster":0}'::jsonb;
 $$;
 
 create function public.ff_year_report(wanted_year int,report_scope text default 'personal',
@@ -178,6 +182,9 @@ begin
       'training_hours',coalesce(sum(present*hours) filter(where final and training),0),
       'service_hours',coalesce(sum(hours) filter(where final and training and eligible>0),0),
       'participant_hours',coalesce(sum(present*hours) filter(where final),0),
+      'average_attendance',case when count(*) filter(where final and eligible>0)=0
+        or coalesce(sum(unknown+excluded) filter(where final),0)>0 then null
+        else 1.0*sum(present) filter(where final)/count(*) filter(where final and eligible>0) end,
       'rate',case when coalesce(sum(eligible) filter(where final and training),0)=0
         or coalesce(sum(unknown) filter(where final and training),0)>0
         or coalesce(sum(excluded) filter(where final),0)>0 then null

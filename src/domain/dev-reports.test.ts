@@ -10,6 +10,7 @@ const metrics = {
   services: 1, practices: 1, training_services: 1, eligible: 1,
   present: 1, absent: 0, training_present: 1, training_absent: 0, unknown: 0,
   training_hours: 2, service_hours: 2, participant_hours: 2, rate: 100,
+  average_attendance: 1,
   pending: 0, excluded: 0, missing_roster: 0,
 };
 const fixture: YearReport = {

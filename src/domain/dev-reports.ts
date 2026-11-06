@@ -19,6 +19,7 @@ export const reportMetricsSchema = z.object({
   present: count, absent: count, training_present: count, training_absent: count,
   unknown: count, training_hours: z.number().nonnegative(), service_hours: z.number().nonnegative(),
   participant_hours: z.number().nonnegative(), rate: z.number().min(0).max(100).nullable(),
+  average_attendance: z.number().nonnegative().nullable(),
   pending: count, excluded: count, missing_roster: count,
 });
 export type ReportMetrics = z.infer<typeof reportMetricsSchema>;
@@ -67,6 +68,7 @@ export function reportCsv(report: YearReport, kind: ReportExport) {
         ["Übungsdienste", s.practices], ["Ausbildungsrelevante Dienste", s.training_services],
         ["Relevante Personen-Dienste (Nenner)", s.eligible], ["Teilnahmen (Ausbildung)", s.training_present],
         ["Fehlzeiten (Ausbildung)", s.training_absent], ["Anwesenheitsquote", reportRate(s.rate)],
+        ["Durchschnittliche Anwesende je Dienst", s.average_attendance === null ? "Nicht berechenbar" : reportNumber(s.average_attendance)],
         ["Ausbildungsstunden des Dienstangebots", reportNumber(s.service_hours)],
         ["Ausbildungs-Teilnehmerstunden", reportNumber(s.training_hours)],
         ["Dokumentierte Teilnehmerstunden (alle Arten)", reportNumber(s.participant_hours)],
@@ -92,11 +94,12 @@ export function reportCsv(report: YearReport, kind: ReportExport) {
   const rows = kind === "units"
     ? report.units.map((unit) => ({ name: unit.name, metrics: unit.metrics, members: unit.members }))
     : report.members.map((member) => ({ ...member, members: "" }));
-  return csv([[...headers, kind === "units" ? "Einheit" : "Name", "Mitglieder", "Relevante Dienste",
+  return csv([[...headers, kind === "units" ? "Einheit" : "Name", "Mitglieder", "Übungsdienste", "Relevante Dienste",
     "Teilnahmen (Ausbildung)", "Fehlzeiten (Ausbildung)", "Anwesenheitsquote",
-    "Ausbildungsstunden", "Dokumentierte Teilnehmerstunden"],
-  ...rows.map((row) => [...prefix, row.name, row.members, row.metrics.training_services,
+    "Durchschnittliche Anwesende je Dienst", "Ausbildungsstunden", "Dokumentierte Teilnehmerstunden"],
+  ...rows.map((row) => [...prefix, row.name, row.members, row.metrics.practices, row.metrics.training_services,
     row.metrics.training_present, row.metrics.training_absent, reportRate(row.metrics.rate),
+    row.metrics.average_attendance === null ? "Nicht berechenbar" : reportNumber(row.metrics.average_attendance),
     reportNumber(kind === "units" ? row.metrics.service_hours : row.metrics.training_hours),
     reportNumber(row.metrics.participant_hours)])]);
 }

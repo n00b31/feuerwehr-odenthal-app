@@ -91,9 +91,12 @@ select pg_temp.report_ok((current_setting('report.personal')::jsonb#>>'{summary,
   'all documented service hours include community separately');
 select pg_temp.report_ok((current_setting('report.personal')::jsonb#>>'{summary,rate}')::numeric=80,
   'rate uses five eligible completed services, no current-unit reassignment');
+select pg_temp.report_ok(abs((current_setting('report.personal')::jsonb#>>'{summary,average_attendance}')::numeric-5.0/6)<0.00000001,
+  'average attendance is centrally calculated per distinct completed service');
 select pg_temp.report_ok(jsonb_array_length(current_setting('report.personal')::jsonb->'events')=6
   and current_setting('report.personal')::jsonb#>>'{events,0,title}'='Synthetic report service 8','own final history descending');
 select pg_temp.report_ok(public.ff_year_report(2024)#>'{summary,rate}'='null'::jsonb
+  and public.ff_year_report(2024)#>'{summary,average_attendance}'='null'::jsonb
   and public.ff_year_report(2024)#>>'{summary,training_hours}'='0','empty year has no fabricated rate');
 select pg_temp.report_ok(jsonb_array_length(public.ff_year_report(2025,'personal',current_setting('report.other')::uuid)->'events')=0,
   'transfer to current unit does not move historical services');

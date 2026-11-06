@@ -7,7 +7,7 @@
 .dev-guest-shell { width: 100%; }
 .dev-shell .bottom-nav > a.active { color: var(--cp-text); }
 .dev-shell .bottom-nav > a { overflow-wrap: anywhere; }
-.dutybook { display: grid; gap: var(--cp-space-5); min-width: 0; }
+.dutybook { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--cp-space-5); min-width: 0; }
 .dutybook .section-heading { flex-wrap: wrap; gap: var(--cp-space-3); }
 .dutybook .filters > label { flex: 1 1 180px; min-width: 0; }
 .dutybook .metrics { margin: 0; }
