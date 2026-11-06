@@ -17,6 +17,8 @@ import { dateLabel } from "@/domain/time";
 import { SupabaseEvents, type EventEditorState } from "./supabase-events";
 import { SupabaseMembers } from "./supabase-members";
 import { SidebarNavigation, BottomNavigation } from "./navigation";
+import { PwaStatus } from "./pwa-status";
+import { currentRelease } from "@/config/release";
 
 export function SupabaseDev() {
   const [client, setClient] = useState<SupabaseClient | null>(null);
@@ -82,6 +84,7 @@ export function SupabaseDev() {
     </header>
     <div className="demo-strip" role="region" aria-label="DEV-Testbetrieb"><span className="demo-tag">DEV</span><span>Supabase-Testbetrieb · nur autorisierte Testkonten · kein Demo-Profilwechsel</span></div>
     <main id="main" className="content" tabIndex={-1}>
+      <PwaStatus />
       {(themeError || operationError) && <p className="notice error" role="alert">{themeError || operationError}</p>}
       {setupError ? <section className="card section-card"><h1>Supabase DEV noch nicht eingerichtet</h1><p>{setupError}</p><p>Kein Zugriff auf Feuerwehrinhalte. Es wird nicht auf lokale Demo-Identitäten zurückgefallen.</p></section>
         : screen.phase === "loading" ? <p role="status">Sitzung und serverseitige Freigabe werden geprüft …</p>
@@ -182,7 +185,7 @@ function DevWorkspace({ client, access, data, pathname, refresh, eventEditor, se
   const ownAttendance = data.attendance.filter((item) => item.report_year === year);
   return <>
     <PageHeading eyebrow="GESCHÜTZTER DEV-BEREICH" title={pathname === "/administration" ? "Administration" : `Hallo ${access.display_name}`} description={`${access.unit_name} · ${access.roles.map((role) => DEV_ROLE_LABELS[role]).join(", ")} · live durch Supabase geprüft`} action={<button className="button secondary" onClick={refresh}><RefreshCw size={18} />Aktualisieren</button>} />
-    <p className="notice">DEV 0.3.4: Termine, Teilnahme, Anwesenheit und Mitgliederverwaltung liegen zentral in Supabase. Hintergrundprüfungen erhalten die Arbeitsansicht. Keine Übernahme lokaler Demo-Daten.</p>
+    <p className="notice">{currentRelease?.version ?? "DEV"}: Termine, Teilnahme, Anwesenheit und Mitgliederverwaltung liegen zentral in Supabase. Hintergrundprüfungen erhalten die Arbeitsansicht. Keine Übernahme lokaler Demo-Daten.</p>
     {pathname === "/administration" ? managesMembers
       ? <>{globalAdmin && <section className="card section-card"><h2>Wartende Testregistrierungen</h2>{data.registrations.length === 0 && <p>Keine wartenden Registrierungen.</p>}{data.registrations.map((person) => <ApprovalRow key={person.user_id} client={client} person={person} units={data.units} refresh={refresh} />)}</section>}
         <SupabaseMembers client={client} actorId={access.user_id} refreshAccess={refresh} /></>

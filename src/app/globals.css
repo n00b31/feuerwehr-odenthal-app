@@ -35,6 +35,9 @@
 .attendance-choice.absent svg, .attendance-status.absent svg { color: var(--cp-danger); }
 .dev-list-filters { margin-block: var(--cp-space-4); align-items: end; }
 .attendance-choice { min-height: 44px; }
+.release-status { color: var(--cp-text-muted); overflow-wrap: anywhere; }
+.release-update { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--cp-space-3); }
+.release-update p { margin: 0; }
 @media (max-width: 640px) {
   .dev-attendance .form-grid { grid-template-columns: minmax(0, 1fr); }
   .dev-attendance .span-2 { grid-column: 1; }

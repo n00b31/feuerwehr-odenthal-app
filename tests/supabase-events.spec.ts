@@ -2,6 +2,8 @@ import { test, expect, type BrowserContext, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { APP, publicPath } from "../src/config/app";
 import { localInput } from "../src/domain/time";
+import { readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 
 const api = "https://syntheticci.supabase.co";
 const unit = "20000000-0000-4000-8000-000000000001";
@@ -503,6 +505,92 @@ test("unsupported native month picker validates partial text before rendering or
   await picker.fill("2027-01");
   await expect(page.getByText("Januar 2027 · chronologisch", { exact: false })).toBeVisible();
   await expect.poll(() => state.queries.some((query) => query.month_key === "2027-01")).toBe(true);
+});
+
+test("available release preserves the live workspace and draft until an explicit confirmed update", async ({ context, page }) => {
+  const state = store();
+  const response = await page.request.get(publicPath("/release.json"));
+  const current = await response.json();
+  const next = { ...current, buildId: "next-release", version: "DEV 0.3.4.2" };
+  let available = false;
+  await context.route("**/release.json?*", (route) => route.fulfill({ json: available ? next : current }));
+  await connect(context, state, admin); await login(page, true);
+  await expect(page.getByLabel("Anwendungsversion")).toContainText(current.gitSha.slice(0, 12));
+  await page.getByRole("button", { name: "Einzeltermin erstellen" }).click();
+  const title = page.getByLabel("Titel", { exact: true });
+  await title.fill("Entwurf vor Versionswechsel");
+  const element = await title.elementHandle();
+  let documents = 0;
+  page.on("request", (request) => { if (request.isNavigationRequest() && request.frame() === page.mainFrame()) documents++; });
+  available = true;
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(page.getByText("Neue Version verfügbar", { exact: true })).toBeVisible();
+  await expect(title).toHaveValue("Entwurf vor Versionswechsel");
+  expect(await element!.evaluate((node) => node.isConnected)).toBe(true);
+  expect(documents).toBe(0);
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await page.getByRole("button", { name: "Jetzt aktualisieren", exact: true }).click();
+  await expect(title).toHaveValue("Entwurf vor Versionswechsel");
+  expect(documents).toBe(0);
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Jetzt aktualisieren", exact: true }).click();
+  await page.waitForURL((url) => url.searchParams.get("_ff_release") === next.buildId);
+  expect(documents).toBe(1);
+});
+
+test("invalid release metadata reports failure without granting access or discarding an authorized draft", async ({ context, page }) => {
+  const state = store();
+  await context.route("**/release.json?*", (route) => route.fulfill({ json: { format: 1, mode: "demo" } }));
+  await connect(context, state, admin); await login(page, true);
+  await expect(page.getByRole("alert").filter({ hasText: "Versionsprüfung fehlgeschlagen" })).toBeVisible();
+  await page.getByRole("button", { name: "Einzeltermin erstellen" }).click();
+  await page.getByLabel("Titel", { exact: true }).fill("Versionsfehler verwirft keinen Entwurf");
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(page.getByLabel("Titel", { exact: true })).toHaveValue("Versionsfehler verwirft keinen Entwurf");
+  await expect(page.getByText("Neue Version verfügbar", { exact: true })).toHaveCount(0);
+});
+
+test("real worker upgrade waits for confirmation, retains a draft and removes only obsolete DEV caches", async ({ context, page }) => {
+  const state = store();
+  const release = await (await page.request.get(publicPath("/release.json"))).json();
+  const workerPath = path.resolve("out", "sw.js");
+  const original = await readFile(workerPath, "utf8");
+  const nextId = `${release.buildId}-worker-test`;
+  const nextWorker = original.replace(release.buildId, nextId);
+  expect(nextWorker).not.toBe(original);
+  await connect(context, state, admin); await login(page, true);
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+    if (!navigator.serviceWorker.controller) await new Promise<void>((resolve) => navigator.serviceWorker.addEventListener("controllerchange", () => resolve(), { once: true }));
+    await caches.open("feuerwehr-offline:/feuerwehr-odenthal-app/:v4");
+    await caches.open("feuerwehr-offline:/feuerwehr-odenthal-demo/:v4");
+  });
+  await page.getByRole("button", { name: "Einzeltermin erstellen" }).click();
+  await page.getByLabel("Titel", { exact: true }).fill("Entwurf während echtem Worker-Update");
+  try {
+    await writeFile(workerPath, nextWorker);
+    await page.evaluate(async () => {
+      const registration = await navigator.serviceWorker.getRegistration();
+      if (!registration) throw new Error("Expected scoped worker registration");
+      await registration.update();
+    });
+    await expect.poll(() => page.evaluate(async () => !!(await navigator.serviceWorker.getRegistration())?.waiting)).toBe(true);
+    await expect(page.getByText("Neue Version verfügbar", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Titel", { exact: true })).toHaveValue("Entwurf während echtem Worker-Update");
+    expect(await page.evaluate(() => caches.keys())).toContain("feuerwehr-offline:/feuerwehr-odenthal-app/:v4");
+    page.once("dialog", (dialog) => dialog.dismiss());
+    await page.getByRole("button", { name: "Jetzt aktualisieren", exact: true }).click();
+    await expect(page.getByLabel("Titel", { exact: true })).toHaveValue("Entwurf während echtem Worker-Update");
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Jetzt aktualisieren", exact: true }).click();
+    await page.waitForURL((url) => url.searchParams.get("_ff_release") === release.buildId);
+    await expect.poll(() => page.evaluate(() => caches.keys())).toContain(`feuerwehr-offline:/feuerwehr-odenthal-app/:${nextId}`);
+    await expect.poll(() => page.evaluate(() => caches.keys())).not.toContain("feuerwehr-offline:/feuerwehr-odenthal-app/:v4");
+    const keys = await page.evaluate(() => caches.keys());
+    expect(keys).not.toContain("feuerwehr-offline:/feuerwehr-odenthal-app/:v4");
+    expect(keys).not.toContain(`feuerwehr-offline:/feuerwehr-odenthal-app/:${release.buildId}`);
+    expect(keys).toContain("feuerwehr-offline:/feuerwehr-odenthal-demo/:v4");
+  } finally { await writeFile(workerPath, original); }
 });
 
 test("two independent sessions centrally create, respond, change, reload, edit and cancel one shared event", async ({ browser }) => {

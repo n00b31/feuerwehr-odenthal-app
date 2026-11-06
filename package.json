@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
-    "test": "tsx --test src/domain/*.test.ts src/config/*.test.ts src/auth/*.test.ts && node --test scripts/seed-dev-users.test.mjs",
+    "test": "tsx --test src/domain/*.test.ts src/config/*.test.ts src/auth/*.test.ts && node --test scripts/seed-dev-users.test.mjs scripts/release.test.mjs scripts/service-worker.test.mjs",
     "check:supabase-config": "tsx scripts/check-supabase-config.ts",
     "test:e2e": "playwright test",
     "icons": "node scripts/generate-icons.mjs",
