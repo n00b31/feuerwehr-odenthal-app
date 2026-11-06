@@ -105,6 +105,7 @@ select pg_temp.ok((select count(*)=1 from public.audit_entries where action='att
 select pg_temp.denied($q$select public.ff_record_attendance('82000000-0000-4000-8000-000000000001','81000000-0000-4000-8000-000000000004','present')$q$);
 select pg_temp.denied($q$select public.ff_record_attendance('82000000-0000-4000-8000-000000000001','81000000-0000-4000-8000-000000000004','unknown','Synthetic reason')$q$);
 select public.ff_record_attendance('82000000-0000-4000-8000-000000000001','81000000-0000-4000-8000-000000000004','present','Synthetic observed late arrival');
+select public.ff_record_attendance('82000000-0000-4000-8000-000000000001','81000000-0000-4000-8000-000000000004','present','Synthetic idempotent repeated request');
 select pg_temp.ok((select attendance_state='CORRECTED' and attendance_corrected_at is not null from public.events where id='82000000-0000-4000-8000-000000000001'),'correction state and timestamp persist');
 select pg_temp.ok((select count(*)=1 from public.audit_entries where action='attendance_corrected' and actor_id=auth.uid()
   and subject_id='81000000-0000-4000-8000-000000000004' and event_id='82000000-0000-4000-8000-000000000001'
@@ -125,6 +126,8 @@ set local role authenticated;
 select pg_temp.ok((select count(*)=6 from public.confirmed_attendance),'chief reads all six finalized roster members');
 select pg_temp.ok(public.ff_attendance_workspace('82000000-0000-4000-8000-000000000001')->>'can_manage'='false','chief finalized workspace is read only');
 select pg_temp.ok(public.ff_attendance_workspace('82000000-0000-4000-8000-000000000001')#>'{primary_organizer,note}'='null'::jsonb,'internal note not exposed to chief');
+select pg_temp.ok((select count(*)=0 from public.event_delegations),'chief cannot recover internal note through direct delegation query');
+select pg_temp.ok((select count(*)=0 from public.audit_entries where action='event_delegation_changed'),'chief cannot recover internal note through audit');
 select pg_temp.denied($q$select public.ff_record_attendance('82000000-0000-4000-8000-000000000001',auth.uid(),'present','Synthetic chief attempt')$q$);
 reset role;
 

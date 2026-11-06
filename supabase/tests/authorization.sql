@@ -221,6 +221,7 @@ select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000002
 set local role authenticated;
 select public.ff_set_event_delegate('30000000-0000-0000-0000-000000000002', null);
 select public.ff_record_attendance('30000000-0000-0000-0000-000000000008', '10000000-0000-0000-0000-000000000003', 'present');
+select pg_temp.expect_denied($q$select public.ff_confirm_attendance('30000000-0000-0000-0000-000000000008')$q$);
 select public.ff_record_attendance('30000000-0000-0000-0000-000000000008',user_id,'absent')
 from public.event_roster where event_id='30000000-0000-0000-0000-000000000008' and user_id<>'10000000-0000-0000-0000-000000000003';
 select public.ff_confirm_attendance('30000000-0000-0000-0000-000000000008');

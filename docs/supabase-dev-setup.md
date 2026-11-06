@@ -1125,7 +1125,7 @@ Read-only-Preflight: bestehendes Projekt `orxinqhhbtjpkzwlfaxq`, Migrationen 001
 acht Auth-Konten, zwei Termine, zwei Antworten, keine Ist-Zeilen, Bestätigungen oder
 Delegationen und keine unvollständigen historischen Abschlüsse.
 
-Lokale Typprüfung, ESLint, 89 Unit-Tests und synthetischer Static Export bestanden.
+Lokale Typprüfung, ESLint, 89 Unit-Tests, alle 15 DEV-Browserfälle und synthetischer Static Export bestanden.
 Die drei neuen abgefangenen Browserabläufe bestanden: Vorbelegung/Filter/Abschluss/
 Korrektur/Reload/eigene bestätigte Werte, genaue Delegation/Widerruf und manipulierte
 Browserzeit. Light/Dark und 390/1366px einschließlich Axe werden geprüft.
@@ -1133,11 +1133,35 @@ Die PostgreSQL-Suite prüft echte RLS/RPCs mit synthetischen Auth-Fixtures aussc
 in `ff_dev_ci`; ein zusätzlicher Zwei-Verbindungs-Test beobachtet den blockierenden
 Zeilen-Lock tatsächlich. Diese Tests kontaktieren weder DEV-Auth noch Mailboxen.
 
-**Stand vor Anwendung:** Migration 010 noch nicht im gehosteten Projekt angewendet.
-Erst erfolgreicher PostgreSQL-CI-Lauf, dann vollständige einmalige Migration im zuvor
-validierten bestehenden DEV-Projekt. Anschließend Funktionskörper, Grants, Schema,
-Bestandszahlen und Prüfsummen unveränderter Altspalten kontrollieren und den tatsächlichen
-Anwendungsnachweis hier ergänzen. Keine Auth-Fixtures in Supabase DEV ausführen.
+**Tatsächlich angewendet am 06.11.2026:** Nach erfolgreichem
+[PostgreSQL-Lauf 42222749092](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42222749092)
+wurde die vollständige Migration einmalig im erneut per Projekt-URL validierten
+bestehenden DEV angewendet. Gehostete History:
+`20261106130856 / ff_010_attendance_workflow`.
+Normalisierte UTF-8/LF-Quelldatei einschließlich abschließender neuer Zeile:
+SHA-256 `115ea10d92deddae4f0621aed098a77e0b2b6a1621ae324e4cf67baa7043dc02`.
+Nicht erneut anwenden; die vom MCP vergebene History-Version unterscheidet sich vom
+lokalen Dateinamen wie bereits bei den vorherigen Migrationen.
+
+Unabhängige anschließende Read-only-Prüfung: alle neun Funktionskörper stimmen
+normalisiert mit dem CI-geprüften Quellstand überein; alle sind `SECURITY DEFINER`
+mit leerem `search_path`, freigegeben für `authenticated`, nicht für `anon`.
+Die drei angepassten RLS-Policies und beide neuen partiellen eindeutigen Indizes sind
+vorhanden; direkte Browser-DML bleibt auf allen Tabellen untersagt, RLS aktiviert.
+Bestand unverändert: acht Konten/acht Profile, zwei Termine/zwei Antworten, null
+Anwesenheiten/Abschlüsse/Delegationen. Beide Termine `NOT_STARTED`. Gemeinsame
+Prüfsumme von Profilen, Mitgliedschaften, Funktionen, Rollen, Roster, bisherigen
+Terminspalten, Antworten und Audit ist vor/nach der Migration identisch.
+Keine echten Benutzer geändert, keine Testzeilen oder Mails im gehosteten Projekt.
+
+[Pages-/Browser-Lauf 42222749134](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42222749134)
+auf Implementierungscommit `d5adb24eea5fba7c52263064a725e8f9c589f553`:
+`build`, `auth` und konfigurierter `dev-export` erfolgreich, `deploy` ausdrücklich
+übersprungen. Die bestehende DEV-Seite bleibt HTTP 200; das ist keine Veröffentlichung
+der neuen Feature-Oberfläche. Der aktuelle Prüfstatus einschließlich ergänzter
+Idempotenz- und Notiz-Privatsphäretests ist in
+[PR #10](https://github.com/n00b31/feuerwehr-odenthal-app/pull/10) einsehbar.
+Keine Auth-Fixtures in Supabase DEV ausführen.
 
 ### Reale Abnahme nach Benutzermerge – noch offen
 

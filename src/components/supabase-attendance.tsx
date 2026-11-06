@@ -138,7 +138,7 @@ export function SupabaseAttendance({ client, eventId, mode, close, changed }: {
           {editable && <div className="attendance-buttons">{statuses.map((status) => {
             const label = attendanceLabels[status];
             return <button key={status} className={`button secondary attendance-choice ${person.status === status ? "selected" : ""}`}
-              aria-pressed={person.status === status} disabled={busy || (finalized && status === "unknown")}
+              aria-pressed={person.status === status} disabled={busy || (finalized && (status === "unknown" || person.status === status))}
               onClick={() => finalized ? (setCorrection({ user: person.user_id, name: person.name, status }), setReason(""))
                 : void run(() => recordAttendance(client, eventId, person.user_id, status), `Anwesenheit für ${person.name} gespeichert.`)}>
               {person.status === status && <Check size={16} />}{label}</button>;
@@ -160,7 +160,7 @@ export function SupabaseAttendance({ client, eventId, mode, close, changed }: {
       </AppDialog>}
       {correction && <AppDialog title="Bestätigte Anwesenheit korrigieren" close={() => { if (!busy) setCorrection(null); }}>
         <p>{correction.name}: neue Anwesenheit <strong>{attendanceLabels[correction.status]}</strong></p>
-        <form onSubmit={(event) => { event.preventDefault(); void run(() => recordAttendance(client, eventId, correction.user, correction.status, reason), "Begründete Anwesenheitskorrektur protokolliert."); }}>
+        <form onSubmit={(event) => { event.preventDefault(); void run(() => recordAttendance(client, eventId, correction.user, correction.status, reason), "Anwesenheit aktualisiert. Unveränderte manuelle Werte erzeugen keinen weiteren Auditeintrag."); }}>
           <label>Begründung der Anwesenheitskorrektur<textarea required minLength={5} maxLength={2000} value={reason} disabled={busy} onChange={(e) => setReason(e.target.value)} /></label>
           <button className="button" disabled={busy || reason.trim().length < 5}>Begründete Korrektur speichern</button>
         </form>

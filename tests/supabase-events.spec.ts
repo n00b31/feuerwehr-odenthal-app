@@ -305,6 +305,7 @@ test("attendance prefill, filters, explicit completion, own final data and reaso
   await correction.getByLabel("Begründung der Anwesenheitskorrektur").fill("Synthetic überprüfte spätere Ankunft");
   await correction.getByRole("button", { name: "Begründete Korrektur speichern" }).click();
   await expect(panel.getByText("Nachträglich korrigiert", { exact: true })).toBeVisible();
+  await expect(panel.getByRole("listitem", { name: "Synthetic Member" }).getByRole("button", { name: "Anwesend", exact: true })).toBeDisabled();
   expect(state.attendanceAudit.find((row) => row.action === "correct")).toMatchObject({
     event: eventId, actor: admin, user: member, before: "absent", after: "present", reason: "Synthetic überprüfte spätere Ankunft",
   });
