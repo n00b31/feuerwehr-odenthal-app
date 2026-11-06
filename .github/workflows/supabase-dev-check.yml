@@ -57,3 +57,11 @@ jobs:
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/dev-seed.sql
+      - name: Verify attendance state, final-only RLS and delegated organizers
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/attendance.sql
+      - name: Verify overlapping attendance initialization with two connections
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: bash supabase/tests/attendance-concurrency.sh

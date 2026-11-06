@@ -13,6 +13,8 @@ import {
 } from "@/domain/dev-events";
 import { dateLabel, localInput, timeLabel } from "@/domain/time";
 import { EVENT_TYPES } from "@/config/app";
+import { SupabaseAttendance } from "./supabase-attendance";
+import { attendanceLabels } from "@/domain/dev-attendance";
 
 export type EventEditorState = { id?: string; revision: number; draft: DevEventDraft };
 const responses: [DevResponse, string][] = [["yes", "Ich komme"], ["no", "Ich kann nicht"], ["maybe", "Vielleicht"]];
@@ -120,7 +122,7 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
     </select></label>
     {workspace.events.length === 0 && <p>Noch keine sichtbaren DEV-Termine. Es werden keine Demo-Daten übernommen.</p>}
     {workspace.events.filter((item) => filter === "all" || item.status === filter).map((item) =>
-      <EventCard key={item.id} item={item} serverNow={serverNow} busy={busy} edit={() => edit(item)}
+      <EventCard key={item.id} client={client} changed={reload} item={item} serverNow={serverNow} busy={busy} edit={() => edit(item)}
         reply={(answer) => run(() => setEventResponse(client, item.id, answer), "Rückmeldung in Supabase gespeichert.")}
         cancel={(reason) => run(() => cancelSingleEvent(client, item, reason), "Termin in Supabase abgesagt. Rückmeldungen und Historie bleiben erhalten.")}
         correct={(user, answer, reason) => run(() => correctEventResponse(client, item.id, user, answer, reason), "Rückmeldung mit Korrekturgrund protokolliert.")} />)}
@@ -157,7 +159,8 @@ function EventForm({ editor, units, busy, change, close, submit }: {
   </section>;
 }
 
-function EventCard({ item, serverNow, busy, edit, reply, cancel, correct }: {
+function EventCard({ client, changed, item, serverNow, busy, edit, reply, cancel, correct }: {
+  client: SupabaseClient; changed: () => Promise<void>;
   item: DevEvent; serverNow: number; busy: boolean; edit: () => void;
   reply: (response: DevResponse) => Promise<void>; cancel: (reason: string) => Promise<void>;
   correct: (user: string, answer: DevResponse, reason: string) => Promise<void>;
@@ -167,13 +170,14 @@ function EventCard({ item, serverNow, busy, edit, reply, cancel, correct }: {
   const [target, setTarget] = useState("");
   const [answer, setAnswer] = useState<DevResponse>("yes");
   const [correction, setCorrection] = useState("");
+  const [attendanceMode, setAttendanceMode] = useState<"attendance" | "organizer" | null>(null);
   const planned = item.status === "scheduled";
   const unlocked = serverNow < Date.parse(item.starts_at) && (!item.response_deadline || serverNow < Date.parse(item.response_deadline));
   const counts = item.participants ? responseCounts(item.participants) : null;
   return <article className="dev-event" aria-labelledby={`event-${item.id}`}>
     <div className="event-card-top"><h3 id={`event-${item.id}`}>{item.title}</h3><span className={`badge ${planned ? "" : "muted"}`}>{planned ? "Geplant" : "Abgesagt"}</span></div>
     <p>{dateLabel(item.starts_at, { year: "numeric" })} · {timeLabel(item.starts_at)} – {dateLabel(item.ends_at)} {timeLabel(item.ends_at)} · {item.location}</p>
-    <p className="muted text-sm">{item.scope_name} · {EVENT_TYPES[item.event_type]}{item.series_id && " · Serieninstanz (nur Lesen und Rückmelden)"}</p>
+    <p className="muted text-sm">{item.scope_name} · {EVENT_TYPES[item.event_type]}{item.series_id && " · Serieninstanz (keine Serienbearbeitung)"}</p>
     <p className="description">{item.description}</p>
     {item.response_deadline && <p className="muted text-sm">Anmeldeschluss: {dateLabel(item.response_deadline)} · {timeLabel(item.response_deadline)}</p>}
     {item.in_roster ? <div className="dev-response">
@@ -182,6 +186,17 @@ function EventCard({ item, serverNow, busy, edit, reply, cancel, correct }: {
         aria-pressed={item.own_response === value} disabled={busy || !planned || !unlocked} onClick={() => void reply(value)}>{label}</button>)}</div>
       {planned && !unlocked && <p className="lock-note">Rückmeldung ab Beginn/Anmeldeschluss gesperrt. Maßgeblich ist die Supabase-Serverzeit.{item.can_lead && " Als zuständige Leitung kannst du eine begründete Korrektur erfassen."}</p>}
     </div> : <p className="muted text-sm">Du gehörst nicht zum gespeicherten Teilnehmerkreis; keine eigene Rückmeldung möglich.</p>}
+    {item.own_attendance && <p className="notice"><strong>Deine bestätigte Anwesenheit: {attendanceLabels[item.own_attendance]}</strong> · Verbindlich abgeschlossene Liste</p>}
+    {(item.can_read_attendance || item.can_delegate) && <>
+      <div className="dev-actions">
+        {item.can_read_attendance && <button className="button secondary" disabled={busy || serverNow < Date.parse(item.starts_at)}
+          onClick={() => setAttendanceMode("attendance")}>Anwesenheit öffnen</button>}
+        {item.can_delegate && <button className="button secondary" disabled={busy} onClick={() => setAttendanceMode("organizer")}>Organisator zuweisen</button>}
+      </div>
+      {serverNow < Date.parse(item.starts_at) && <p className="lock-note">Anwesenheit erst ab Dienstbeginn {timeLabel(item.starts_at)}; vorher ist nur die Teilnahmeplanung möglich.</p>}
+      {attendanceMode && <SupabaseAttendance key={`${item.id}-${attendanceMode}`} client={client} eventId={item.id} mode={attendanceMode}
+        close={() => setAttendanceMode(null)} changed={changed} />}
+    </>}
     {counts && <details className="dev-participants">
       <summary>Teilnehmerübersicht · {counts.yes} Zusagen · {counts.no} Absagen · {counts.maybe} Vielleicht · {counts.unanswered} ohne Rückmeldung</summary>
       <ul>{item.participants?.map((person) => <li key={person.user_id}><span>{person.name}</span><strong>{person.response ? responseNames[person.response] : "Ohne Rückmeldung"}</strong></li>)}</ul>

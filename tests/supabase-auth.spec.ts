@@ -89,6 +89,7 @@ async function fixture(context: BrowserContext) {
         location: "Synthetischer Testort", status: "scheduled",
         unit_id: unitId, series_id: null, revision: 0, response_deadline: null, scope_name: "Scheuren",
         can_manage: state.admin, can_lead: state.admin, in_roster: true, own_response: null,
+        can_delegate: state.admin, can_read_attendance: state.admin, attendance_state: "NOT_STARTED", own_attendance: null,
         participants: state.admin ? [{ user_id: memberId, name: "Synthetic Mitglied", response: null, updated_at: null }] : null,
       }] });
       return respond([]);
