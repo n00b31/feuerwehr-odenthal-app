@@ -1193,6 +1193,120 @@ eigene/fremde Einheit, FUNCTION_ADMIN eigene/fremde Funktion und FIRE_CHIEF nur 
 lesen. Keine neuen Konten, Mails oder produktiven Daten für diesen Auftrag erforderlich.
 Testereignisse nicht still löschen; Aufbewahrung/Bereinigung bewusst separat entscheiden.
 
+## 16. DEV 0.3.4 – stabile Arbeitsansicht und Terminfilter
+
+Basis: `main` `cbc7b0ebe05b6800971493429463b2c2d4ab8609`, PR #10 manuell
+gemergt. Der Benutzer bestätigt die manuelle Abnahme von DEV 0.3.3.
+Arbeitsbranch: `feature/dev-034-ux`. Kein automatischer Merge oder Pages-Deployment.
+
+### Tatsächliche Ursache und Umsetzung
+
+Kein periodischer Browser-Reload und keine automatische Navigation: `useDevAuth`
+rief jede Minute, bei Fokus/Online/Offline/Sichtbarkeit und bei jedem
+`onAuthStateChange` denselben `refresh` auf. Dieser setzte stets `phase=loading`.
+`SupabaseDev` entfernte dadurch `DevWorkspace` aus dem React-Baum. Der anschließende
+Remount verlor offene Anwesenheiten, native Dialoge und lokale Filter/Formularzustände.
+Die zusätzlichen 30-/10-Sekunden-Termin-/Anwesenheitsabfragen aktualisierten dagegen
+lediglich Daten und waren nicht der Auslöser des minütlichen Arbeitsbereich-Resets.
+
+Implementierungsplan und Umsetzung:
+1. Auth-Revalidierung ohne Loading-Unmount bei derselben Identität; Sessionprüfung,
+   serverseitige Freigabe und erneute Freigabeprüfung nach den Datenabfragen erhalten.
+   Explizites Abmelden/Identitätswechsel entfernt den Arbeitsbereich unmittelbar;
+   ungültige Sitzung, gesperrter Zugang oder Prüfungsfehler schließen weiterhin sicher.
+   SDK-Refresh, PKCE und Auth-Speichermechanismus bleiben unverändert.
+2. Statusbezogene CP-Theme-Farben mit Text plus Check-/X-Icons. „Nicht festgestellt“
+   neutral ohne Haken. Vorläufige Werte bleiben ausdrücklich als solche bezeichnet.
+3. Additive Migration 011: geänderte erste Vorbelegung und begrenzte serverseitige
+   Terminabfrage; keine Bestands-Updates, Tabellen-/RLS-/Rollenänderungen.
+4. Aktuelle/zukünftige Termine aufsteigend, Historie absteigend, jeweils höchstens
+   fünf. Vergangenheit ab geplantem Ende (`ends_at <= server_now`), nicht ab Beginn.
+   Gleiche Startzeit wird über Termin-ID eindeutig sortiert.
+5. Nativer Monat/Jahr-Picker, deutscher Zeitraum, Reset, Filter vor Limit, 50er-
+   Monatsseiten mit `(starts_at,id)`-Cursor. Monatsgrenzen beziehen sich auf den
+   **Beginn in Europe/Berlin**, auch über Sommerzeit-/Jahresgrenzen. Bereits
+   nachgeladene Seiten werden bei Hintergrundabfragen erhalten/erneuert.
+
+### Datenbank, Rechte und Bestand
+
+`supabase/migrations/20261106001100_event_list_ux.sql` ersetzt ausschließlich
+`ff_prepare_attendance` und den bisherigen Workspace-Wrapper und ergänzt:
+
+- `ff_events_page(list_view,month_key,after_start,after_id,status_filter,retained_ids)`.
+  Nur `authenticated` darf ausführen; aktive Freigabe und bestehendes
+  `ff_private.can_view_event` werden für **jeden** zurückgegebenen Termin geprüft.
+  Begrenzung/Sortierung finden vor der Teilnehmer-Hydrierung statt.
+- Private, nicht für Browser aufrufbare Serialisierung `ff_private.event_summary`.
+  Teilnehmernamen bleiben Leitung/Übersehern vorbehalten, eigene finale Ist-Werte
+  bleiben wie in DEV 0.3.3 geschützt. Keine Auth-/RLS-/Rollenlockerung.
+- Indizes `events_list_start(starts_at,id)` und `events_list_end(ends_at)`.
+  `ff_events_workspace()` bleibt kompatibel, liefert jetzt ebenfalls nur die
+  begrenzte Standardansicht. Auch Auth-Initialisierung lädt keine gesamte Terminliste.
+
+Nur **neue erste** Übungs-/Sonderübungs-Vorbereitungen verwenden Zusage → vorläufig
+anwesend, Absage/Vielleicht/ohne Antwort → vorläufig abwesend. Ereignis-Lock,
+`ON CONFLICT DO NOTHING`, gespeicherte Originalantwort, Akteur/Zeit und
+einmaliger Audit bleiben erhalten. Initialisierte, manuelle oder abgeschlossene
+Listen werden nicht neu bewertet. Manuell unbekannte Werte verhindern weiterhin
+den Abschluss. Erst der ausdrücklich bestätigte Abschluss macht Vorschläge verbindlich.
+
+Geöffnete Terminansichten werden als explizite IDs (maximal 100) bei jeder Abfrage
+erneut autorisiert und außerhalb der fünf Ergebnisse gekennzeichnet erhalten.
+Das ist kein ungefiltertes Nachladen der Historie. Unberechtigte IDs liefern keine
+Daten; Rollen-/Delegationswiderruf wird weiterhin bei jedem Befehl geprüft.
+Stabile React-Keys und versionierte Antworten verhindern Remounts und alte Antworten.
+Neue Listeninformationen überschreiben keinen angefangenen Organisator-Entwurf.
+Termineditoren behalten ihre ursprüngliche Revision; Fremdänderungen werden nicht
+still überschrieben, sondern weiterhin serverseitig als Versionskonflikt abgewiesen.
+
+### Dateien und automatisierte Nachweise
+
+Geändert: `src/auth/use-dev-auth.ts`, `src/components/supabase-dev.tsx`,
+`supabase-events.tsx`, `supabase-attendance.tsx`, `src/app/globals.css`,
+`src/data/supabase-repository.ts`, `src/domain/dev-events.ts`.
+Neu: `src/domain/dev-event-list.ts` samt Unit-Tests, Migration 011 und
+`supabase/tests/event-list.sql`. Regressionen in `authorization.sql`,
+`attendance.sql`, `tests/supabase-auth.spec.ts` und `tests/supabase-events.spec.ts`
+angepasst/ergänzt. Die bestehende PostgreSQL-CI führt zusätzlich die Listensuite aus.
+README und dieser Abschnitt dokumentieren Verhalten und Nachweisgrenzen.
+
+Lokal tatsächlich erfolgreich: 92 Unit-Tests, Typecheck, Lint, statischer synthetischer
+DEV-Export und 18 synthetische DEV-/Auth-Browserfälle. Browserfälle prüfen
+Light/Dark und 390/1366 px mit Axe, grün/rot mit Symbolen, neue Vorbelegung,
+unbekannte Werte/Abschluss/Korrektur, Historie/Monat/Jahresgrenze/Nachladen,
+persistente Filter und erhaltene DOM-Identität von Dialog, Eingabe und Anwesenheit.
+Der echte Supabase-JS-SDK erneuert im **abgefangenen synthetischen Protokolltest**
+sein Token (`grant_type=refresh_token`); Auth-Recheck, Scrollposition und offene
+Ansicht bleiben erhalten. Keine echte Anmeldung oder menschliche Geräteabnahme
+wird daraus abgeleitet. Initiale Testfehler (redundante erste Nachabfrage und
+vorbelegtes Monatsfeld in der Historienansicht) wurden an der Ursache behoben.
+
+PostgreSQL-CI, 19 bestehende Demo-Browserfälle, echter konfigurierter DEV-Export
+und kontrollierte Hosted-Anwendung/Bestandsvergleich: Nachweise vor Abschluss ergänzen.
+Migration 011 zu diesem Dokumentationsstand noch nicht auf Hosted DEV angewendet.
+
+### Manuelle Prüfung und Grenzen
+
+Nach bewusstem Benutzermerge/verfügbarem Frontend mit bestehenden Testkonten:
+1. Anwesenheit/Abschlussdialog öffnen, Termin- und Organisatorentwurf bearbeiten.
+   Mindestens zwei Minuten warten, Tab wechseln/zurückkehren. Dialog, Texte,
+   Filter, gewählter Termin und möglichst Scrollposition bleiben erhalten.
+2. Neue begonnene Übung mit Zusage/Absage/Vielleicht/ohne Antwort öffnen. Nur
+   Zusage vorläufig anwesend, übrige vorläufig abwesend; alte Listen unverändert.
+   Unbekannten manuellen Status prüfen, dann alle Werte prüfen und explizit abschließen.
+3. Historie, Monat/Jahr, Statusfilter, Nachladen und Reset bedienen, insbesondere
+   über Jahreswechsel. MEMBER sieht keine fremden Einheiten und keine fremden Ist-Werte.
+4. Mit separatem Admin Testzugang sperren bzw. Delegation widerrufen: Auth-Recheck
+   bzw. nächster RPC entzieht Zugriff; kein Offline-/Demo-Fallback.
+
+Native Picker unterscheiden sich je Browser; Text-Fallback erwartet `JJJJ-MM`
+und validiert vor Abfrage/Rendering. Automatische Abfragen pausieren in unsichtbaren
+Tabs. Keine Realtime-Abhängigkeit, neuer Statistik-/Serienumfang oder Zeit-Bypass.
+Monatsseiten sind Live-Daten, kein transaktionaler Export-Snapshot: parallele
+Terminverschiebungen können Seitenpositionen ändern. Die Hintergrundabfrage baut
+die bereits geladenen Seiten erneut aus stabilen Cursorn auf. Echte iPhone-/Android-
+Abnahme und autorisierte reale Auth-Sitzungen bleiben manuell.
+
 ## Quellen
 
 - [Supabase Passwortauthentifizierung](https://supabase.com/docs/guides/auth/passwords)

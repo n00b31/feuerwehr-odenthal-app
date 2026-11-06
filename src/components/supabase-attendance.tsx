@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { Check, ClipboardCheck, RefreshCw, UserRoundCheck } from "lucide-react";
+import { Check, X, ClipboardCheck, RefreshCw, UserRoundCheck } from "lucide-react";
 import {
   readAttendanceWorkspace, prepareAttendance, recordAttendance, completeAttendance, assignOrganizer,
 } from "@/data/supabase-repository";
@@ -119,7 +119,7 @@ export function SupabaseAttendance({ client, eventId, mode, close, changed }: {
       {data.primary_organizer && !data.primary_organizer.access_granted && <p className="notice error">Der zugewiesene Organisator hat derzeit keinen freigegebenen Zugang.</p>}
       {data.can_delegate && <details open={mode === "organizer"} className="attendance-delegation">
         <summary>Organisator zuweisen · ausschließlich dieser Termin</summary>
-        <OrganizerForm key={data.primary_organizer?.user_id ?? "none"} data={data} busy={busy}
+        <OrganizerForm data={data} busy={busy}
           assign={(user, note) => run(() => assignOrganizer(client, eventId, user, note), user ? "Terminbezogene Dienstleitung gespeichert." : "Delegation widerrufen. Anwesenheit und Historie bleiben erhalten.")} />
       </details>}
       {mode === "attendance" && <>
@@ -132,23 +132,25 @@ export function SupabaseAttendance({ client, eventId, mode, close, changed }: {
         <ul className="attendance-members">{visibleMembers.map((person) => <li key={person.user_id} className="attendance-member" aria-label={person.name}>
           <div><strong>{person.name}</strong>
             <p className="muted text-sm">{data.state === "NOT_STARTED" ? "Aktuelle" : "Ursprüngliche"} Rückmeldung: {!person.response_known ? "Historisch nicht gespeichert" : person.response ? responseLabels[person.response] : "Ohne Rückmeldung"}</p>
-            <p><strong>{person.status ? attendanceLabels[person.status] : "Noch nicht erfasst"}</strong> · {finalized ? "Bestätigte Liste" : person.origin === "manual" ? "Manuell festgestellt" : "Vorläufig"}</p>
+            <p><strong className={`attendance-status ${person.status ?? "unknown"}`}>
+              {person.status === "present" ? <Check size={16} aria-hidden="true" /> : person.status === "absent" ? <X size={16} aria-hidden="true" /> : null}
+              {person.status ? attendanceLabels[person.status] : "Noch nicht erfasst"}</strong> · {finalized ? "Bestätigte Liste" : person.origin === "manual" ? "Manuell festgestellt" : "Vorläufig"}</p>
             {person.recorded_at && <p className="muted text-sm">Letzte Erfassung: {dateLabel(person.recorded_at)} {timeLabel(person.recorded_at)}</p>}
           </div>
           {editable && <div className="attendance-buttons">{statuses.map((status) => {
             const label = attendanceLabels[status];
-            return <button key={status} className={`button secondary attendance-choice ${person.status === status ? "selected" : ""}`}
+            return <button key={status} className={`button secondary attendance-choice ${status} ${person.status === status ? "selected" : ""}`}
               aria-pressed={person.status === status} disabled={busy || (finalized && (status === "unknown" || person.status === status))}
               onClick={() => finalized ? (setCorrection({ user: person.user_id, name: person.name, status }), setReason(""))
                 : void run(() => recordAttendance(client, eventId, person.user_id, status), `Anwesenheit für ${person.name} gespeichert.`)}>
-              {person.status === status && <Check size={16} />}{label}</button>;
+              {status === "present" ? <Check size={16} aria-hidden="true" /> : status === "absent" ? <X size={16} aria-hidden="true" /> : null}{label}</button>;
           })}</div>}
         </li>)}</ul>
         {data.members.length > 0 && visibleMembers.length === 0 && <p>Keine Mitglieder für diese Suche oder diesen Filter.</p>}
         {data.members.length === 0 && <p>Kein gespeicherter Teilnehmerkreis. Ein leerer Dienst kann nicht abgeschlossen werden.</p>}
         {!finalized && data.can_manage && <div className="dev-actions">
           <button className="button" disabled={busy || !canCompleteAttendance(data)} onClick={() => setCompleting(true)}><ClipboardCheck size={18} />Liste abschließen</button>
-          <p className="muted text-sm">Alle {counts.total} Mitglieder müssen festgestellt sein. Ungeklärte Personen werden niemals automatisch als abwesend eingestuft.</p>
+          <p className="muted text-sm">Vorbelegung: Zusage → vorläufig anwesend, alle anderen Antworten → vorläufig abwesend. Prüfe die tatsächliche Anwesenheit aller {counts.total} Mitglieder vor dem Abschluss. Manuell „Nicht festgestellt“ verhindert den Abschluss.</p>
         </div>}
         {finalized && editable && <p className="notice">Korrekturen benötigen einen Grund. Ursprünglicher Abschluss und Änderungsprotokoll bleiben unverändert erhalten; ein Rücksetzen auf „Nicht festgestellt“ würde den Abschluss ungültig machen und ist gesperrt.</p>}
       </>}

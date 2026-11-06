@@ -59,14 +59,17 @@ select public.ff_prepare_attendance('82000000-0000-4000-8000-000000000001');
 select pg_temp.ok((select count(*)=1 from public.audit_entries where action='attendance_prepared'),'prefill audited exactly once');
 select pg_temp.ok((select status='present' and origin='prefill' and response_snapshot='yes' from public.actual_attendance where user_id='81000000-0000-4000-8000-000000000003'),'yes is provisional present with original answer');
 select pg_temp.ok((select status='absent' and origin='prefill' from public.actual_attendance where user_id='81000000-0000-4000-8000-000000000004'),'no is provisional absent');
-select pg_temp.ok((select status='unknown' from public.actual_attendance where user_id='81000000-0000-4000-8000-000000000005'),'maybe is unknown');
-select pg_temp.ok((select status='unknown' from public.actual_attendance where user_id='81000000-0000-4000-8000-000000000009'),'unanswered is unknown, never presumed absent');
+select pg_temp.ok((select status='absent' and origin='prefill' and response_snapshot='maybe' from public.actual_attendance where user_id='81000000-0000-4000-8000-000000000005'),'maybe is only provisional absent');
+select pg_temp.ok((select status='absent' and origin='prefill' and response_snapshot is null from public.actual_attendance where user_id='81000000-0000-4000-8000-000000000009'),'unanswered is only provisional absent');
 select pg_temp.ok((select status='absent' and origin='manual' from public.actual_attendance where user_id=auth.uid()),'manual value survives preparation');
 select pg_temp.ok((select attendance_state='IN_PROGRESS' and attendance_initialized_by=auth.uid() and attendance_initialized_at is not null
   from public.events where id='82000000-0000-4000-8000-000000000001'),'initial actor and time persisted');
 select public.ff_set_member_response('82000000-0000-4000-8000-000000000001','81000000-0000-4000-8000-000000000003','no','Synthetic later planning correction');
 select pg_temp.ok((select m->>'response'='yes' from jsonb_array_elements(public.ff_attendance_workspace('82000000-0000-4000-8000-000000000001')->'members') m
   where m->>'user_id'='81000000-0000-4000-8000-000000000003'),'original planned answer is immutable even if later planning changes');
+select public.ff_record_attendance('82000000-0000-4000-8000-000000000001','81000000-0000-4000-8000-000000000009','unknown');
+select public.ff_prepare_attendance('82000000-0000-4000-8000-000000000001');
+select pg_temp.ok((select status='unknown' and origin='manual' from public.actual_attendance where user_id='81000000-0000-4000-8000-000000000009'),'initialized unknown never overwritten');
 select pg_temp.denied($q$select public.ff_confirm_attendance('82000000-0000-4000-8000-000000000001')$q$);
 select pg_temp.denied($q$select public.ff_prepare_attendance('82000000-0000-4000-8000-000000000004')$q$);
 select pg_temp.denied($q$select public.ff_record_attendance('82000000-0000-4000-8000-000000000004',auth.uid(),'present')$q$);
@@ -100,6 +103,7 @@ select public.ff_record_attendance('82000000-0000-4000-8000-000000000001',user_i
 from public.actual_attendance where event_id='82000000-0000-4000-8000-000000000001' and status='unknown';
 select public.ff_confirm_attendance('82000000-0000-4000-8000-000000000001');
 select public.ff_confirm_attendance('82000000-0000-4000-8000-000000000001');
+select public.ff_prepare_attendance('82000000-0000-4000-8000-000000000001');
 select pg_temp.ok((select attendance_state='COMPLETED' from public.events where id='82000000-0000-4000-8000-000000000001'),'fully determined list closes');
 select pg_temp.ok((select count(*)=1 from public.audit_entries where action='attendance_confirmed'),'completion is idempotent');
 select pg_temp.denied($q$select public.ff_record_attendance('82000000-0000-4000-8000-000000000001','81000000-0000-4000-8000-000000000004','present')$q$);

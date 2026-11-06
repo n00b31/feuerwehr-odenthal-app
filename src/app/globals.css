@@ -27,7 +27,13 @@
 .attendance-member { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--cp-space-3); border-bottom: 1px solid var(--cp-border); padding-block: var(--cp-space-4); }
 .attendance-member p { margin-top: var(--cp-space-1); }
 .attendance-buttons { display: flex; flex-wrap: wrap; gap: var(--cp-space-2); }
-.attendance-choice.selected { border-color: var(--cp-success); background: color-mix(in srgb, var(--cp-success) 18%, var(--cp-surface)); color: var(--cp-text); }
+.attendance-choice.present.selected, .attendance-status.present { border-color: var(--cp-success); background: color-mix(in srgb, var(--cp-success) 18%, var(--cp-surface)); color: var(--cp-text); }
+.attendance-choice.absent.selected, .attendance-status.absent { border-color: var(--cp-danger); background: color-mix(in srgb, var(--cp-danger) 18%, var(--cp-surface)); color: var(--cp-text); }
+.attendance-choice.unknown.selected, .attendance-status.unknown { border-color: var(--cp-border-strong); background: var(--cp-surface-soft); color: var(--cp-text); }
+.attendance-status { display: inline-flex; align-items: center; gap: var(--cp-space-2); border: 1px solid var(--cp-border); border-radius: var(--cp-radius); padding: var(--cp-space-2); }
+.attendance-choice.present svg, .attendance-status.present svg { color: var(--cp-success); }
+.attendance-choice.absent svg, .attendance-status.absent svg { color: var(--cp-danger); }
+.dev-list-filters { margin-block: var(--cp-space-4); align-items: end; }
 .attendance-choice { min-height: 44px; }
 @media (max-width: 640px) {
   .dev-attendance .form-grid { grid-template-columns: minmax(0, 1fr); }

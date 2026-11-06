@@ -44,7 +44,7 @@ export function eventErrorMessage(error: unknown) {
   const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
   const message = error && typeof error === "object" && "message" in error ? String(error.message) : "";
   if (code === "42501" || code === "40001") return message || "Keine Berechtigung oder zwischenzeitliche Änderung. Bitte aktualisieren.";
-  if (code === "PGRST202" || code === "PGRST204") return "Terminverwaltung noch nicht verfügbar. Migration 006 und Data-API-Schema prüfen.";
+  if (code === "PGRST202" || code === "PGRST204") return "Terminverwaltung noch nicht verfügbar. Migration 006 bis 011 und Data-API-Schema prüfen.";
   if (code === "23514" || code === "22P02" || code === "22007" || code === "22008") return "Ungültige Terminangaben. Datum, Uhrzeit und Pflichtfelder prüfen.";
   return "Supabase-Terminoperation fehlgeschlagen. Verbindung und serverseitige Berechtigung prüfen; kein erfolgreicher Abschluss bestätigt.";
 }

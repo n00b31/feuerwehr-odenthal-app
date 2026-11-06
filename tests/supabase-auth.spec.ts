@@ -81,8 +81,9 @@ async function fixture(context: BrowserContext) {
       if (url.pathname.endsWith("/ff_members_workspace")) return respond({
         global_admin: state.admin, units: [{ id: unitId, name: "Scheuren" }], functions: [], members: [],
       });
-      if (url.pathname.endsWith("/ff_events_workspace")) return respond({
+      if (url.pathname.endsWith("/ff_events_page")) return respond({
         server_now: new Date().toISOString(), manageable_units: state.admin ? [{ id: unitId, name: "Scheuren" }] : [],
+        retained_events: [], has_more: false, next_cursor: null,
         events: [{
         id: "30000000-0000-4000-8000-000000000001", title: "Synthetic DEV Dienst", description: "Nur Testdaten",
         event_type: "regular", starts_at: "2026-12-01T18:00:00Z", ends_at: "2026-12-01T20:00:00Z",
