@@ -11,6 +11,16 @@
 .dev-member summary { min-height: 48px; cursor: pointer; overflow-wrap: anywhere; }
 .dev-member .soft-panel { margin-block: var(--cp-space-4); }
 .dev-member .button { margin: var(--cp-space-2); }
+.member-role-list { display: grid; gap: var(--cp-space-3); list-style: none; padding: 0; }
+.member-role, .member-role-state { padding: var(--cp-space-4); border: 1px solid var(--cp-border); border-radius: var(--cp-radius); background: var(--cp-surface-soft); color: var(--cp-text); }
+.member-role { display: flex; align-items: center; flex-wrap: wrap; gap: var(--cp-space-4); }
+.member-role-description { display: grid; flex: 1 1 180px; gap: var(--cp-space-2); min-width: 0; overflow-wrap: anywhere; }
+.member-role-status, .member-role-state { display: flex; align-items: center; gap: var(--cp-space-2); }
+.member-role-state { grid-column: 1 / -1; }
+.member-role.assigned, .member-role-state.assigned { background: color-mix(in srgb, var(--cp-success) 18%, var(--cp-surface)); border-color: var(--cp-success); }
+.member-role-status svg, .member-role-state svg { color: var(--cp-success); flex-shrink: 0; }
+.dev-member .member-role-remove { margin: 0; white-space: normal; }
+.dev-member .member-role-remove:hover:not(:disabled) { background: var(--cp-surface); border-color: var(--cp-danger); }
 .auth-card { max-width: 680px; margin: 24px auto; }
 .dev-approval, .dev-event { padding-block: 20px; border-top: 1px solid var(--cp-border); }
 .dev-approval label { max-width: 480px; margin-bottom: 12px; }
@@ -30,6 +40,8 @@
   .dev-event-editor .span-2, .dev-participants .span-2 { grid-column: 1; }
   .dev-event .dev-actions { padding-inline: 0; }
   .dev-member .form-grid { grid-template-columns: minmax(0, 1fr); }
+  .member-role { flex-direction: column; align-items: stretch; }
+  .member-role-description { flex-basis: auto; }
 }
 
 :root {

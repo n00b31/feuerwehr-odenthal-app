@@ -6,6 +6,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Moon, Sun, LogOut, RefreshCw, ShieldCheck } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabasePublicConfig } from "@/config/supabase";
+import { DEV_ROLE_LABELS } from "@/config/app";
 import { approveMember, type Access, type DevData, type PendingRegistration } from "@/data/supabase-repository";
 import { authErrorMessage, callbackUrl, emailSchema, registrationSchema } from "@/auth/validation";
 import { resetAuthCallback, useDevAuth } from "@/auth/use-dev-auth";
@@ -180,7 +181,7 @@ function DevWorkspace({ client, access, data, pathname, refresh, eventEditor, se
   const year = Number(new Intl.DateTimeFormat("en", { year: "numeric", timeZone: "Europe/Berlin" }).format(new Date()));
   const ownAttendance = data.attendance.filter((item) => item.report_year === year);
   return <>
-    <PageHeading eyebrow="GESCHÜTZTER DEV-BEREICH" title={pathname === "/administration" ? "Administration" : `Hallo ${access.display_name}`} description={`${access.unit_name} · ${access.roles.join(", ")} · live durch Supabase geprüft`} action={<button className="button secondary" onClick={refresh}><RefreshCw size={18} />Aktualisieren</button>} />
+    <PageHeading eyebrow="GESCHÜTZTER DEV-BEREICH" title={pathname === "/administration" ? "Administration" : `Hallo ${access.display_name}`} description={`${access.unit_name} · ${access.roles.map((role) => DEV_ROLE_LABELS[role]).join(", ")} · live durch Supabase geprüft`} action={<button className="button secondary" onClick={refresh}><RefreshCw size={18} />Aktualisieren</button>} />
     <p className="notice">DEV 0.3.1: Einzeltermine, Teilnahmeantworten und Mitgliederverwaltung liegen zentral in Supabase. Serienverwaltung, Anwesenheits- und Dokumentbearbeitung folgen separat. Keine Übernahme lokaler Demo-Daten.</p>
     {pathname === "/administration" ? managesMembers
       ? <>{globalAdmin && <section className="card section-card"><h2>Wartende Testregistrierungen</h2>{data.registrations.length === 0 && <p>Keine wartenden Registrierungen.</p>}{data.registrations.map((person) => <ApprovalRow key={person.user_id} client={client} person={person} units={data.units} refresh={refresh} />)}</section>}

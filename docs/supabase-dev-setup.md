@@ -1028,6 +1028,32 @@ Operatorvorgang planen. Niemals SQL-DML in `auth.users`, breite Löschlisten ode
 als vermeintliche Fixtures entfernen. Anschließend Seed-Secret/Passwort entfernen, sofern
 keine weiteren Testläufe benötigt werden; ein erneuter Seed behebt keine manuell geänderten Konten.
 
+## 14. DEV 0.3.2.1 – verständliche Rollenanzeige
+
+Reine DEV-Oberflächenänderung auf Basis des Benutzermerges von PR #8.
+`DEV_ROLE_LABELS` bildet technische Werte nur zur Darstellung ab:
+GLOBAL_ADMIN → Globaler Administrator, UNIT_ADMIN → Einheitsführer,
+MEMBER → Mitglied. Dieselbe Zuordnung gilt für Mitgliederverwaltung, Rollenauswahl,
+Entfernen-Aktionen und DEV-Seitenkopf. Die bisherigen Demo-Bezeichnungen bleiben getrennt.
+
+Zugewiesene Rollen erscheinen als grüne Karten mit Häkchen und „Zugewiesen“.
+Die Auswahl zeigt den aktuellen serverseitig geladenen Zuweisungsstatus **für genau den
+gewählten Einheits-/Funktionsbereich**: grün „Bereits zugewiesen“, sonst neutral
+„Nicht zugewiesen“ oder „Rollenbereich auswählen“. Keine optimistische Rollenänderung
+durch bloßes Auswählen. Nur die tatsächliche Entfernen-Aktion ist rot markiert.
+Mitglied bleibt ausdrücklich die nicht einzeln entziehbare Basisrolle.
+
+Bestehende Änderungsgrund-, Lade-/Sperr- und serverseitige Sicherheitsprüfungen,
+technische Optionswerte sowie RPC-Payloads bleiben unverändert. Keine Supabase-Migration,
+RLS-/RPC- oder Bestandsdatenänderung; keine Änderungen am separaten Demo-Repository.
+
+Lokal bestanden: 81 Unit-Tests, Typprüfung, ESLint, Static Export und alle zwölf
+synthetischen Auth-/Termin-/Mitglieder-Browserfälle. Der zusätzliche UI-Fall prüft
+Labels, grüne/rote tatsächliche Farbwerte, neutrale nicht zugewiesene Bereiche,
+unverändert erforderlichen Änderungsgrund und schreibfreie Auswahl bei 390/1366px
+in Light/Dark sowie vollständige Axe-Prüfung. Dies sind abgefangene Protokollfixtures,
+keine Änderungen an vorhandenen Supabase-Mitgliedschaften.
+
 ## Quellen
 
 - [Supabase Passwortauthentifizierung](https://supabase.com/docs/guides/auth/passwords)

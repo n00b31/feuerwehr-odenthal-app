@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Check, Trash2 } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   readMembersWorkspace, setUnitMembership, setFunctionMembership, changeMemberRole, changeMemberStatus,
 } from "@/data/supabase-repository";
 import { memberErrorMessage, memberRoleSchema, type MembersWorkspace, type ManagedMember, type MemberRole } from "@/domain/dev-members";
 import { dateLabel } from "@/domain/time";
+import { DEV_ROLE_LABELS } from "@/config/app";
 
 export function SupabaseMembers({ client, actorId, refreshAccess }: {
   client: SupabaseClient; actorId: string; refreshAccess: () => void;
@@ -55,7 +57,7 @@ export function SupabaseMembers({ client, actorId, refreshAccess }: {
     <div className="event-card-top"><h2>Mitgliederverwaltung</h2><button className="button secondary" disabled={busy || (!workspace && !error)}
       onClick={() => void run(reload, "Mitgliederliste aktualisiert.")}>Mitglieder aktualisieren</button></div>
     <p>Serverseitig geprüfte Bereiche. Mitgliedschaftshistorie und historische Terminlisten bleiben erhalten.
-      Ohne aktuelle Einheit besteht kein Mitgliederzugriff. MEMBER ist die Basisrolle der Freigabe, kein frei entziehbares Administrationsrecht.</p>
+      Ohne aktuelle Einheit besteht kein Mitgliederzugriff. Mitglied ist die Basisrolle der Freigabe, kein frei entziehbares Administrationsrecht.</p>
     {error && <p role="alert" className="notice error">{error}</p>}
     {message && <p role="status" className="notice">{message}</p>}
     {busy && <p role="status">Mitgliederänderung läuft …</p>}
@@ -85,6 +87,11 @@ function MemberRow({ person, workspace, client, busy, run }: {
   const scopeOptions = role === "UNIT_ADMIN" ? workspace.units : role === "FUNCTION_ADMIN" ? workspace.functions : [];
   const canAssign = person.status === "approved" || person.status === "suspended";
   const currentUnit = person.unit_id;
+  const requiresScope = role === "UNIT_ADMIN" || role === "FUNCTION_ADMIN";
+  const selectionComplete = !requiresScope || !!scope;
+  const roleAssigned = selectionComplete && person.roles.some((item) => item.role === role
+    && item.unit_id === (role === "UNIT_ADMIN" ? scope : null)
+    && item.function_id === (role === "FUNCTION_ADMIN" ? scope : null));
   return <details className="dev-member">
     <summary><strong>{person.display_name}</strong> · {person.unit_name ?? "Ohne aktuelle Einheit"} · {person.status === "approved" ? "Freigegeben" : person.status === "suspended" ? "Deaktiviert" : person.status === "pending" ? "Wartet auf Freigabe" : "Abgelehnt"}</summary>
     <p>{person.access_granted ? "Serverseitiger Zugang aktiv." : "Kein serverseitiger Mitgliederzugriff."}</p>
@@ -103,12 +110,18 @@ function MemberRow({ person, workspace, client, busy, run }: {
     </form>}
     {workspace.global_admin && <>
       <h3>Rollen für {person.display_name}</h3>
-      <ul>{person.roles.map((item) => { const assignedRole = item.role; return <li key={`${item.role}-${item.unit_id}-${item.function_id}`}>
-        {item.role}{item.unit_id && ` · ${workspace.units.find((u) => u.id === item.unit_id)?.name ?? item.unit_id}`}
-        {item.function_id && ` · ${workspace.functions.find((f) => f.id === item.function_id)?.name ?? item.function_id}`}
-        {assignedRole !== "MEMBER" && <button className="button secondary" disabled={!ready} onClick={() => void run(() =>
+      <ul className="member-role-list" aria-label={`Zugewiesene Rollen für ${person.display_name}`}>{person.roles.map((item) => {
+        const assignedRole = item.role;
+        const scopeName = item.unit_id ? workspace.units.find((u) => u.id === item.unit_id)?.name ?? item.unit_id
+          : item.function_id ? workspace.functions.find((f) => f.id === item.function_id)?.name ?? item.function_id : "";
+        return <li className="member-role assigned" key={`${item.role}-${item.unit_id}-${item.function_id}`}>
+        <div className="member-role-description"><strong>{DEV_ROLE_LABELS[assignedRole]}{scopeName && ` · ${scopeName}`}</strong>
+          <span className="member-role-status"><Check size={18} aria-hidden="true" />Zugewiesen</span>
+          {assignedRole === "MEMBER" && <small>Basisrolle · nicht einzeln entziehbar</small>}
+        </div>
+        {assignedRole !== "MEMBER" && <button className="button secondary danger-button member-role-remove" disabled={!ready} onClick={() => void run(() =>
           changeMemberRole(client, { target_user: person.user_id, wanted_role: assignedRole, target_unit: item.unit_id, target_function: item.function_id, assign: false }),
-          "Rollenentzug protokolliert.")}>Rolle {item.role} entziehen</button>}
+          "Rollenentzug protokolliert.")}><Trash2 size={18} aria-hidden="true" />Rolle {DEV_ROLE_LABELS[assignedRole]}{scopeName && ` · ${scopeName}`} entfernen</button>}
       </li>; })}</ul>
       <form className="form-grid soft-panel" onSubmit={(e) => {
         e.preventDefault(); void run(() => changeMemberRole(client, {
@@ -117,10 +130,14 @@ function MemberRow({ person, workspace, client, busy, run }: {
         }), "Rollenzuweisung protokolliert.");
       }}>
         <label>Neue Rolle für {person.display_name}<select value={role} disabled={busy} onChange={(e) => { setRole(memberRoleSchema.parse(e.target.value)); setScope(""); }}>
-          {memberRoleSchema.options.filter((item) => item !== "MEMBER").map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+          {memberRoleSchema.options.filter((item) => item !== "MEMBER").map((item) => <option key={item} value={item}>{DEV_ROLE_LABELS[item]}</option>)}</select></label>
         {(role === "UNIT_ADMIN" || role === "FUNCTION_ADMIN") && <label>Rollenbereich<select value={scope} required disabled={busy} onChange={(e) => setScope(e.target.value)}>
           <option value="">Bereich auswählen</option>{scopeOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
-        <button className="button" disabled={!ready || !person.access_granted}>Rolle zuweisen</button>
+        <div className={`member-role-state ${roleAssigned ? "assigned" : ""}`} role="status">
+          {roleAssigned && <Check size={18} aria-hidden="true" />}
+          <span>{DEV_ROLE_LABELS[role]} · {!selectionComplete ? "Rollenbereich auswählen" : roleAssigned ? "Bereits zugewiesen" : "Nicht zugewiesen"}</span>
+        </div>
+        <button className="button secondary" disabled={!ready || !person.access_granted}>Rolle zuweisen</button>
       </form>
       <h3>Sonderfunktionen für {person.display_name}</h3>
       <ul>{person.functions.map((item) => <li key={item.id}>{item.name} <button className="button secondary" disabled={!ready}
@@ -135,7 +152,7 @@ function MemberRow({ person, workspace, client, busy, run }: {
       {(person.status === "approved" || person.status === "suspended") && <button className="button secondary danger-button" disabled={!ready}
         onClick={() => void run(() => changeMemberStatus(client, person.user_id, person.status === "suspended", reason),
           person.status === "suspended" ? "Mitglied reaktiviert." : "Mitglied deaktiviert.")}>{person.status === "suspended" ? "Mitglied reaktivieren" : "Mitglied deaktivieren"}</button>}
-      <p className="muted text-sm">Der letzte aktive GLOBAL_ADMIN ist serverseitig vor Rechteentzug, Deaktivierung und Verlust der letzten Einheit geschützt.
+      <p className="muted text-sm">Der letzte aktive globale Administrator ist serverseitig vor Rechteentzug, Deaktivierung und Verlust der letzten Einheit geschützt.
         Einheitswechsel entzieht keine ausdrücklich vergebenen scoped Adminrollen; diese separat prüfen. Reaktivierung erfordert unverändert verifizierte E-Mail und aktuelle Einheit.</p>
     </>}
   </details>;
