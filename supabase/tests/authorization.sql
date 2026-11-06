@@ -197,6 +197,10 @@ select pg_temp.assert_true((select status = 'absent' from public.actual_attendan
 select pg_temp.assert_true((select count(*) = 3 from public.actual_attendance where event_id = '30000000-0000-0000-0000-000000000002' and status = 'unknown'), 'manual unknown, maybe and unanswered stay unknown');
 select pg_temp.assert_true((select origin = 'manual' from public.actual_attendance where event_id = '30000000-0000-0000-0000-000000000002' and user_id = '10000000-0000-0000-0000-000000000002'), 'manual value never overwritten');
 select pg_temp.assert_true((select count(*) = 0 from public.confirmed_attendance), 'provisional attendance is never final statistics');
+select pg_temp.expect_denied($q$select public.ff_confirm_attendance('30000000-0000-0000-0000-000000000002')$q$);
+select public.ff_record_attendance('30000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002','absent');
+select public.ff_record_attendance('30000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000004','absent');
+select public.ff_record_attendance('30000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000005','absent');
 select public.ff_confirm_attendance('30000000-0000-0000-0000-000000000002');
 select public.ff_confirm_attendance('30000000-0000-0000-0000-000000000002');
 select pg_temp.assert_true((select count(*) = 1 from public.audit_entries where action = 'attendance_confirmed'), 'confirmation is idempotent');
@@ -217,6 +221,8 @@ select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000002
 set local role authenticated;
 select public.ff_set_event_delegate('30000000-0000-0000-0000-000000000002', null);
 select public.ff_record_attendance('30000000-0000-0000-0000-000000000008', '10000000-0000-0000-0000-000000000003', 'present');
+select public.ff_record_attendance('30000000-0000-0000-0000-000000000008',user_id,'absent')
+from public.event_roster where event_id='30000000-0000-0000-0000-000000000008' and user_id<>'10000000-0000-0000-0000-000000000003';
 select public.ff_confirm_attendance('30000000-0000-0000-0000-000000000008');
 select pg_temp.assert_true((select report_year = 2025 from public.confirmed_attendance where event_id = '30000000-0000-0000-0000-000000000008' and user_id = '10000000-0000-0000-0000-000000000003'), 'year follows Berlin, not UTC');
 reset role;

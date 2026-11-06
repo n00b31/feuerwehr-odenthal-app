@@ -1054,6 +1054,121 @@ unverändert erforderlichen Änderungsgrund und schreibfreie Auswahl bei 390/136
 in Light/Dark sowie vollständige Axe-Prüfung. Dies sind abgefangene Protokollfixtures,
 keine Änderungen an vorhandenen Supabase-Mitgliedschaften.
 
+## 15. DEV 0.3.3 – verbindliche Anwesenheit und Dienstleitung
+
+Grundlage ist Main `557e336abc0ae698d1eb0afb77caa3de9b0e51ea` nach dem Benutzermerge von
+PR #9. Implementierung im Branch `feature/dev-033-attendance`. Kein automatischer Merge,
+keine Veröffentlichung und keine Änderung am separaten Demo-Repository.
+
+### Ursache und Datenmodell
+
+Migration 003 enthielt bereits Ereignissperren, einmalige Vorbelegung, manuelle Werte,
+Bestätigungssnapshots und Audit. Der alte Abschluss ergänzte jedoch fehlende unbekannte
+Zeilen und ließ ungeklärte Personen in bestätigten Listen zu. Es fehlten dauerhafte
+Listenstatus und die DEV-Bedienoberfläche. Ein eindeutiger Index erlaubte dauerhaft nur
+eine aktive Delegation pro Termin. Diese tatsächlichen Lücken werden behoben; Auth,
+Einzeltermine, Mitgliedschaften und Teilnahmeplanung werden nicht neu implementiert.
+
+`20261106001000_attendance_workflow.sql` erweitert vorhandene Tabellen:
+
+| Oberfläche / Daten | Verbindliche Regel |
+|---|---|
+| Listenstatus am Termin | `NOT_STARTED`, `IN_PROGRESS`, `COMPLETED`, `CORRECTED`; Beginn mit Akteur/Zeit, letzte Korrekturzeit |
+| Vorbelegung | Reguläre Dienste/Sonderübungen: beim ersten Öffnen nach Serverbeginn; Zusage → vorläufig anwesend, Absage → vorläufig abwesend, Vielleicht/fehlende Antwort → nicht festgestellt |
+| Originalplanung | Erstanlage jeder Ist-Zeile speichert die damalige Teilnahmeantwort separat. Spätere Planungskorrekturen ändern diesen Snapshot nicht. Historisch nicht gespeicherte Antworten werden nicht erfunden. |
+| Manuelle Erfassung | Ein-Tipp-Werte, Such-/Statusfilter, „Nicht festgestellt“; alle vorhandenen manuellen Werte bleiben beim Vorbelegen erhalten |
+| Abschluss | Nichtleerer historischer Teilnehmerkreis, jede Person vollständig erfasst, keine unbekannten Werte; expliziter Dialog und atomare RPC-Bestätigung mit Akteur/Zeit |
+| Nachträgliche Korrektur | Mindestens fünf, höchstens 2000 Zeichen Begründung; vor/nachher, Person, Termin, Akteur und Zeitpunkt; `CORRECTED`, unveränderlicher Originalabschluss |
+| Delegation | Freigegebenes Mitglied des gespeicherten Rosters, ausschließlich diese Instanz, interne Notiz; keine globale Rolle und keine Weiterdelegation |
+| Mehrere Organisatoren | Vorhandene Delegationstabelle: ein aktiver primärer Organisator plus mehrere unterschiedliche sekundäre. Primärwechsel/-widerruf löscht keine Daten und entzieht keine unabhängige sekundäre Delegation. UI verwaltet nur den primären Organisator. |
+
+Der alte Ein-Personen-Index wird erst durch zwei passende eindeutige Indizes ersetzt,
+danach entfernt; keine Tabelle und keine Bestandszeile wird gelöscht. Migration 010
+bricht bei historischen unvollständigen Abschlüssen ab, statt diese still als gültig zu
+übernehmen. Vorhandene gültige Abschlüsse/Korrekturen werden aus ihrer Historie zugeordnet.
+Geklärte abgeschlossene Listen dürfen nicht nachträglich auf „Nicht festgestellt“
+zurückgesetzt werden: Das würde die Abschlussinvariante verletzen.
+
+### RPCs, RLS und Gleichzeitigkeit
+
+- Vorhandene `ff_prepare_attendance`, `ff_record_attendance`, `ff_confirm_attendance`
+  verwenden weiterhin dieselbe Termin-Zeilensperre und die aktuelle `can_lead_event`-Prüfung.
+  Initialisierung, manuelle Änderung und Abschluss werden dadurch serialisiert.
+  Wiederholtes Öffnen erzeugt weder neue Vorbelegung noch doppelten Audit.
+- `ff_attendance_workspace` liefert die kontrollierte Erfassungsansicht.
+  `ff_set_primary_organizer` prüft die bestehende Bereichsadministration, Roster und
+  aktuelle Freigabe; `ff_set_event_delegate` bleibt als kompatibler Primär-Wrapper erhalten.
+  GLOBAL_ADMIN verwaltet alle, UNIT_ADMIN eigene Einheiten und FUNCTION_ADMIN eigene
+  Funktionen gemäß bestehenden Bereichsprüfungen. Ein delegiertes Mitglied erhält
+  keine Bereichsadministration. Die vorhandene begründete Planungskorrektur für
+  berechtigte Dienstleitung bleibt erhalten und verändert keine Ist-Werte.
+- MEMBER liest ausschließlich eigene bestätigte Ist-Werte; keine vorläufigen Ist-Daten.
+  FIRE_CHIEF liest organisationsweit abgeschlossene Listen ohne Schreibrechte; keine
+  vorläufigen Anwesenheitswerte über Tabellen, Workspace oder Audit. Interne
+  Delegationsnotizen werden nicht an FIRE_CHIEF ausgegeben.
+- `confirmed_attendance` bleibt die vorhandene final-only Datenquelle. Keine neue
+  Jahresstatistik, kein Dienstbuch, kein Export und kein Wehrleiter-Dashboard.
+- Keine privilegierten Tabellenschreibrechte im Browser, kein Service-Role-Key.
+  Zeitsperren verwenden `clock_timestamp()` nach der Ereignissperre.
+  Es gibt keinen DEV-Zeit-Bypass. UI-Zeit ist nur ein zusätzlicher Bedienhinweis.
+- Widerruf gilt beim nächsten Serverbefehl mit demselben Konto/Token. Fehler entfernen
+  die alte Erfassungsansicht. Offene Listen aktualisieren sich spätestens alle zehn
+  Sekunden, Termine alle 30 Sekunden; keine Push-/Realtime-Funktion.
+
+Andere Terminarten behalten die bestehende manuelle Anwesenheitserfassung ohne
+automatische RSVP-Vorbelegung. Serien bleiben erhalten; Bearbeitung/Delegation betrifft
+nur eine konkrete Instanz, keine neue Serienverwaltung.
+
+### Prüfung und kontrollierte Migration
+
+Read-only-Preflight: bestehendes Projekt `orxinqhhbtjpkzwlfaxq`, Migrationen 001–009,
+acht Auth-Konten, zwei Termine, zwei Antworten, keine Ist-Zeilen, Bestätigungen oder
+Delegationen und keine unvollständigen historischen Abschlüsse.
+
+Lokale Typprüfung, ESLint, 89 Unit-Tests und synthetischer Static Export bestanden.
+Die drei neuen abgefangenen Browserabläufe bestanden: Vorbelegung/Filter/Abschluss/
+Korrektur/Reload/eigene bestätigte Werte, genaue Delegation/Widerruf und manipulierte
+Browserzeit. Light/Dark und 390/1366px einschließlich Axe werden geprüft.
+Die PostgreSQL-Suite prüft echte RLS/RPCs mit synthetischen Auth-Fixtures ausschließlich
+in `ff_dev_ci`; ein zusätzlicher Zwei-Verbindungs-Test beobachtet den blockierenden
+Zeilen-Lock tatsächlich. Diese Tests kontaktieren weder DEV-Auth noch Mailboxen.
+
+**Stand vor Anwendung:** Migration 010 noch nicht im gehosteten Projekt angewendet.
+Erst erfolgreicher PostgreSQL-CI-Lauf, dann vollständige einmalige Migration im zuvor
+validierten bestehenden DEV-Projekt. Anschließend Funktionskörper, Grants, Schema,
+Bestandszahlen und Prüfsummen unveränderter Altspalten kontrollieren und den tatsächlichen
+Anwendungsnachweis hier ergänzen. Keine Auth-Fixtures in Supabase DEV ausführen.
+
+### Reale Abnahme nach Benutzermerge – noch offen
+
+Die folgenden Schritte sind vorbereitet, **nicht als durch Menschen durchgeführt
+behauptet**. Zwei vorhandene freigegebene Konten in getrennten Browserprofilen verwenden;
+Passwörter/Token niemals in Chat, Repository oder Prüfprotokoll schreiben.
+
+1. GLOBAL_ADMIN erstellt einen ausdrücklich als Test bezeichneten regulären Dienst für
+   Scheuren mit Beginn in wenigen Minuten. MEMBER sagt zu; Admin sieht die zentrale Antwort.
+2. Vor Beginn: Erfassung gesperrt. Ohne Zeitmanipulation den tatsächlichen Beginn abwarten.
+   Admin öffnet Anwesenheit: Zusage vorläufig anwesend. Andere Antworten gemäß Tabelle prüfen.
+3. Einen echten Test-Abweichler einzeln korrigieren. Alle übrigen Personen bewusst als
+   anwesend/abwesend feststellen; bei unbekannter Person Abschluss gesperrt lassen.
+4. Vollständig geprüfte Liste über Abschlussdialog bestätigen, neu laden.
+   MEMBER aktualisiert und sieht ausschließlich die eigene bestätigte Anwesenheit.
+5. Einen Status nach Abschluss mit dokumentierter Testbegründung ändern. Erwartung:
+   `CORRECTED`, neuer eigener Wert nach Aktualisierung, ursprünglicher Snapshot unverändert.
+6. In Supabase für die bekannte Testtermin-ID `attendance_corrected` in `audit_entries`
+   kontrollieren: Akteur, Person, vor/nachher, Zeitpunkt, Grund und lesbarer Snapshot.
+   `attendance_confirmations.original_snapshot` nur im privilegierten Dashboard prüfen.
+7. Für einen zweiten zeitnahen Testdienst MEMBER als primären Organisator zuweisen.
+   Nur für diesen Termin erscheinen Teilnehmer-/Erfassungsrechte, keine Benutzerverwaltung,
+   keine Weiterdelegation und keine Erfassung anderer Termine/Serieninstanzen.
+8. Delegation widerrufen, im noch offenen MEMBER-Browser erneut schreiben: Server lehnt ab,
+   Historie und Ist-Daten bleiben erhalten. Nach Aktualisierung verschwinden Zusatzrechte.
+
+Zusätzliche manuelle Rollenabnahme mit passenden vorhandenen DEV-Testkonten: UNIT_ADMIN
+eigene/fremde Einheit, FUNCTION_ADMIN eigene/fremde Funktion und FIRE_CHIEF nur final
+lesen. Keine neuen Konten, Mails oder produktiven Daten für diesen Auftrag erforderlich.
+Testereignisse nicht still löschen; Aufbewahrung/Bereinigung bewusst separat entscheiden.
+
 ## Quellen
 
 - [Supabase Passwortauthentifizierung](https://supabase.com/docs/guides/auth/passwords)

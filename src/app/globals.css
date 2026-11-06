@@ -17,6 +17,25 @@
 .member-role-description { display: grid; flex: 1 1 180px; gap: var(--cp-space-2); min-width: 0; overflow-wrap: anywhere; }
 .member-role-status, .member-role-state { display: flex; align-items: center; gap: var(--cp-space-2); }
 .member-role-state { grid-column: 1 / -1; }
+.dev-attendance { margin-block: var(--cp-space-4); }
+.dev-attendance h4, .attendance-state { display: flex; align-items: center; gap: var(--cp-space-2); }
+.dev-attendance > p, .attendance-delegation, .attendance-filters { margin-block: var(--cp-space-3); }
+.attendance-counts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--cp-space-3); padding-block: var(--cp-space-3); }
+.attendance-state.final { color: var(--cp-text); background: color-mix(in srgb, var(--cp-success) 18%, var(--cp-surface)); padding: var(--cp-space-3); border: 1px solid var(--cp-success); border-radius: var(--cp-radius); }
+.attendance-state.final svg { color: var(--cp-success); }
+.attendance-members { list-style: none; padding: 0; }
+.attendance-member { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--cp-space-3); border-bottom: 1px solid var(--cp-border); padding-block: var(--cp-space-4); }
+.attendance-member p { margin-top: var(--cp-space-1); }
+.attendance-buttons { display: flex; flex-wrap: wrap; gap: var(--cp-space-2); }
+.attendance-choice.selected { border-color: var(--cp-success); background: color-mix(in srgb, var(--cp-success) 18%, var(--cp-surface)); color: var(--cp-text); }
+.attendance-choice { min-height: 44px; }
+@media (max-width: 640px) {
+  .dev-attendance .form-grid { grid-template-columns: minmax(0, 1fr); }
+  .dev-attendance .span-2 { grid-column: 1; }
+  .attendance-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .attendance-buttons { width: 100%; }
+  .attendance-buttons .button { flex: 1 1 120px; }
+}
 .member-role.assigned, .member-role-state.assigned { background: color-mix(in srgb, var(--cp-success) 18%, var(--cp-surface)); border-color: var(--cp-success); }
 .member-role-status svg, .member-role-state svg { color: var(--cp-success); flex-shrink: 0; }
 .dev-member .member-role-remove { margin: 0; white-space: normal; }

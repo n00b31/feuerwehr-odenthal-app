@@ -11,6 +11,13 @@ const member = "10000000-0000-4000-8000-000000000002";
 const eventId = "30000000-0000-4000-8000-000000000001";
 const specialFunction = "40000000-0000-4000-8000-000000000001";
 type Response = "yes" | "no" | "maybe";
+type Actual = "present" | "absent" | "unknown";
+type Attendance = {
+  state: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "CORRECTED"; initialized_at: string | null;
+  initialized_by: string | null; prepared_at: string | null; confirmed_at: string | null;
+  confirmed_by: string | null; corrected_at: string | null;
+  rows: Map<string, { status: Actual; origin: "prefill" | "manual"; response: Response | null; recorded_at: string }>;
+};
 type StoredEvent = {
   id: string; title: string; description: string; event_type: string; location: string;
   starts_at: string; ends_at: string; unit_id: string; status: "scheduled" | "cancelled"; revision: number;
@@ -21,6 +28,8 @@ function store() {
     audit: [] as { actor: string; before: Response | undefined; after: Response }[],
     now: Date.now(), broken: false, denyCreation: false,
     memberUnit: unit, memberAdmin: false, memberSuspended: false, memberFunction: false,
+    roster: [admin, member], attendance: new Map<string, Attendance>(), delegates: new Map<string, { user: string; note: string }>(),
+    attendanceAudit: [] as { event: string; actor: string; action: string; user?: string; before?: Actual; after?: Actual; reason?: string }[],
   };
 }
 type Store = ReturnType<typeof store>;
@@ -44,6 +53,14 @@ async function connect(context: BrowserContext, state: Store, actor: string) {
     });
     const denied = () => respond({ code: "42501", message: "Synthetische serverseitige Sperre." }, 403);
     const actorUnit = isAdmin ? unit : state.memberUnit || null;
+    const name = (id: string) => id === admin ? "Synthetic Admin" : id === member ? "Synthetic Member" : `Synthetic Person ${id.slice(-1)}`;
+    const leader = (id: string) => isAdmin || state.delegates.get(id)?.user === actor;
+    const attendance = (id: string) => {
+      if (!state.attendance.has(id)) state.attendance.set(id, { state: "NOT_STARTED", initialized_at: null, initialized_by: null,
+        prepared_at: null, confirmed_at: null, confirmed_by: null, corrected_at: null, rows: new Map() });
+      return state.attendance.get(id)!;
+    };
+    const final = (id: string) => ["COMPLETED","CORRECTED"].includes(attendance(id).state);
     if (path === "/auth/v1/token") {
       const payload = Buffer.from(JSON.stringify({ sub: actor, aud: "authenticated", role: "authenticated", exp: Math.floor(Date.now()/1000)+3600 })).toString("base64url");
       return respond({ access_token: `eyJhbGciOiJIUzI1NiJ9.${payload}.synthetic-signature`,
@@ -113,14 +130,73 @@ async function connect(context: BrowserContext, state: Store, actor: string) {
         server_now: new Date(state.now).toISOString(), manageable_units: isAdmin ? [{ id: unit, name: "Scheuren" }] : [],
         events: state.events.filter((e) => isAdmin || e.unit_id === unit).map((e) => ({
           ...e, series_id: null, response_deadline: null, scope_name: e.unit_id === unit ? "Scheuren" : "Andere Einheit",
-          can_manage: isAdmin, can_lead: isAdmin, in_roster: e.unit_id === unit,
+          can_manage: isAdmin, can_lead: leader(e.id), can_delegate: isAdmin, can_read_attendance: leader(e.id),
+          attendance_state: attendance(e.id).state, own_attendance: final(e.id) ? attendance(e.id).rows.get(actor)?.status ?? null : null,
+          in_roster: e.unit_id === unit,
           own_response: state.answers.get(`${e.id}:${actor}`) ?? null,
-          participants: isAdmin ? [admin, member].map((id) => ({
-            user_id: id, name: id === admin ? "Synthetic Admin" : "Synthetic Member",
+          participants: leader(e.id) ? state.roster.map((id) => ({
+            user_id: id, name: name(id),
             response: state.answers.get(`${e.id}:${id}`) ?? null, updated_at: null,
           })) : null,
         })),
       });
+    }
+    if (path === "/rest/v1/rpc/ff_attendance_workspace") {
+      const id: string = request.postDataJSON().target_event;
+      const e = state.events.find((item) => item.id === id);
+      if (!e || !leader(id)) return denied();
+      const a = attendance(id); const delegate = state.delegates.get(id);
+      return respond({ ...a, rows: undefined, server_now: new Date(state.now).toISOString(), event_id: id,
+        title: e.title, starts_at: e.starts_at, ends_at: e.ends_at, event_type: e.event_type,
+        event_status: e.status, scope_name: "Scheuren", can_manage: leader(id), can_delegate: isAdmin,
+        organizer_name: delegate ? name(delegate.user) : name(admin),
+        primary_organizer: delegate ? { user_id: delegate.user, name: name(delegate.user), note: delegate.note, access_granted: true } : null,
+        candidates: isAdmin ? state.roster.map((id) => ({ id, name: name(id) })) : [],
+        members: state.roster.map((user) => {
+          const row = a.rows.get(user);
+          return { user_id: user, name: name(user), response: row ? row.response : state.answers.get(`${id}:${user}`) ?? null,
+            response_known: true, status: row?.status ?? null, origin: row?.origin ?? null, recorded_at: row?.recorded_at ?? null };
+        }),
+      });
+    }
+    if (path === "/rest/v1/rpc/ff_set_primary_organizer") {
+      const input = request.postDataJSON();
+      if (!isAdmin || (input.target_user && !state.roster.includes(input.target_user))) return denied();
+      if (input.target_user) state.delegates.set(input.target_event, { user: input.target_user, note: input.internal_note });
+      else state.delegates.delete(input.target_event);
+      return respond(null);
+    }
+    if (["/rest/v1/rpc/ff_prepare_attendance","/rest/v1/rpc/ff_record_attendance","/rest/v1/rpc/ff_confirm_attendance"].includes(path)) {
+      const input = request.postDataJSON(); const id: string = input.target_event;
+      const e = state.events.find((item) => item.id === id);
+      if (!e || !leader(id) || state.now < Date.parse(e.starts_at) || e.status !== "scheduled") return denied();
+      const a = attendance(id); const stamp = new Date(state.now).toISOString();
+      if (path.endsWith("ff_prepare_attendance")) {
+        if (a.prepared_at || final(id)) return respond(null);
+        for (const user of state.roster) if (!a.rows.has(user)) {
+          const response = state.answers.get(`${id}:${user}`) ?? null;
+          a.rows.set(user, { status: response === "yes" ? "present" : response === "no" ? "absent" : "unknown",
+            origin: "prefill", response, recorded_at: stamp });
+        }
+        a.state = "IN_PROGRESS"; a.prepared_at = stamp; a.initialized_at ??= stamp; a.initialized_by ??= name(actor);
+        state.attendanceAudit.push({ event: id, actor, action: "prepare" });
+      } else if (path.endsWith("ff_record_attendance")) {
+        if (!state.roster.includes(input.target_user) || (final(id) && (input.attendance_status === "unknown" || (input.reason?.trim().length ?? 0) < 5))) return denied();
+        const previous = a.rows.get(input.target_user);
+        const confirmed = final(id);
+        a.rows.set(input.target_user, { status: input.attendance_status, origin: "manual",
+          response: previous ? previous.response : state.answers.get(`${id}:${input.target_user}`) ?? null, recorded_at: stamp });
+        a.state = confirmed ? "CORRECTED" : "IN_PROGRESS"; a.initialized_at ??= stamp; a.initialized_by ??= name(actor);
+        if (confirmed) a.corrected_at = stamp;
+        state.attendanceAudit.push({ event: id, actor, action: confirmed ? "correct" : "record", user: input.target_user,
+          before: previous?.status, after: input.attendance_status, reason: input.reason ?? undefined });
+      } else {
+        if (final(id)) return respond(null);
+        if (!a.prepared_at || !state.roster.length || state.roster.some((user) => !a.rows.has(user) || a.rows.get(user)?.status === "unknown")) return denied();
+        a.state = "COMPLETED"; a.confirmed_at = stamp; a.confirmed_by = name(actor);
+        state.attendanceAudit.push({ event: id, actor, action: "complete" });
+      }
+      return respond(null);
     }
     if (path === "/rest/v1/rpc/ff_create_single_event") {
       if (!isAdmin || state.denyCreation) return denied();
@@ -150,7 +226,11 @@ async function connect(context: BrowserContext, state: Store, actor: string) {
       return respond(null);
     }
     if (path === "/rest/v1/units") return respond([{ id: unit, name: "Scheuren" }]);
-    if (path === "/rest/v1/document_areas" || path === "/rest/v1/confirmed_attendance" || path === "/rest/v1/rpc/ff_pending_registrations") return respond([]);
+    if (path === "/rest/v1/confirmed_attendance") return respond(state.events.filter((e) => final(e.id) && attendance(e.id).rows.has(actor)).map((e) => ({
+      event_id: e.id, user_id: actor, title: e.title, starts_at: e.starts_at, status: attendance(e.id).rows.get(actor)!.status,
+      report_year: new Date(e.starts_at).getFullYear(), training_hours: 2,
+    })));
+    if (path === "/rest/v1/document_areas" || path === "/rest/v1/rpc/ff_pending_registrations") return respond([]);
     throw new Error(`Unexpected synthetic endpoint: ${path}`);
   });
   await context.route(/https:\/\/(?!syntheticci\.supabase\.co)[^/]+\.supabase\.co\/.*/, (route) => route.abort());
@@ -171,6 +251,134 @@ async function create(page: Page, state: Store) {
   await page.getByLabel("Ort", { exact: true }).fill("Synthetic Gerätehaus");
   await page.getByRole("button", { name: "Termin speichern" }).click();
 }
+
+function attendanceEvent(state: Store, delay = -1000): StoredEvent {
+  return { id: eventId, title: "Synthetic Anwesenheitsdienst", description: "Nur synthetischer Protokolltest", event_type: "regular",
+    unit_id: unit, location: "Synthetic Gerätehaus", starts_at: new Date(state.now + delay).toISOString(),
+    ends_at: new Date(state.now + delay + 7200000).toISOString(), status: "scheduled", revision: 0 };
+}
+
+test("attendance prefill, filters, explicit completion, own final data and reasoned correction survive reload across themes", async ({ browser }) => {
+  const state = store(); state.events = [attendanceEvent(state)];
+  const maybe = "10000000-0000-4000-8000-000000000003", unanswered = "10000000-0000-4000-8000-000000000004";
+  state.roster.push(maybe, unanswered);
+  state.answers.set(`${eventId}:${admin}`, "yes"); state.answers.set(`${eventId}:${member}`, "no"); state.answers.set(`${eventId}:${maybe}`, "maybe");
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const memberContext = await browser.newContext();
+  await connect(context, state, admin); await connect(memberContext, state, member);
+  const page = await context.newPage(), memberPage = await memberContext.newPage();
+  await login(page, true);
+  await page.getByRole("button", { name: "Anwesenheit öffnen" }).click();
+  const panel = page.getByRole("region", { name: "Tatsächliche Anwesenheit" });
+  await expect(panel.getByText("In Bearbeitung", { exact: true })).toBeVisible();
+  await expect(panel.getByRole("listitem", { name: "Synthetic Admin" })).toContainText("Anwesend · Vorläufig");
+  await expect(panel.getByRole("listitem", { name: "Synthetic Member" })).toContainText("Abwesend · Vorläufig");
+  await expect(panel.getByRole("button", { name: "Liste abschließen" })).toBeDisabled();
+  await panel.getByRole("combobox", { name: "Anwesenheitsfilter", exact: true }).selectOption("unknown");
+  await expect(panel.getByRole("listitem")).toHaveCount(2);
+  await panel.getByRole("listitem", { name: "Synthetic Person 3" }).getByRole("button", { name: "Abwesend", exact: true }).click();
+  await expect(panel.getByRole("listitem")).toHaveCount(1);
+  await panel.getByRole("listitem", { name: "Synthetic Person 4" }).getByRole("button", { name: "Abwesend", exact: true }).click();
+  await expect(panel.getByRole("listitem")).toHaveCount(0);
+  await panel.getByRole("combobox", { name: "Anwesenheitsfilter", exact: true }).selectOption("all");
+  await panel.getByLabel("Mitglied suchen", { exact: true }).fill("Member");
+  await expect(panel.getByRole("listitem")).toHaveCount(1);
+  await panel.getByLabel("Mitglied suchen", { exact: true }).fill("");
+  await panel.getByRole("button", { name: "Liste abschließen" }).click();
+  const dialog = page.getByRole("dialog", { name: "Anwesenheitsliste verbindlich abschließen" });
+  await expect(dialog).toBeVisible();
+  expect(state.attendanceAudit.filter((row) => row.action === "complete")).toHaveLength(0);
+  await dialog.getByRole("button", { name: "Weiter prüfen" }).click();
+  await panel.getByRole("button", { name: "Liste abschließen" }).click();
+  await dialog.getByRole("button", { name: "Abschluss bestätigen" }).click();
+  await expect(panel.getByText("Verbindlich abgeschlossen", { exact: true })).toBeVisible();
+  await page.reload(); await page.getByRole("button", { name: "Anwesenheit öffnen" }).click();
+  await expect(panel.getByText("Verbindlich abgeschlossen", { exact: true })).toBeVisible();
+  expect(state.attendanceAudit.filter((row) => row.action === "prepare")).toHaveLength(1);
+  expect(state.attendanceAudit.filter((row) => row.action === "complete")).toHaveLength(1);
+  await login(memberPage, false);
+  await expect(memberPage.getByText("Deine bestätigte Anwesenheit: Abwesend", { exact: true })).toBeVisible();
+  await expect(memberPage.getByRole("button", { name: "Anwesenheit öffnen" })).toHaveCount(0);
+  await panel.getByRole("listitem", { name: "Synthetic Member" }).getByRole("button", { name: "Anwesend", exact: true }).click();
+  const correction = page.getByRole("dialog", { name: "Bestätigte Anwesenheit korrigieren" });
+  await expect(correction.getByRole("button", { name: "Begründete Korrektur speichern" })).toBeDisabled();
+  await correction.getByLabel("Begründung der Anwesenheitskorrektur").fill("Synthetic überprüfte spätere Ankunft");
+  await correction.getByRole("button", { name: "Begründete Korrektur speichern" }).click();
+  await expect(panel.getByText("Nachträglich korrigiert", { exact: true })).toBeVisible();
+  expect(state.attendanceAudit.find((row) => row.action === "correct")).toMatchObject({
+    event: eventId, actor: admin, user: member, before: "absent", after: "present", reason: "Synthetic überprüfte spätere Ankunft",
+  });
+  await memberPage.getByRole("button", { name: "Termine aktualisieren" }).click();
+  await expect(memberPage.getByText("Deine bestätigte Anwesenheit: Anwesend", { exact: true })).toBeVisible();
+  for (const width of [390, 1366]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const theme of ["light", "dark"]) {
+      if (await page.locator("html").getAttribute("data-theme") !== theme) await page.getByRole("button", { name: "Farbschema wechseln" }).click();
+      await expect.poll(() => page.evaluate(() => document.getAnimations().filter((animation) =>
+        animation.playState === "running" && Number.isFinite(animation.effect?.getComputedTiming().endTime)).length)).toBe(0);
+      expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await panel.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: `test-results/dev033-attendance-${width}-${theme}.png` });
+    }
+  }
+  await context.close(); await memberContext.close();
+});
+
+test("event-only organizer can work without an admin role and loses access on the next request after revocation", async ({ browser }) => {
+  const state = store(); state.events = [attendanceEvent(state, 60000), { ...attendanceEvent(state, 60000),
+    id: "30000000-0000-4000-8000-000000000002", title: "Synthetic anderer Dienst" }];
+  const adminContext = await browser.newContext(), memberContext = await browser.newContext();
+  await connect(adminContext, state, admin); await connect(memberContext, state, member);
+  const page = await adminContext.newPage(), memberPage = await memberContext.newPage();
+  await login(page, true);
+  const event = page.locator(".dev-event").filter({ has: page.getByRole("heading", { name: "Synthetic Anwesenheitsdienst" }) });
+  await event.getByRole("button", { name: "Organisator zuweisen" }).click();
+  const panel = event.getByRole("region", { name: "Tatsächliche Anwesenheit" });
+  await panel.getByRole("combobox", { name: "Organisator", exact: true }).selectOption(member);
+  await panel.getByLabel("Interne Notiz (optional)").fill("Synthetic nur dieser Termin");
+  await panel.getByRole("button", { name: "Dienstleitung speichern" }).click();
+  await expect(panel.getByRole("status").filter({ hasText: "Terminbezogene Dienstleitung gespeichert" })).toBeVisible();
+  expect(state.attendanceAudit).toHaveLength(0);
+  state.now += 60001;
+  await login(memberPage, false);
+  await expect(memberPage.getByRole("link", { name: "Administration", exact: true })).toHaveCount(0);
+  await expect(memberPage.getByRole("button", { name: "Anwesenheit öffnen" })).toHaveCount(1);
+  await memberPage.getByRole("button", { name: "Anwesenheit öffnen" }).click();
+  const memberPanel = memberPage.getByRole("region", { name: "Tatsächliche Anwesenheit" });
+  await expect(memberPanel.getByText("In Bearbeitung", { exact: true })).toBeVisible();
+  await expect(memberPanel.getByRole("button", { name: "Dienstleitung speichern" })).toHaveCount(0);
+  await memberPanel.getByRole("listitem", { name: "Synthetic Member" }).getByRole("button", { name: "Anwesend", exact: true }).click();
+  await expect(memberPanel.getByRole("status").filter({ hasText: "Anwesenheit für Synthetic Member gespeichert" })).toBeVisible();
+  const status = await memberPage.evaluate(async ({ api, id }) => {
+    const result = await fetch(`${api}/rest/v1/rpc/ff_prepare_attendance`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ target_event: id }),
+    }); return result.status;
+  }, { api, id: state.events[1].id });
+  expect(status).toBe(403);
+  await panel.getByRole("button", { name: "Delegation widerrufen" }).click();
+  await expect(panel.getByRole("status").filter({ hasText: "Delegation widerrufen" })).toBeVisible();
+  const before = state.attendanceAudit.length;
+  await memberPanel.getByRole("listitem", { name: "Synthetic Admin" }).getByRole("button", { name: "Anwesend", exact: true }).click();
+  await expect(memberPanel.getByRole("alert")).toContainText("Anfrage abgewiesen");
+  await expect(memberPanel.getByRole("listitem")).toHaveCount(0);
+  expect(state.attendanceAudit).toHaveLength(before);
+  await memberPage.getByRole("button", { name: "Termine aktualisieren" }).click();
+  await expect(memberPage.getByRole("button", { name: "Anwesenheit öffnen" })).toHaveCount(0);
+  await adminContext.close(); await memberContext.close();
+});
+
+test("a forged browser wall clock unlocks neither attendance UI nor synthetic server-time gate", async ({ context, page }) => {
+  const state = store(); state.events = [attendanceEvent(state, 3600000)];
+  await context.addInitScript(() => { Date.now = () => 4_000_000_000_000; });
+  await connect(context, state, admin); await login(page, true);
+  await expect(page.getByRole("button", { name: "Anwesenheit öffnen" })).toBeDisabled();
+  const status = await page.evaluate(async ({ api, id }) => (await fetch(`${api}/rest/v1/rpc/ff_prepare_attendance`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ target_event: id }),
+  })).status, { api, id: eventId });
+  expect(status).toBe(403);
+  expect(state.attendanceAudit).toHaveLength(0);
+});
 
 test("two independent sessions centrally create, respond, change, reload, edit and cancel one shared event", async ({ browser }) => {
   const state = store();

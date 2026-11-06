@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { devResponseSchema, devEventTypeSchema, devEventPayloadSchema, type DevEventPayload, type DevResponse } from "@/domain/dev-events";
 import { memberRoleSchema, membersWorkspaceSchema, memberRoleInputSchema, memberReasonSchema } from "@/domain/dev-members";
+import { attendanceWorkspaceSchema, attendanceStateSchema, attendanceStatusSchema, type AttendanceStatus } from "@/domain/dev-attendance";
 
 const roleSchema = memberRoleSchema;
 export const accessSchema = z.object({
@@ -25,6 +26,8 @@ export const devEventSchema = z.object({
   response_deadline: z.iso.datetime({ offset: true }).nullable(),
   revision: z.number().int().nonnegative(), scope_name: z.string(),
   can_manage: z.boolean(), can_lead: z.boolean(), in_roster: z.boolean(),
+  can_delegate: z.boolean(), can_read_attendance: z.boolean(), attendance_state: attendanceStateSchema,
+  own_attendance: z.enum(["present", "absent"]).nullable(),
   own_response: devResponseSchema.nullable(),
   participants: z.array(z.object({
     user_id: z.uuid(), name: z.string(), response: devResponseSchema.nullable(),
@@ -90,6 +93,27 @@ export async function readDevData(client: SupabaseClient, access: Access): Promi
 
 export async function readEventWorkspace(client: SupabaseClient): Promise<EventWorkspace> {
   return eventWorkspaceSchema.parse(checked(await client.rpc("ff_events_workspace")));
+}
+export async function readAttendanceWorkspace(client: SupabaseClient, eventId: string) {
+  return attendanceWorkspaceSchema.parse(checked(await client.rpc("ff_attendance_workspace", { target_event: z.uuid().parse(eventId) })));
+}
+export async function prepareAttendance(client: SupabaseClient, eventId: string) {
+  checked(await client.rpc("ff_prepare_attendance", { target_event: z.uuid().parse(eventId) }));
+}
+export async function recordAttendance(client: SupabaseClient, eventId: string, userId: string, status: AttendanceStatus, reason?: string) {
+  checked(await client.rpc("ff_record_attendance", {
+    target_event: z.uuid().parse(eventId), target_user: z.uuid().parse(userId), attendance_status: attendanceStatusSchema.parse(status),
+    reason: reason === undefined ? null : memberReasonSchema.parse(reason),
+  }));
+}
+export async function completeAttendance(client: SupabaseClient, eventId: string) {
+  checked(await client.rpc("ff_confirm_attendance", { target_event: z.uuid().parse(eventId) }));
+}
+export async function assignOrganizer(client: SupabaseClient, eventId: string, userId: string | null, note: string) {
+  checked(await client.rpc("ff_set_primary_organizer", {
+    target_event: z.uuid().parse(eventId), target_user: z.uuid().nullable().parse(userId),
+    internal_note: z.string().trim().max(2000, "Interne Notiz: höchstens 2000 Zeichen.").parse(note),
+  }));
 }
 
 export async function saveSingleEvent(client: SupabaseClient, input: DevEventPayload, event?: { id: string; revision: number }) {
