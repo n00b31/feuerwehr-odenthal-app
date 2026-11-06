@@ -1386,7 +1386,7 @@ registriert oder auf Aktualisierungen geprüft zu werden.
 | Pages-Deployment | ID `7603416192`, SHA `88a10b95…`, Environment `github-pages`, Status erfolgreich um 15:14:02 UTC |
 | Tatsächlich deploytes Artefakt | `github-pages`, Artifact-ID `13514507290`, zugehöriger `workflow_run.head_sha` ebenfalls `88a10b95…` |
 | Kein Demo-/Altartefakt | Entpacktes `github-pages/artifact.tar` und `supabase-dev-export` haben alle 71 Dateien bytegleich; Uploadpfad ist `out` des frischen DEV-Jobs |
-| Öffentliche Dateien | HTML `/termine/`, alle zwölf darin referenzierten JS-Dateien, CSS, Manifest und `sw.js`: 16 von 16 SHA256-Vergleichen stimmen mit dem deployten Artefakt überein |
+| Öffentliche Dateien | Zunächst 16 Einstieg-/Bundle-Dateien geprüft; anschließend alle 71 exportierten Dateien einschließlich aller Routen und RSC-Dateien: 71 von 71 SHA256-Vergleichen stimmen mit dem deployten Artefakt überein |
 | Tatsächlich ausgeführte DEV-Komponenten | Frische Live-Ansicht lädt `0t2hyxbr9poqf.js`, zeigt „DEV 0.3.4“, Monats-/Historiensteuerung und statusbezogene Klassen; echte Anfragen gehen an `orxinqhhbtjpkzwlfaxq.supabase.co` |
 
 GitHub meldet für das **ZIP-Artefakt** den Digest
@@ -1515,6 +1515,13 @@ Die drei neuen Update-/Worker-Szenarien wurden nach der Race-Korrektur zusätzli
 dreimal ausgeführt (9 erfolgreiche Wiederholungsfälle). Die Demo-Prüfung betrifft
 nur den lokalen Regressionsmodus dieses Repositories, keine Änderung oder
 Veröffentlichung des separaten Demo-Repositories.
+
+Der erste PR-CI-Lauf fand im bestehenden Audit-Axe-Test einen Farb-Zwischenstand
+direkt beim Themewechsel: dunkle Schrift traf noch auf den laufenden Übergang
+des Button-Hintergrunds (4,41 statt 4,5 Kontrast). Dieser Test verwendet jetzt wie
+die übrigen Theme-Audits `reducedMotion: "reduce"` und prüft beide fertigen Themes,
+ohne Kontrastregeln abzuschalten oder die Anwendungsfarben zu verändern.
+Zehn Wiederholungen gegen exakt das heruntergeladene CI-Artefakt waren erfolgreich.
 
 ### Einmalige Altclient- und PWA-Abnahme
 

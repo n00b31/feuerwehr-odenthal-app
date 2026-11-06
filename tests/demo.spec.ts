@@ -201,6 +201,7 @@ test("administration and attendance dialogs are accessible in both themes and on
 });
 
 test("legacy audit shows person names and event title/date, with raw IDs only in technical details", async ({ page }, info) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await profile(page, "Lukas Weber");
   await page.goto(publicPath("/administration"));
   const startsAt = await page.evaluate((key) => {
