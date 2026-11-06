@@ -1308,8 +1308,38 @@ Unmittelbarer Vorher-/Nachher-Vergleich: sämtliche öffentlichen Tabellenzeilen
 Originalantworten) und Auth-Kontenmetadaten identisch. Acht Konten, vier Termine,
 14 Anwesenheiten, ein Abschluss. Keine echten Kontoaktionen, Testwrites oder Mails.
 
-012-Kompatibilitätsmigration, finale CI einschließlich 19 bestehender Demo-Browserfälle
-und echtem konfiguriertem DEV-Export: Nachweise vor Abschluss ergänzen.
+Die [vollständige PostgreSQL-CI 42238180602](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42238180602)
+prüft auch 012 erfolgreich: der Legacy-Client behält alle 83 berechtigten
+Fixture-Termine, der neue Client nur fünf bzw. Monatsseiten. Nach diesem Erfolg
+wurde 012 einmalig als
+`20261106145653 / ff_012_legacy_workspace_compatibility` angewendet.
+Normalisierte Quell-SHA256:
+`b896cee2157096144aaae9f483ec34c466da4fc083c61a13cc251d7fee2e2a5e`.
+Erneuter unmittelbarer Vorher-/Nachher-Abgleich: alle öffentlichen Daten und
+Auth-Metadaten weiterhin identisch zum Stand vor 011. Der Legacy-Funktionskörper
+entspricht wieder exakt 010. Kein vorhandener Termin/Status/Abschluss/Audit geändert.
+
+Unabhängige normalisierte Hosted-Funktions-MD5s im Endstand:
+
+| Funktion | MD5 |
+|---|---|
+| `public.ff_prepare_attendance` | `3b443e41b16a52e90e2a93e5e3d997c9` |
+| `ff_private.event_summary` | `f15fcf0f9264596ca7a97d11d5d70234` |
+| `public.ff_events_page` | `bc7ab8dbe3f4f7fdb885e0a0a945864b` |
+| `public.ff_events_workspace` (unverändert zu 010) | `85b1b8ad57f943cc10a5ef543a3bc4c1` |
+
+Alle vier: SECURITY DEFINER, leerer search_path, kein anon-Execute; private
+Serialisierung auch ohne authenticated-Execute, öffentliche RPCs nur authenticated.
+RLS/Grants/Indizes sind geprüft; SQL-Tests wurden ausschließlich im wegwerfbaren
+CI-PostgreSQL ausgeführt, nicht als Fixtures auf Hosted DEV.
+
+Die [Pages-Validierung 42237680964](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42237680964)
+ist ebenfalls erfolgreich: 92 Unit-Tests, 19 bestehende Demo-Browserfälle,
+18 synthetische DEV-/Auth-Browserfälle, Typen/Lint und echter konfigurierter
+statischer DEV-Export. Veröffentlichung übersprungen.
+Aktuelle Commit-/CI-Prüfungen: [PR #11](https://github.com/n00b31/feuerwehr-odenthal-app/pull/11).
+Die neue Oberfläche ist noch nicht veröffentlicht. Keine Änderungen am separaten
+Demo-Repository. Temporäre lokale Vorschau nach erfolgreicher Prüfung gestoppt.
 
 ### Manuelle Prüfung und Grenzen
 
