@@ -132,9 +132,10 @@ Einheiten und 65 Dienste. Migration 013 läuft nach 001–012. Das bestehende
 persistente Konkurrenztest-Fixture muss weiterhin zuletzt ausgeführt werden.
 
 Der erfolgreiche PostgreSQL-Lauf
-[42295196626](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42295196626)
-prüfte den Zwischenstand `8eaa980`; eine Jahresaggregation mit 250 Mitgliedern
-dauerte dort **287,937 ms**, einschließlich 32.500 Teilnehmerstunden,
+[42296947978](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42296947978)
+prüfte die finale SQL-Quelle aus `a67df4d120265e469ac953d5760b8b72423c4d9c`;
+eine Jahresaggregation mit 250 Mitgliedern dauerte dort **288,905 ms**,
+einschließlich 32.500 Teilnehmerstunden,
 50+15 Seitenaufteilung und vollständigem Export. Das ist eine gemessene
 CI-Ausführung, keine garantierte Hosting-Latenz.
 
@@ -152,6 +153,39 @@ kontrollieren und nur diese additive Migration anwenden. Keine Konten, Rollen
 oder vorhandenen Anwesenheiten zur Abnahme verändern. Danach Funktionsdefinitionen,
 RLS/Grants, sechs Konfigurationswerte und Berichtsergebnisse lesend prüfen.
 Eine PR-Erstellung oder ein Feature-Branch-Workflow veröffentlicht keine Pages-Version.
+
+### Tatsächlich angewendet und geprüft am 06.11.2026
+
+Nach bestätigtem Projektziel und vorhandenen Migrationen 001–012 wurde Migration
+013 kontrolliert als **`20261106213649` / `ff_013_dutybook_reports`** angewendet.
+SHA-256 der getesteten lokalen Datei:
+`ceabeae35df0afb69387e5fa96d382e87c92959aa9daeb39b221f968ea0670be`.
+Alle sechs normalisierten Funktionsquell-Hashes stimmen auf dem Server mit dieser
+Datei überein. Vier Indizes, aktive SELECT-RLS, sechs Standard-Klassifikationen,
+entzogene direkte Schreibrechte, nur authentifiziert aufrufbare öffentliche RPCs,
+nicht aufrufbare private Helfer und `security_invoker` der View sind nachgewiesen.
+
+Zusätzlicher **echter, rein lesender SQL-RPC-Lauf** auf den vorhandenen DEV-Daten,
+mit `SET LOCAL ROLE authenticated` und vorhandenen MEMBER-/UNIT_ADMIN-/GLOBAL_ADMIN-
+Zuordnungen, vollständig mit Rollback: eigene/zugewiesene/organisationsweite
+Bereiche funktionieren; MEMBER wird für Einheit und Organisation abgewiesen,
+UNIT_ADMIN für fremde Einheit und Organisation. Der vollständige scoped Export
+wurde ebenfalls serverseitig gelesen. Das ist keine Auth-/Browserabnahme.
+
+Die unabhängig aus finalen Ist-Zeilen gegengeprüfte Organisationssumme 2026:
+acht historische Mitglieder, ein abgeschlossener Dienst, fünf Anwesende,
+zwei Abwesende, zehn Teilnehmerstunden, durchschnittlich fünf Anwesende.
+Der einzige abgeschlossene Dienst ist nicht ausbildungsrelevant: folgerichtig
+null Ausbildungsstunden und **keine berechenbare Ausbildungsquote**, nicht 0 %.
+Vier offene Listen sind ausgeschlossen. Die Datenbank enthält unverändert fünf
+Einheiten, acht Profile und sechs Termine; keine FIRE_CHIEF-Zuweisung hinzugefügt.
+Keine bestehenden Konten, Mitgliedschaften, Rollen oder Anwesenheiten verändert.
+
+Lokal erfolgreich: **107 Unit-/Skripttests, 27 synthetische DEV-Browserfälle,
+19 bestehende Demo-Browserfälle**, ESLint, TypeScript und statische DEV-/Demo-Builds.
+Die neuen Berichte wurden bei 320/390/1440 Pixeln in Light/Dark mit Axe geprüft;
+Tabellen scrollen innerhalb ihres Bereichs und sind per Tastatur fokussierbar.
+Virtuelle Zeitfortschritte sind ausdrücklich kein neuer 130-Sekunden-Echtzeittest.
 
 ## Vorbereitete echte DEV-Abnahme
 

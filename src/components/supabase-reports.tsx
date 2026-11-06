@@ -160,7 +160,7 @@ export function SupabaseReports({ client, access, personalOnly = false }: {
           {filters.scope === "organization" && <button className="button secondary" disabled={exporting || busy} onClick={() => void download("units")}>Einheiten als CSV</button>}
         </div>
         <p className="muted text-sm">UTF-8-CSV mit Excel-Trennzeichen, deutschen Zahlen und Zeiten in Europe/Berlin. Der Export lädt alle berechtigten Dienste des gewählten Jahres/Filters erneut serverseitig, nicht nur diese Seite.</p>
-        {report.units.length>0 && <section className="card section-card"><h3>Einheiten im Vergleich</h3><div className="table-scroll"><table>
+        {report.units.length>0 && <section className="card section-card"><h3>Einheiten im Vergleich</h3><div className="table-scroll" tabIndex={0} role="region" aria-label="Einheitsvergleich horizontal scrollen"><table>
           <caption className="sr-only">Einheitsvergleich {report.year}</caption><thead><tr><th>Einheit</th><th>Mitglieder</th><th>Ausbildungen</th><th>Quote</th><th>Teilnehmerstunden</th></tr></thead>
           <tbody>{report.units.map((unit) => <tr key={unit.id}><th scope="row">{unit.name}</th><td>{unit.members}</td><td>{unit.metrics.training_services}</td>
             <td>{reportRate(unit.metrics.rate)}{unit.metrics.rate !== null && <div className="bar-track" aria-hidden="true"><i style={{ width: `${unit.metrics.rate}%` }} /></div>}</td>
@@ -170,7 +170,7 @@ export function SupabaseReports({ client, access, personalOnly = false }: {
             <label>Mitglieder sortieren<select value={sort} onChange={(event) => setSort(event.target.value)}>
               <option value="name">Name</option><option value="attendance">Teilnahmen absteigend</option><option value="rate">Quote absteigend</option><option value="hours">Ausbildungsstunden absteigend</option>
             </select></label></div>
-          <div className="table-scroll"><table><caption className="sr-only">Berechtigte Mitglieder im Bericht {report.year}</caption>
+          <div className="table-scroll" tabIndex={0} role="region" aria-label="Mitgliederübersicht horizontal scrollen"><table><caption className="sr-only">Berechtigte Mitglieder im Bericht {report.year}</caption>
             <thead><tr><th>Name</th><th>Relevante Dienste</th><th>Teilnahmen</th><th>Fehlzeiten</th><th>Quote</th><th>Ausbildungsstunden</th></tr></thead>
             <tbody>{members.map((member) => <tr key={member.user_id}><th scope="row">{member.name}</th><td>{member.metrics.training_services}</td>
               <td>{member.metrics.training_present}</td><td>{member.metrics.training_absent}</td><td>{reportRate(member.metrics.rate)}</td><td>{reportNumber(member.metrics.training_hours)} h</td></tr>)}</tbody>
@@ -180,7 +180,7 @@ export function SupabaseReports({ client, access, personalOnly = false }: {
           <span className="year-tag">{report.event_count} Dienste · {report.year}</span></div>
           {report.events.length===0 ? <Empty title="Keine abgeschlossenen Dienste für diese Auswahl">
             Es wird keine Anwesenheitsquote erfunden. Ein anderes Berichtsjahr oder einen anderen Filter auswählen.
-          </Empty> : <div className="table-scroll"><table><caption className="sr-only">Bestätigte Dienste, neueste zuerst</caption>
+          </Empty> : <div className="table-scroll" tabIndex={0} role="region" aria-label="Diensthistorie horizontal scrollen"><table><caption className="sr-only">Bestätigte Dienste, neueste zuerst</caption>
             <thead><tr><th>Datum / Dienst</th><th>Einheit / Bereich</th><th>Dauer</th><th>{filters.scope === "personal" ? "Eigener Status" : "Anwesend / Abwesend"}</th><th>Details</th></tr></thead>
             <tbody>{report.events.map((event) => <tr key={event.event_id}><th scope="row">{dateLabel(event.starts_at, { year: "numeric" })}<small>{event.title} · {EVENT_TYPES[event.event_type]}</small></th>
               <td>{event.unit_name}</td><td>{event.hours === null ? "Ungültige Zeit" : `${reportNumber(event.hours)} h`}</td>
