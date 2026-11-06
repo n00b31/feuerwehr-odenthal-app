@@ -1229,8 +1229,8 @@ Implementierungsplan und Umsetzung:
 
 ### Datenbank, Rechte und Bestand
 
-`supabase/migrations/20261106001100_event_list_ux.sql` ersetzt ausschließlich
-`ff_prepare_attendance` und den bisherigen Workspace-Wrapper und ergänzt:
+`supabase/migrations/20261106001100_event_list_ux.sql` ersetzt
+`ff_prepare_attendance` und ergänzt:
 
 - `ff_events_page(list_view,month_key,after_start,after_id,status_filter,retained_ids)`.
   Nur `authenticated` darf ausführen; aktive Freigabe und bestehendes
@@ -1240,8 +1240,17 @@ Implementierungsplan und Umsetzung:
   Teilnehmernamen bleiben Leitung/Übersehern vorbehalten, eigene finale Ist-Werte
   bleiben wie in DEV 0.3.3 geschützt. Keine Auth-/RLS-/Rollenlockerung.
 - Indizes `events_list_start(starts_at,id)` und `events_list_end(ends_at)`.
-  `ff_events_workspace()` bleibt kompatibel, liefert jetzt ebenfalls nur die
-  begrenzte Standardansicht. Auch Auth-Initialisierung lädt keine gesamte Terminliste.
+  Auch die neue Auth-Initialisierung verwendet ausschließlich `ff_events_page`
+  und lädt keine gesamte Terminliste.
+
+Migration 012 (`20261106001200_legacy_workspace_compatibility.sql`) stellt den
+ursprünglichen `ff_events_workspace()` aus 010 unverändert wieder her. Der noch
+veröffentlichte 0.3.3-Client hat keinen Historienfilter und benötigt vor dem
+manuellen Frontend-Merge weiter seine alte, berechtigte Gesamtansicht.
+011 hatte dessen Wrapper vorübergehend auf die begrenzte Standardliste umgestellt.
+Diese additive Korrektur erhält das alte Clientverhalten; die bereits angewendete
+011-Datei wird nicht umgeschrieben. 0.3.4 ruft den Legacy-RPC weder beim Auth-Start
+noch beim Polling auf. Die PostgreSQL-Suite prüft ausdrücklich beide Verträge.
 
 Nur **neue erste** Übungs-/Sonderübungs-Vorbereitungen verwenden Zusage → vorläufig
 anwesend, Absage/Vielleicht/ohne Antwort → vorläufig abwesend. Ereignis-Lock,
@@ -1264,7 +1273,7 @@ still überschrieben, sondern weiterhin serverseitig als Versionskonflikt abgewi
 Geändert: `src/auth/use-dev-auth.ts`, `src/components/supabase-dev.tsx`,
 `supabase-events.tsx`, `supabase-attendance.tsx`, `src/app/globals.css`,
 `src/data/supabase-repository.ts`, `src/domain/dev-events.ts`.
-Neu: `src/domain/dev-event-list.ts` samt Unit-Tests, Migration 011 und
+Neu: `src/domain/dev-event-list.ts` samt Unit-Tests, Migrationen 011/012 und
 `supabase/tests/event-list.sql`. Regressionen in `authorization.sql`,
 `attendance.sql`, `tests/supabase-auth.spec.ts` und `tests/supabase-events.spec.ts`
 angepasst/ergänzt. Die bestehende PostgreSQL-CI führt zusätzlich die Listensuite aus.
@@ -1281,9 +1290,26 @@ Ansicht bleiben erhalten. Keine echte Anmeldung oder menschliche Geräteabnahme
 wird daraus abgeleitet. Initiale Testfehler (redundante erste Nachabfrage und
 vorbelegtes Monatsfeld in der Historienansicht) wurden an der Ursache behoben.
 
-PostgreSQL-CI, 19 bestehende Demo-Browserfälle, echter konfigurierter DEV-Export
-und kontrollierte Hosted-Anwendung/Bestandsvergleich: Nachweise vor Abschluss ergänzen.
-Migration 011 zu diesem Dokumentationsstand noch nicht auf Hosted DEV angewendet.
+Die [PostgreSQL-CI 42237680953](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42237680953)
+ist tatsächlich erfolgreich, einschließlich Monatsgrenzen/Keyset, RLS und
+beobachteter Zwei-Verbindungs-Sperre. Der erste Lauf deckte eine reine CI-Fixture-
+Reihenfolge auf: der Concurrency-Test committet seinen isolierten Bootstrap.
+Die neue zurückgerollte Listensuite läuft deshalb vor ihm; der Einmal-Bootstrap-
+Schutz wurde nicht gelockert.
+
+011 wurde nach diesem Erfolg einmalig als `20261106145251 / ff_011_event_list_ux`
+angewendet. Normalisierte Quell-SHA256:
+`48934c575f6296d46132f2fb23ee53f8c31da5bb66d05c125a1c3b5a4cb02b86`.
+Alle vier Funktionskörper stimmen unabhängig mit der CI-geprüften Quelle überein,
+SECURITY DEFINER/leerem search_path, Execute-Grants und beiden gültigen Indizes.
+Alle öffentlichen Tabellen behalten RLS, keine direkten Browser-DML-Rechte.
+Unmittelbarer Vorher-/Nachher-Vergleich: sämtliche öffentlichen Tabellenzeilen
+(einschließlich 14 Ist-Werten, Abschluss, Audit, Mitgliedschaften, Rollen und
+Originalantworten) und Auth-Kontenmetadaten identisch. Acht Konten, vier Termine,
+14 Anwesenheiten, ein Abschluss. Keine echten Kontoaktionen, Testwrites oder Mails.
+
+012-Kompatibilitätsmigration, finale CI einschließlich 19 bestehender Demo-Browserfälle
+und echtem konfiguriertem DEV-Export: Nachweise vor Abschluss ergänzen.
 
 ### Manuelle Prüfung und Grenzen
 

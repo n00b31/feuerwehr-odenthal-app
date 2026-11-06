@@ -48,6 +48,8 @@ values('89000000-0000-4000-8000-000000000001','Synthetic foreign','regular','203
 select set_config('request.jwt.claim.sub','83000000-0000-4000-8000-000000000002',true);
 set local role authenticated;
 select pg_temp.list_ok(jsonb_array_length(public.ff_events_page()->'events')=5,'default returns only five');
+select pg_temp.list_ok(jsonb_array_length(public.ff_events_workspace()->'events')=83,
+  'published legacy client retains all authorized history until manual frontend merge');
 select pg_temp.list_ok(public.ff_events_page()#>>'{events,0,title}'='Synthetic upcoming 1'
   and public.ff_events_page()#>>'{events,4,title}'='Synthetic upcoming 5','upcoming ascending');
 select pg_temp.list_ok(public.ff_events_page('past')#>>'{events,0,title}'='Synthetic past 1'
