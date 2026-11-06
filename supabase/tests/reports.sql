@@ -56,7 +56,8 @@ from (values
   (6,'regular','2025-12-01 08:00Z'::timestamptz,99.0,'unit'),
   (7,'training','2025-11-15 16:00Z'::timestamptz,2.0,'organization'),
   (8,'training','2025-12-15 16:00Z'::timestamptz,1.0,'function'),
-  (9,'regular','2025-01-01 16:00Z'::timestamptz,2.0,'unit')
+  (9,'regular','2025-01-01 16:00Z'::timestamptz,2.0,'unit'),
+  (10,'training','2025-12-31 23:30Z'::timestamptz,2.0,'unit')
 ) fixture(i,kind,stamp,duration,scope);
 insert into public.event_roster(event_id,user_id,unit_snapshot_id,name_snapshot)
 select e.id,'91000000-0000-4000-8000-000000000002',current_setting('report.unit')::uuid,'Synthetic historical member'
@@ -96,6 +97,9 @@ select pg_temp.report_ok(public.ff_year_report(2024)#>'{summary,rate}'='null'::j
   and public.ff_year_report(2024)#>>'{summary,training_hours}'='0','empty year has no fabricated rate');
 select pg_temp.report_ok(jsonb_array_length(public.ff_year_report(2025,'personal',current_setting('report.other')::uuid)->'events')=0,
   'transfer to current unit does not move historical services');
+select pg_temp.report_ok(public.ff_year_report(2026)#>>'{events,0,title}'='Synthetic report service 10'
+  and (public.ff_year_report(2026)#>>'{summary,training_hours}')::numeric=2,
+  'Berlin January midnight belongs to 2026 despite UTC 2025');
 select pg_temp.report_ok(jsonb_array_length(public.ff_year_report(2025,'personal',null,'community')->'events')=1
   and public.ff_year_report(2025,'personal',null,'community')#>>'{summary,training_hours}'='0','event type filter and default classification');
 select pg_temp.report_ok((select count(*)=0 from public.actual_attendance where user_id<>auth.uid())
@@ -171,6 +175,13 @@ set local role authenticated;
 select pg_temp.report_ok(public.ff_year_report(2025)#>'{summary,rate}'='null'::jsonb
   and public.ff_year_report(2025)#>>'{summary,unknown}'='1','missing attendance is visible and suppresses misleading rate');
 reset role;
+delete from public.event_roster where event_id='92000000-0000-4000-8000-000000000001'
+  and user_id='91000000-0000-4000-8000-000000000002';
+select set_config('request.jwt.claim.sub','91000000-0000-4000-8000-000000000002',true);
+set local role authenticated;
+select pg_temp.report_ok(public.ff_year_report(2025)#>>'{summary,missing_roster}'='1',
+  'eligible membership with missing roster is visible, not silently omitted');
+reset role;
 insert into public.unit_memberships(user_id,unit_id,valid_from,valid_until)
   values('91000000-0000-4000-8000-000000000002',current_setting('report.unit')::uuid,'2025-08-01 00:00Z','2025-08-02 00:00Z');
 select set_config('request.jwt.claim.sub','91000000-0000-4000-8000-000000000002',true);
@@ -183,6 +194,66 @@ select pg_temp.report_ok(not has_function_privilege('authenticated',
 set local role anon;
 select pg_temp.report_denied($q$select public.ff_year_report(2025)$q$);
 select pg_temp.report_denied($q$select public.ff_reports_context()$q$);
+reset role;
+do $$ begin
+  begin
+    update public.events set ends_at=starts_at where id='92000000-0000-4000-8000-000000000002';
+    raise exception 'FAIL: negative/zero duration accepted';
+  exception when check_violation then raise notice 'PASS: non-positive duration rejected'; end;
+  begin
+    update public.events set starts_at=null where id='92000000-0000-4000-8000-000000000002';
+    raise exception 'FAIL: missing start accepted';
+  exception when not_null_violation then raise notice 'PASS: missing start rejected'; end;
+  begin
+    insert into public.event_roster select * from public.event_roster limit 1;
+    raise exception 'FAIL: duplicate attendance key accepted';
+  exception when unique_violation then raise notice 'PASS: duplicate roster/attendance key rejected'; end;
+  begin
+    update public.unit_memberships set valid_until=valid_from where user_id='91000000-0000-4000-8000-000000000003';
+    raise exception 'FAIL: invalid membership period accepted';
+  exception when check_violation then raise notice 'PASS: invalid membership period rejected'; end;
+end $$;
+
+-- Representative annual workload: 250 people, five units, 65 shared services.
+insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data)
+select ('97000000-0000-4000-8000-'||lpad(i::text,12,'0'))::uuid,
+  'synthetic.report.scale.'||i||'@feuerwehr-odenthal.de',clock_timestamp(),
+  jsonb_build_object('display_name','Synthetic Scale '||i) from generate_series(1,250) i;
+update public.profiles p set status='approved',approved_at=clock_timestamp(),
+  approved_by='91000000-0000-4000-8000-000000000001',approved_email=a.email
+  from auth.users a where a.id=p.id and p.id::text like '97000000-%';
+insert into public.unit_memberships(user_id,unit_id,valid_from)
+select p.id,u.id,'2023-01-01 00:00Z' from public.profiles p
+join (select id,row_number() over(order by code) as n from public.units) u
+  on u.n=1+(right(p.id::text,12)::int-1)%5 where p.id::text like '97000000-%';
+insert into public.events(id,title,event_type,starts_at,ends_at,location,scope_kind,organizer_id,attendance_state)
+select ('98000000-0000-4000-8000-'||lpad(i::text,12,'0'))::uuid,'Synthetic Scale Service '||i,'regular',
+  '2023-01-01 16:00Z'::timestamptz+i*interval '1 day',
+  '2023-01-01 18:00Z'::timestamptz+i*interval '1 day','Synthetic','organization',
+  '91000000-0000-4000-8000-000000000001','COMPLETED' from generate_series(1,65) i;
+insert into public.event_roster(event_id,user_id,unit_snapshot_id,name_snapshot)
+select e.id,m.user_id,m.unit_id,p.display_name from public.events e cross join public.unit_memberships m
+  join public.profiles p on p.id=m.user_id where e.id::text like '98000000-%' and p.id::text like '97000000-%';
+insert into public.actual_attendance(event_id,user_id,status,origin,recorded_by)
+select event_id,user_id,'present','manual','91000000-0000-4000-8000-000000000001'
+  from public.event_roster where event_id::text like '98000000-%';
+insert into public.attendance_confirmations(event_id,confirmed_by,original_snapshot)
+select id,'91000000-0000-4000-8000-000000000001','[]' from public.events where id::text like '98000000-%';
+select set_config('request.jwt.claim.sub','91000000-0000-4000-8000-000000000005',true);
+set local role authenticated;
+do $$ declare started timestamptz; result jsonb; begin
+  started:=clock_timestamp();
+  result:=public.ff_year_report(2023,'organization');
+  perform pg_temp.report_ok(result#>>'{summary,members}'='250' and result#>>'{summary,training_services}'='65'
+    and (result#>>'{summary,participant_hours}')::numeric=32500,'250 members across five units, no double count');
+  perform pg_temp.report_ok(jsonb_array_length(result->'events')=50 and result->>'has_more'='true',
+    'annual event history bounded to 50 services');
+  raise notice '250-member annual aggregation: % ms',extract(epoch from clock_timestamp()-started)*1000;
+end $$;
+select pg_temp.report_ok(jsonb_array_length(public.ff_year_report(2023,'organization',null,null,1)->'events')=15,
+  'second page returns remaining services');
+select pg_temp.report_ok(jsonb_array_length(public.ff_year_report(2023,'organization',null,null,0,true)->'events')=65,
+  'server export includes complete authorized history, not only visible page');
 reset role;
 \echo 'Dutybook eligibility, final-only hours, corrections, scopes, FIRE_CHIEF and direct RLS passed.'
 rollback;

@@ -49,10 +49,6 @@ const documentSchema = z.object({
   id: z.uuid(), name: z.string(), description: z.string(),
   sharepoint_url: z.url().regex(/^https:\/\/[^/@?#\s]+\.sharepoint\.com\//),
 });
-const attendanceSchema = z.object({
-  event_id: z.uuid(), user_id: z.uuid(), title: z.string(), starts_at: z.string(),
-  status: z.enum(["present", "absent", "unknown"]), report_year: z.number(), training_hours: z.coerce.number(),
-});
 const unitSchema = z.object({ id: z.uuid(), name: z.string() });
 const registrationSchema = z.object({
   user_id: z.uuid(), display_name: z.string(), email: z.string(),
@@ -61,12 +57,11 @@ const registrationSchema = z.object({
 export type PendingRegistration = z.infer<typeof registrationSchema>;
 export type DevData = EventWorkspace & {
   documents: z.infer<typeof documentSchema>[];
-  attendance: z.infer<typeof attendanceSchema>[];
   units: z.infer<typeof unitSchema>[];
   registrations: PendingRegistration[];
 };
 
-function checked<T>(result: { data: T; error: { message: string } | null }) {
+export function checked<T>(result: { data: T; error: { message: string } | null }) {
   if (result.error) throw result.error;
   return result.data;
 }
@@ -78,18 +73,15 @@ export async function readAccess(client: SupabaseClient): Promise<Access> {
 // No query is made until ff_my_access has confirmed live, server-side approval.
 export async function readDevData(client: SupabaseClient, access: Access): Promise<DevData> {
   if (!access.access_granted) throw new Error("Freigabe erforderlich.");
-  const [events, documents, attendance, units, registrations] = await Promise.all([
+  const [events, documents, units, registrations] = await Promise.all([
     readEventWorkspace(client),
     client.from("document_areas").select("id,name,description,sharepoint_url").order("name"),
-    client.from("confirmed_attendance").select("event_id,user_id,title,starts_at,status,report_year,training_hours")
-      .eq("user_id", access.user_id).order("starts_at", { ascending: false }),
     client.from("units").select("id,name").order("name"),
     access.roles.includes("GLOBAL_ADMIN") ? client.rpc("ff_pending_registrations") : Promise.resolve({ data: [], error: null }),
   ]);
   return {
     ...events,
     documents: z.array(documentSchema).parse(checked(documents)),
-    attendance: z.array(attendanceSchema).parse(checked(attendance)),
     units: z.array(unitSchema).parse(checked(units)),
     registrations: z.array(registrationSchema).parse(checked(registrations)),
   };
