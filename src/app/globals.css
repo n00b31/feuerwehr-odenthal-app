@@ -7,6 +7,16 @@
 .dev-guest-shell { width: 100%; }
 .dev-shell .bottom-nav > a.active { color: var(--cp-text); }
 .dev-shell .bottom-nav > a { overflow-wrap: anywhere; }
+.dutybook { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--cp-space-5); min-width: 0; }
+.dutybook .section-heading { flex-wrap: wrap; gap: var(--cp-space-3); }
+.dutybook .filters > label { flex: 1 1 180px; min-width: 0; }
+.dutybook .metrics { margin: 0; }
+.dutybook .metric-value { overflow-wrap: anywhere; }
+.dutybook .badge { display: inline-flex; align-items: center; gap: var(--cp-space-1); }
+.dutybook .badge.danger { background: color-mix(in srgb, var(--cp-danger) 18%, var(--cp-surface)); color: var(--cp-text); border: 1px solid var(--cp-danger); }
+.dutybook .badge.neutral { background: var(--cp-surface-soft); color: var(--cp-text-muted); border: 1px solid var(--cp-border); }
+.dutybook .bar-track { min-width: 80px; margin-top: var(--cp-space-2); }
+.reporting-type { display: grid; gap: var(--cp-space-3); padding-block: var(--cp-space-4); border-top: 1px solid var(--cp-border); }
 .dev-member { padding-block: var(--cp-space-5); border-top: 1px solid var(--cp-border); }
 .dev-member summary { min-height: 48px; cursor: pointer; overflow-wrap: anywhere; }
 .dev-member .soft-panel { margin-block: var(--cp-space-4); }

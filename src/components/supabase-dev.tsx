@@ -13,12 +13,12 @@ import { resetAuthCallback, useDevAuth } from "@/auth/use-dev-auth";
 import { BrandLogo } from "./branding";
 import { useTheme } from "./theme-provider";
 import { PageHeading } from "./ui";
-import { dateLabel } from "@/domain/time";
 import { SupabaseEvents, type EventEditorState } from "./supabase-events";
 import { SupabaseMembers } from "./supabase-members";
 import { SidebarNavigation, BottomNavigation } from "./navigation";
 import { PwaStatus } from "./pwa-status";
 import { currentRelease } from "@/config/release";
+import { SupabaseReports } from "./supabase-reports";
 
 export function SupabaseDev() {
   const [client, setClient] = useState<SupabaseClient | null>(null);
@@ -181,8 +181,6 @@ function AuthForm({ client, refresh }: { client: SupabaseClient; refresh: () => 
 function DevWorkspace({ client, access, data, pathname, refresh, eventEditor, setEventEditor }: { client: SupabaseClient; access: Access; data: DevData; pathname: string; refresh: () => void; eventEditor: EventEditorState | null; setEventEditor: (value: EventEditorState | null) => void }) {
   const globalAdmin = access.roles.includes("GLOBAL_ADMIN");
   const managesMembers = globalAdmin || access.roles.includes("UNIT_ADMIN");
-  const year = Number(new Intl.DateTimeFormat("en", { year: "numeric", timeZone: "Europe/Berlin" }).format(new Date()));
-  const ownAttendance = data.attendance.filter((item) => item.report_year === year);
   return <>
     <PageHeading eyebrow="GESCHÜTZTER DEV-BEREICH" title={pathname === "/administration" ? "Administration" : `Hallo ${access.display_name}`} description={`${access.unit_name} · ${access.roles.map((role) => DEV_ROLE_LABELS[role]).join(", ")} · live durch Supabase geprüft`} action={<button className="button secondary" onClick={refresh}><RefreshCw size={18} />Aktualisieren</button>} />
     <p className="notice">{currentRelease?.version ?? "DEV"}: Termine, Teilnahme, Anwesenheit und Mitgliederverwaltung liegen zentral in Supabase. Hintergrundprüfungen erhalten die Arbeitsansicht. Keine Übernahme lokaler Demo-Daten.</p>
@@ -191,8 +189,8 @@ function DevWorkspace({ client, access, data, pathname, refresh, eventEditor, se
         <SupabaseMembers client={client} actorId={access.user_id} refreshAccess={refresh} /></>
       : <p className="notice error" role="alert">Keine Berechtigung zur Mitgliederverwaltung. Direkte API-Aufrufe werden ebenfalls serverseitig geprüft.</p>
     : pathname === "/dokumente" ? <section className="card section-card"><h2>Dokumentenbereiche</h2><p>App-Sichtbarkeit ersetzt keine SharePoint-Berechtigung.</p>{data.documents.length === 0 && <p>Noch keine sichtbaren DEV-Dokumentenbereiche.</p>}{data.documents.map((item) => <article key={item.id}><h3>{item.name}</h3><p>{item.description}</p><a href={item.sharepoint_url} target="_blank" rel="noopener noreferrer">SharePoint öffnen</a></article>)}</section>
-    : pathname === "/statistik" ? <section className="card section-card"><h2>Bestätigte eigene Anwesenheiten {year}</h2><p>{ownAttendance.filter((item) => item.status === "present").length} tatsächliche Teilnahmen · {ownAttendance.reduce((sum, item) => sum + item.training_hours, 0).toFixed(1)} Ausbildungsstunden</p><p>Nur serverseitig bestätigte Listen. Zusagen, vorläufige Werte und unbekannte Anwesenheiten zählen nicht als Teilnahme.</p>{ownAttendance.map((item) => <p key={item.event_id}>{item.title} · {dateLabel(item.starts_at)} · {item.status === "present" ? "Anwesend" : item.status === "absent" ? "Abwesend" : "Nicht festgestellt"}</p>)}</section>
-    : pathname === "/profil" ? <section className="card section-card"><h2>Verifiziertes DEV-Profil</h2><p>{access.display_name} · Einheit {access.unit_name}</p><p>Status: Freigegeben. Kein Identitäts- oder Rollenwechsel über lokale Demo-Profile.</p><p>Die Sitzung liegt ausschließlich unter einem projekt- und unterpfadbezogenen SDK-Speicherschlüssel in diesem Browser. Zum Entfernen „Abmelden / Sitzung entfernen“ verwenden.</p></section>
+    : pathname === "/statistik" ? <SupabaseReports client={client} access={access} />
+    : pathname === "/profil" ? <><section className="card section-card"><h2>Verifiziertes DEV-Profil</h2><p>{access.display_name} · Einheit {access.unit_name}</p><p>Status: Freigegeben. Kein Identitäts- oder Rollenwechsel über lokale Demo-Profile.</p><p>Die Sitzung liegt ausschließlich unter einem projekt- und unterpfadbezogenen SDK-Speicherschlüssel in diesem Browser. Zum Entfernen „Abmelden / Sitzung entfernen“ verwenden.</p></section><SupabaseReports client={client} access={access} personalOnly /></>
     : <SupabaseEvents client={client} initial={data} preferredUnit={access.unit_id} editor={eventEditor} setEditor={setEventEditor} />}
   </>;
 }
