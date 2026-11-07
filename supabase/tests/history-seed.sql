@@ -79,6 +79,9 @@ select pg_temp.history_ok(not exists(select 1 from jsonb_array_elements(
   public.ff_dev_personal_report(current_setting('history.entrant')::uuid,2025,null,null,0,true)->'events') e
   where (e->>'starts_at')::timestamptz<'2025-07-01 00:00 Europe/Berlin'::timestamptz),
   'midyear entrance never counts earlier services');
+select pg_temp.history_ok(public.ff_dev_personal_report(current_setting('history.high')::uuid,2025)->>'scope_name'
+  =(select display_name from public.profiles where id=current_setting('history.high')::uuid),
+  'synthetic report label has exactly one DEV marker');
 select pg_temp.history_ok(exists(select 1 from jsonb_array_elements(
   public.ff_dev_personal_report(current_setting('history.transfer')::uuid,2026,null,null,0,true)->'events') e where e->>'unit_name'='Scherf')
   and exists(select 1 from jsonb_array_elements(

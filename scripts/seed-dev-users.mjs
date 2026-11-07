@@ -5,7 +5,7 @@ import { setTimeout as delay } from "node:timers/promises";
 export const PROJECT = "orxinqhhbtjpkzwlfaxq";
 const ORIGIN = `https://${PROJECT}.supabase.co`;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const PLAN = [
+export const PLAN = [
   ["max.test", "Max Mustermann", "UNIT_ADMIN", "scheuren"],
   ["anna.test", "Anna Becker", "UNIT_ADMIN", "scheuren"],
   ["thomas.test", "Thomas Weber", "MEMBER", "scheuren"],

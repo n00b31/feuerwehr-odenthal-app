@@ -88,7 +88,7 @@ Fingerprints der geschützten Auth- und Fachdatensätze vor und nach dem Seed.
 
 ## Sichere spätere Entfernung: vorbereitet, nicht ausführen
 
-`ff_cleanup_dev_history` ist standardmäßig ein **Dry Run**. Voraussetzung:
+`ff_dev_remove_history` ist standardmäßig ein **Dry Run**. Voraussetzung:
 aktiver GLOBAL_ADMIN, korrekter Projektissuer, unveränderter Seed-Fingerprint.
 Zuerst mit `dry_run => true` die ausschließlich markierten Beziehungen prüfen.
 Eine tatsächliche Entfernung benötigt zusätzlich `dry_run => false`,
@@ -125,16 +125,103 @@ die aktuellen Seed-Hilfsfunktionen, keine Auth-Datensätze.
 Migration 015 wurde anschließend zweimal vom MCP-Client bei der
 Bestätigungsanforderung automatisch abgebrochen, auch nach ausdrücklicher
 erneuter Nutzerfreigabe. Laut Tool wurde jeweils **nichts ausgeführt**.
-Migration 016 und der historische Seed wurden deshalb nicht gestartet.
-Es gibt im gehosteten DEV noch **keine 50 neuen Historienprofile**.
-Die oben genannten 50/262/258 sind der tatsächlich geprüfte CI-Datensatz,
-nicht bereits angelegte gehostete Daten.
+Nach direkter Nutzeranmeldung wurde der reguläre, sichtbare Supabase-SQL-Editor
+des bestätigten DEV-Projekts verwendet. Seine Sicherheitsdialoge wurden für die
+ausdrücklich freigegebenen Schemaänderungen bestätigt, nicht versteckt umgangen.
+Die geladenen, unveränderten Quellen wurden vor Ausführung per SHA-256 geprüft
+und innerhalb derselben Transaktion in der Migrationshistorie protokolliert:
 
-Für die Fertigstellung müssen die getesteten Migrationen 015 und 016 über einen
-funktionierenden autorisierten Migrationsweg bestätigt werden. Erst danach darf
-der manuelle Seed erfolgen. Ein Austausch des Clients oder eine Umgehung der
-abgebrochenen Bestätigung wurde nicht vorgenommen.
-Echte gehostete Jahres-/Einheitszahlen werden erst nach diesem Lauf dokumentiert.
+| Migration | Gehostete Version | Quellen-SHA-256 |
+|---|---|---|
+| 015 | `20261107194924` | `83a408bbb5b61558f551e047a51760c9d124b8d33fc5058d13a04f54c363b66c` |
+| 016 | `20261107195053` | `3b4125cb4eaafb30087a388b4145648ad62dfbb3b36136b9ce20b9cfe0152648` |
+
+Alle 15 Funktionsdefinitionen stimmten anschließend exakt mit den geprüften
+Quellen überein. Die acht normalen Auth-Bindungen und bestehende öffentliche
+RLS-Regeln blieben erhalten; Zugriff auf die private Seed-Tabelle und private
+Seed-Helfer ist für `authenticated` weiterhin entzogen.
+Migration 017 korrigiert ausschließlich die doppelte DEV-Kennzeichnung im
+Testdienstbuch; Berechtigungen und Daten bleiben unverändert.
+
+Der Seed wurde danach über die tatsächlich installierte RPC im ausdrücklich
+autorisierten Datenbank-Administratorkontext ausgeführt. Der bestehende aktive
+GLOBAL_ADMIN war als handelnde Person hinterlegt. Dies war **kein Browserlogin
+als dieser Benutzer** und keine neu geschaffene Authentifizierung.
+
+**Tatsächlich gehostet:** 50 zusätzliche Fachprofile ohne Auth-Identität oder Rolle,
+51 historische Einheitsmitgliedschaften, 41 Funktionsmitgliedschaften und
+262 Termine. 258 sind abgeschlossen, zwei offen und zwei abgesagt.
+2.655 tatsächliche Anwesenheitszeilen sind vorhanden; davon sind 2.616 durch
+Abschlüsse bestätigt. Die übrigen 39 Vorbelegungen zählen nicht als bestätigte
+Anwesenheit. Der Datensatz-Fingerprint lautet
+`6fd6737be8dab684db406d63507b7989`. Ein tatsächlich ausgeführter, committed
+Wiederholungslauf ließ Datensatz und geschützte Originaldaten unverändert.
+
+### Tatsächliche Seed-Statistik nach Jahr und historischer Einheit
+
+Die Tabelle enthält **nur neue synthetische Daten**, einschließlich zugeordneter
+Organisations- und Funktionstermine. Deshalb sind es 29 abgeschlossene Dienste
+je Einheit und Jahr, obwohl 25 Termine unmittelbar je Einheit angelegt wurden.
+Gemeinsame Dienste dürfen bei einer Organisationssumme nicht mehrfach gezählt
+werden. Die Quote bezieht sich auf ausbildungsrelevante bestätigte Teilnahmen.
+„Teilnehmerstunden“ sind aufsummierte Anwesenheitsstunden, keine angebotenen Stunden.
+
+| Jahr | Einheit | Anwesend | Abwesend | Ausbildungsquote | Ausbildungs-Teilnehmerstunden | Teilnehmerstunden gesamt |
+|---|---|---:|---:|---:|---:|---:|
+| 2025 | Scheuren | 209 | 46 | 82,96 % | 409,5 | 474 |
+| 2025 | Scherf | 194 | 74 | 71,91 % | 375,5 | 435,5 |
+| 2025 | Blecher | 161 | 107 | 59,15 % | 316 | 363 |
+| 2025 | Eikamp | 149 | 119 | 56,60 % | 301,5 | 341 |
+| 2025 | Voiswinkel | 98 | 144 | 40,57 % | 196,5 | 230,5 |
+| 2026 | Scheuren | 240 | 29 | 89,41 % | 572,5 | 663,5 |
+| 2026 | Scherf | 206 | 51 | 80,09 % | 504,5 | 575,5 |
+| 2026 | Blecher | 198 | 81 | 70,49 % | 473,5 | 555 |
+| 2026 | Eikamp | 170 | 98 | 65,11 % | 415 | 472 |
+| 2026 | Voiswinkel | 115 | 127 | 48,58 % | 278 | 315 |
+
+Seed-only Organisationssumme: 2025 1.599 Ausbildungs-Teilnehmerstunden und
+1.844 Teilnehmerstunden gesamt; 2026 2.243,5 und 2.581 Stunden.
+Die normale zentrale RPC enthält zusätzlich bestehende reale DEV-Daten:
+2026 insgesamt 2.247,5 Ausbildungs-Teilnehmerstunden und 2.605 Teilnehmerstunden.
+Die Differenz von vier beziehungsweise 24 Stunden stammt aus bestehenden Daten,
+nicht aus einer Änderung des Seeds. Eine unabhängige Abfrage bestätigter
+Anwesenheitszeilen stimmt mit diesen RPC-Ergebnissen überein.
+
+### Tatsächlich geprüfte gehostete Sonderfälle und Rechte
+
+Scheuren 01 hat 2025 100 % Ausbildungsquote und 51,5 Ausbildungsstunden;
+Scheuren 02 8,70 % und 3,5 Stunden. Scheuren 09 hat 15 abgeschlossene Dienste
+und keinen Eintrag vor dem Eintritt am 01.07.2025. Scherf 08 behält 2026
+16 historische Dienste in Scherf und elf in Blecher.
+Voiswinkel 10 hat keine bestätigte Historie, null Stunden, eine offene Liste
+und ausdrücklich keine berechenbare Quote.
+
+Die tatsächlich installierten RLS-Regeln und RPCs wurden mit `authenticated`
+und bestehenden GLOBAL_ADMIN-, UNIT_ADMIN- und MEMBER-Identitäten geprüft.
+Der bestehende MEMBER behält drei eigene abgeschlossene reale Dienste,
+ohne synthetische Einträge, Testidentitätsauswahl oder administrative Rechte.
+UNIT_ADMIN kann den eigenen Einheitsbericht lesen, nicht andere Einheiten oder
+fremde Testdienstbücher, und nicht seeden. Eine synthetische Identität kann auch
+im negativen SQL-Claims-Test keinen aktiven Mitgliederbericht abrufen.
+Der letzte GLOBAL_ADMIN kann weder deaktiviert noch seiner Rolle beraubt werden;
+diese Prüfungen waren ausschließlich rollback-geschützt.
+Die gehostete Bereinigung wurde nur als Dry Run geprüft, niemals ausgeführt.
+Positive FIRE_CHIEF-Prüfungen stammen aus echten isolierten PostgreSQL-Tests
+und synthetischen Browserprüfungen; es wurde kein neuer gehosteter FIRE_CHIEF
+oder eine zusätzliche gehostete Rolle angelegt.
+
+### Optionaler manueller Auth-/HTTP-Nachweis
+
+Der bestehende manuelle Workflow `seed-dev-test-users.yml` bietet den zusätzlichen
+rein prüfenden Modus `history-check`. Dieser verwendet ausschließlich die sechs
+bestehenden Auth-Testkonten, den öffentlichen DEV-Key und das geschützte
+Laufzeit-Testpasswort. Er erzeugt keine Konten und ändert keine Fach-/Rollendaten.
+Normale Auth-Anmeldungen können erwartungsgemäß Auth-Sitzungsmetadaten aktualisieren.
+Die bestehenden aktuellen Einheiten werden geprüft, nicht auf das ursprüngliche
+Seed-Manifest zurückgesetzt. Profil-RLS, echte Jahresbericht-RPCs, geschützte
+Scopes und die bestehende Termin-RPC werden mit echten signierten Auth-Sitzungen
+geprüft. Der Modus ist manuell auf `main` und diesem Feature-Branch ausführbar;
+die bisherigen schreibenden Auth-Seeds bleiben ausschließlich auf `main`.
 
 `supabase/tests/history-seed.sql` führt echte PostgreSQL-, RLS- und RPC-Tests
 in der wegwerfbaren CI-Datenbank aus. Dazu gehören beide Jahre, Einheitswechsel,

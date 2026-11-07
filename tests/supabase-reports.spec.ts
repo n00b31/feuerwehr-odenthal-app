@@ -114,6 +114,7 @@ test("synthetic testbook is readonly overseer reporting, never a login or authen
   await page.getByRole("button", { name: "Dienste als CSV", exact: true }).click();
   const file = await download;
   expect(await readFile((await file.path())!, "utf8")).toContain('"DEV TEST | Testmitglied Scheuren 01"');
+  expect(file.suggestedFilename()).toMatch(/^dev-test-/);
   expect(state.calls.filter((call) => call==="/auth/v1/token")).toHaveLength(1);
   expect(state.queries.some((query) => query.seed_member===seedPerson)).toBe(true);
   await page.getByRole("combobox", { name: "Testdienstbuch (nicht anmeldbar)", exact: true }).selectOption("");
