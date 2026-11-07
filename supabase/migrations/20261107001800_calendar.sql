@@ -216,7 +216,7 @@ begin
   if resource is not null then
     perform 1 from public.calendar_resources where id=resource and active and resource_type='building' for update;
     perform ff_private.require_rule(found and ff_private.can_view_resource(resource),'Keine aktive berechtigte Gerätehausressource.');
-    perform ff_private.require_rule(not(kind='unit') or exists(select 1 from public.calendar_resources
+    perform ff_private.require_rule(ff_private.has_role('GLOBAL_ADMIN') or not(kind='unit') or exists(select 1 from public.calendar_resources
       where id=resource and (unit_id is null or unit_id=unit)),'Einheitsbelegung nur für eigene Ressourcen.');
   end if;
   if target_event is not null then

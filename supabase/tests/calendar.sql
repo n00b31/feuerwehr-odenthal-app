@@ -41,6 +41,11 @@ select public.ff_set_role('a0500000-0000-4000-8000-000000000005','FUNCTION_ADMIN
 select public.ff_set_role('a0500000-0000-4000-8000-000000000006','FIRE_CHIEF',null,null,true);
 select set_config('cal.resource',public.ff_save_calendar_resource(jsonb_build_object('name','Synthetic Scheuren building',
   'resource_type','building','unit_id',current_setting('cal.unit'),'active',true))::text,true);
+select set_config('cal.foreign_resource',public.ff_save_calendar_resource(jsonb_build_object('name','Synthetic foreign building',
+  'resource_type','building','unit_id',current_setting('cal.other'),'active',true))::text,true);
+select pg_temp.calendar_assert(public.ff_save_calendar_event(pg_temp.calendar_payload('Synthetic global cross-unit booking','booking',
+  current_setting('cal.unit')::uuid,current_setting('cal.foreign_resource')::uuid))->>'id' is not null,
+  'GLOBAL_ADMIN may coordinate an authorized cross-unit resource booking');
 select set_config('cal.info',(public.ff_save_calendar_event(pg_temp.calendar_payload('Synthetic public information','information',null))->>'id'),true);
 select set_config('cal.private',(public.ff_save_calendar_event(pg_temp.calendar_payload('Synthetic leadership booking','booking',current_setting('cal.unit')::uuid,
   current_setting('cal.resource')::uuid)||jsonb_build_object('audience','leadership'))->>'id'),true);
@@ -96,6 +101,8 @@ select pg_temp.calendar_assert((select count(*)=0 from jsonb_array_elements(publ
   current_setting('cal.lower')::timestamptz,current_setting('cal.upper')::timestamptz)->'events') e
   where e->>'id'=current_setting('cal.own')),'archived event leaves calendar without deletion');
 select pg_temp.calendar_denied($q$select public.ff_save_calendar_event(pg_temp.calendar_payload('Forged foreign unit','information',current_setting('cal.other')::uuid))$q$);
+select pg_temp.calendar_denied($q$select public.ff_save_calendar_event(pg_temp.calendar_payload('Forged foreign resource','booking',
+  current_setting('cal.unit')::uuid,current_setting('cal.foreign_resource')::uuid))$q$);
 select pg_temp.calendar_denied($q$select public.ff_save_calendar_category('Forged category')$q$);
 select pg_temp.calendar_denied($q$select public.ff_save_calendar_event(pg_temp.calendar_payload('Forged organization','information',null))$q$);
 reset role;

@@ -79,9 +79,9 @@ export function SupabaseCalendar({client,actorId,initialTime,openService}:{
     closeSelected();setConflicts([]);
     setEditor(event ? {event,draft:calendarDraft(event)} : {draft:{
       title:"",description:"",location:"",start:`${date}T18:00`,end:`${date}T19:30`,all_day:false,
-      entry_kind:"information",scope_kind:snapshot.context.manageable_units.length ? "unit" :
-        snapshot.context.organization ? "organization" : "function",
-      unit_id:snapshot.context.manageable_units[0]?.id ?? "",function_id:"",
+      entry_kind:"information",scope_kind:snapshot.context.organization ? "organization" :
+        snapshot.context.manageable_units.length ? "unit" : "function",
+      unit_id:snapshot.context.organization ? "" : snapshot.context.manageable_units[0]?.id ?? "",function_id:"",
       organizer_id:actorId,category_id:snapshot.context.categories.find(c=>c.active)?.id ?? "",
       resource_id:"",audience:"scope",unit_ids:[],
     }});

@@ -162,7 +162,7 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
       <button className="button secondary" aria-pressed={!calendarVisible} onClick={()=>setCalendarVisible(false)}>Dienstverwaltung</button>
       <button className="button secondary" aria-pressed={calendarVisible} onClick={()=>{setCalendarActivated(true);setCalendarVisible(true);}}>Gemeinsamer Kalender</button>
     </div>
-    {calendarActivated && <div hidden={!calendarVisible}><SupabaseCalendar client={client} actorId={actorId}
+    {calendarActivated && <div hidden={!calendarVisible}>    <SupabaseCalendar key={actorId} client={client} actorId={actorId}
       initialTime={initial.server_now} openService={openService}/></div>}
     <section className="card section-card" hidden={calendarVisible}>
     <div className="event-card-top"><h2>Sichtbare DEV-Termine</h2><div className="dev-actions">
