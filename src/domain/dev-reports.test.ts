@@ -90,6 +90,26 @@ test("repository rejects mismatched and partial export responses", async () => {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     global: { fetch: async () => new Response(JSON.stringify(response), { headers: { "content-type": "application/json" } }) },
   });
+  test("synthetic report uses its dedicated readonly RPC and verifies the returned synthetic subject", async () => {
+    let response: YearReport = { ...fixture, scope_name: "DEV TEST | Testmitglied Scheuren 01", seed_member: person };
+    let url = "";
+    let body: Record<string, unknown> = {};
+    const client = createClient("https://syntheticci.supabase.co", "sb_publishable_SYNTHETIC_CI_ONLY", {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      global: { fetch: async (input, init) => {
+        url = String(input); body = JSON.parse(String(init?.body));
+        return new Response(JSON.stringify(response), { headers: { "content-type": "application/json" } });
+      } },
+    });
+    const result = await readYearReport(client, { ...query, seed_member: person });
+    assert.ok(url.endsWith("/rpc/ff_dev_personal_report"));
+    assert.equal(body.target_user, person);
+    assert.ok(!("report_scope" in body) && !("seed_member" in body));
+    assert.ok(reportCsv(result, "events").includes('"DEV TEST | Testmitglied Scheuren 01"'));
+    response = { ...response, seed_member: unit };
+    await assert.rejects(() => readYearReport(client, { ...query, seed_member: person }), /Identität/);
+    assert.throws(() => reportQuerySchema.parse({ ...query, report_scope: "unit", target_scope: unit, seed_member: person }));
+  });
   await assert.rejects(() => readYearReport(client, query), /stimmt nicht/);
   response = { ...fixture, has_more: true };
   await assert.rejects(() => readYearReport(client, { ...query, export_all: true }), /Unvollständiger Export/);

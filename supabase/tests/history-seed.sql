@@ -123,7 +123,7 @@ select pg_temp.history_ok(public.ff_year_report(2025,'organization')#>>'{summary
 select pg_temp.history_ok(jsonb_array_length(public.ff_year_report(2025,'organization',null,null,0,true)->'events')=130,
   'full CSV source includes all 129 seeded final services plus protected existing final event');
 select set_config('request.jwt.claim.sub','d1000000-0000-4000-8000-000000000002',true);
-select pg_temp.history_ok(public.ff_year_report(2025)#>>'{summary,training_hours}'='2'
+select pg_temp.history_ok((public.ff_year_report(2025)#>>'{summary,training_hours}')::numeric=2
   and jsonb_array_length(public.ff_reports_context()->'seed_people')=0,'existing MEMBER personal book unchanged; no synthetic identity switch');
 select pg_temp.history_denied($q$select public.ff_dev_personal_report(current_setting('history.high')::uuid,2025)$q$);
 select pg_temp.history_denied($q$select public.ff_dev_seed_history('orxinqhhbtjpkzwlfaxq','SEED DEV041-HISTORY-V1')$q$);

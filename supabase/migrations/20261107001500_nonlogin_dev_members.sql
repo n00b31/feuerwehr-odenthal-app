@@ -29,7 +29,12 @@ begin
       or new.dev_seed_key is distinct from old.dev_seed_key) then
     raise exception 'Profile identity and fixture origin are immutable' using errcode='42501';
   end if;
-  if tg_op='INSERT' and new.dev_seed_key is null then new.auth_user_id:=new.id; end if;
+  if tg_op='INSERT' and new.dev_seed_key is null then
+    if new.auth_user_id is not null and new.auth_user_id<>new.id then
+      raise exception 'Auth binding must match profile identity' using errcode='42501';
+    end if;
+    new.auth_user_id:=new.id;
+  end if;
   return new;
 end;
 $$;
