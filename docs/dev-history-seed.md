@@ -113,6 +113,15 @@ Die tatsächliche Bereinigung wird nur im isolierten CI-Rollback-Test ausgeführ
 
 Die Scherf-Korrektur wurde im bestehenden DEV ausgeführt. Die Einheits-ID
 `458dae15-ba37-43eb-9e75-b2296092aed7` bleibt erhalten.
+Gehostete Migrationsversion: `20261107185038`. Exakt fünf Einheiten; die zwei
+bisherigen Mitgliedschaften und eine scoped Rollenzuweisung an dieser Einheit
+bleiben erhalten. Vorher-/Nachher-Fingerprints der Profile, Rollen,
+Mitgliedschaften, Termine und tatsächlichen Anwesenheiten stimmen exakt überein.
+Die acht bestehenden Auth-Identitäten bleiben bestehen; es wurde kein Auth-Konto
+angelegt oder gelöscht. Der gesamte Auth-Datensatz-Fingerprint hat sich im
+Prüfzeitraum geändert und wird deshalb ausdrücklich nicht als unverändert
+ausgegeben. Migration 014 schreibt ausschließlich Einheiten, Korrektur-Audit und
+die aktuellen Seed-Hilfsfunktionen, keine Auth-Datensätze.
 Migration 015 wurde anschließend zweimal vom MCP-Client bei der
 Bestätigungsanforderung automatisch abgebrochen, auch nach ausdrücklicher
 erneuter Nutzerfreigabe. Laut Tool wurde jeweils **nichts ausgeführt**.
