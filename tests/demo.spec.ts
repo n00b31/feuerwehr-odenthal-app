@@ -134,11 +134,11 @@ test("global administration adds documents, assigns multiple roles and transfers
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("combobox", { name: "Einheit", exact: true }).selectOption("unit-1");
   await dialog.getByRole("button", { name: "Einheitszuordnung speichern" }).click();
-  await dialog.getByLabel("Einheitsadministration · Odenthal", { exact: true }).check();
+  await dialog.getByLabel("Einheitsadministration · Scherf", { exact: true }).check();
   await dialog.getByRole("button", { name: "Rollen speichern" }).click();
   await page.getByRole("button", { name: "Dialog schließen" }).click();
   await profile(page, "Anna Berg");
-  await expect(page.getByText("Einheitsadministration · Odenthal", { exact: true })).toBeVisible();
+  await expect(page.getByText("Einheitsadministration · Scherf", { exact: true })).toBeVisible();
   await expect(page.getByText("Scheuren · seit", { exact: false })).toBeVisible();
   const after = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!).events.filter((e: { attendance: Record<string, string> }) => e.attendance["person-0-0"] === "present").length, APP.storageKey);
   expect(after).toEqual(before);

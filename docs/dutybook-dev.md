@@ -1,5 +1,8 @@
 # DEV 0.4 – Zentrales Dienstbuch und Jahresberichte
 
+DEV 0.4.1 ergänzt isolierte, nicht anmeldbare historische Testmitglieder:
+[Architektur, manuelle Ausführung und sichere spätere Entfernung](dev-history-seed.md).
+
 ## Umfang und Architektur
 
 Die Berichte verwenden ausschließlich das bestehende Supabase-DEV-Projekt

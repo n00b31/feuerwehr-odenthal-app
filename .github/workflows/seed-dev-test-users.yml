@@ -6,7 +6,7 @@ on:
       mode:
         description: Read-only check or create missing DEV test accounts
         type: choice
-        options: [check, seed]
+        options: [check, seed, history-check]
         default: check
         required: true
       confirm_project:
@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   seed:
-    if: github.repository == 'n00b31/feuerwehr-odenthal-app' && github.ref == 'refs/heads/main'
+    if: github.repository == 'n00b31/feuerwehr-odenthal-app' && github.ref == 'refs/heads/main' && inputs.mode != 'history-check'
     environment: supabase-dev-seed
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -54,3 +54,25 @@ jobs:
             seed) node scripts/seed-dev-users.mjs --apply ;;
             *) echo "Invalid seed mode"; exit 1 ;;
           esac
+  history:
+    if: github.repository == 'n00b31/feuerwehr-odenthal-app' && inputs.mode == 'history-check' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/dev-041-seed-data')
+    environment: supabase-dev-seed
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify existing Auth sessions and historical report RPCs without business-data writes
+        env:
+          SUPABASE_DEV_SEED_CONFIRM_PROJECT: ${{ inputs.confirm_project }}
+          SUPABASE_DEV_SEED_ENVIRONMENT: isolated-dev
+          SUPABASE_DEV_URL: ${{ vars.SUPABASE_DEV_URL }}
+          SUPABASE_DEV_PUBLISHABLE_KEY: ${{ vars.SUPABASE_DEV_PUBLISHABLE_KEY }}
+          SUPABASE_DEV_TEST_PASSWORD: ${{ secrets.SUPABASE_DEV_TEST_PASSWORD }}
+        run: npx tsx scripts/verify-dev-history.ts

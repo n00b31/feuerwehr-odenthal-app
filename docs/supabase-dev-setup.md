@@ -1,5 +1,13 @@
 # Supabase DEV – Verbindung, Authentifizierung und Freigabe
 
+**DEV 0.4.1:** Die aktuelle Einheit heißt **Scherf**, nicht Odenthal. Ihre
+Identität und die Konten von Peter/Sarah bleiben unverändert. Migration 014
+korrigiert die Stammdaten; historische Nachweise unten bleiben nachvollziehbar.
+Die zusätzlichen 50 historischen Testmitglieder sind ausdrücklich **nicht
+anmeldbar**, ohne neue Auth-Konten oder Rollen. Seed-Konzept, manuelle Ausführung,
+Prüfnachweise und ausschließlich vorbereitete Bereinigung:
+[DEV-Historien-Seed](dev-history-seed.md).
+
 Stand: 03.11.2026. Nur das **bereits angelegte DEV-Projekt** verwenden.
 Keine produktiven Daten, kein neues Projekt, keine kostenpflichtigen Dienste.
 

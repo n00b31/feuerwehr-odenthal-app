@@ -8,6 +8,7 @@ const api = "https://syntheticci.supabase.co";
 const actor = "11000000-0000-4000-8000-000000000001";
 const unit = "21000000-0000-4000-8000-000000000001";
 const other = "21000000-0000-4000-8000-000000000002";
+const seedPerson = "41000000-0000-4000-8000-000000000001";
 const units = [unit, other, ...[3,4,5].map((n) => `21000000-0000-4000-8000-00000000000${n}`)]
   .map((id, i) => ({ id, name: i===0 ? "Scheuren" : `Synthetic Einheit ${i+1}` }));
 const metrics: ReportMetrics = { services: 2, practices: 2, training_services: 2, eligible: 2,
@@ -54,12 +55,16 @@ async function connect(page: Page, role: "MEMBER" | "UNIT_ADMIN" | "FIRE_CHIEF" 
     if (pathname.endsWith("/ff_reports_context")) return respond({
       current_year: state.contextYear, years: [state.contextYear,2025], organization: overseer, configure: role==="GLOBAL_ADMIN",
       personal_units: [units[0], units[1]], units: overseer ? units : role==="UNIT_ADMIN" ? [units[0]] : [],
+      seed_people: overseer ? [{ id: seedPerson, name: "DEV TEST | Testmitglied Scheuren 01", units: [units[0]] }] : [],
       functions: [], event_types: ["regular","special","breathing","training","community","other"].map((event_type) => ({
         event_type, is_training_relevant: !["community","other"].includes(event_type),
       })),
     });
-    if (pathname.endsWith("/ff_year_report")) {
-      const query: ReportQuery = request.postDataJSON();
+    if (pathname.endsWith("/ff_year_report") || pathname.endsWith("/ff_dev_personal_report")) {
+      const payload = request.postDataJSON();
+      const seeded = pathname.endsWith("/ff_dev_personal_report");
+      if (seeded && (!overseer || payload.target_user!==seedPerson)) return denied();
+      const query: ReportQuery = seeded ? { ...payload, report_scope: "personal", seed_member: payload.target_user } : payload;
       state.queries.push(query);
       if (state.fail) return respond({ code: "XX000", message: "Synthetic report unavailable" }, 500);
       if ((query.report_scope==="organization" && !overseer)
@@ -74,7 +79,8 @@ async function connect(page: Page, role: "MEMBER" | "UNIT_ADMIN" | "FIRE_CHIEF" 
         own_status: query.report_scope==="personal" ? id===1 ? "present" : "absent" : null, metrics,
       });
       return respond({ year: query.wanted_year, scope: query.report_scope, target: query.target_scope,
-        scope_name: query.report_scope==="personal" ? "Mein Dienstbuch" : query.report_scope==="organization" ? "Feuerwehr Odenthal" : "Scheuren",
+        scope_name: seeded ? "DEV TEST | Testmitglied Scheuren 01" : query.report_scope==="personal" ? "Mein Dienstbuch" : query.report_scope==="organization" ? "Feuerwehr Odenthal" : "Scheuren",
+        ...(seeded ? { seed_member: seedPerson } : {}),
         summary: { ...data, members: 1 }, page: query.page_number, event_count: noData ? 0 : 2,
         has_more: !noData && !query.export_all && query.page_number===0,
         events: noData ? [] : query.export_all ? [event(1),event(2)] : [event(query.page_number===0 ? 1 : 2)],
@@ -97,8 +103,27 @@ async function connect(page: Page, role: "MEMBER" | "UNIT_ADMIN" | "FIRE_CHIEF" 
   return state;
 }
 
+test("synthetic testbook is readonly overseer reporting, never a login or authenticated profile switch", async ({ page }) => {
+  const state = await connect(page, "FIRE_CHIEF");
+  await page.getByRole("combobox", { name: "Testdienstbuch (nicht anmeldbar)", exact: true }).selectOption(seedPerson);
+  await expect(page.getByRole("heading", { name: "Synthetisches Testdienstbuch", exact: true })).toBeVisible();
+  await expect(page.getByText(/ohne Auth-Konto oder Anmeldung/)).toBeVisible();
+  await expect(page.getByRole("link", { name: "Administration" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Dienst öffnen: Synthetic bestätigter Dienst" })).toBeVisible();
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Dienste als CSV", exact: true }).click();
+  const file = await download;
+  expect(await readFile((await file.path())!, "utf8")).toContain('"DEV TEST | Testmitglied Scheuren 01"');
+  expect(file.suggestedFilename()).toMatch(/^dev-test-/);
+  expect(state.calls.filter((call) => call==="/auth/v1/token")).toHaveLength(1);
+  expect(state.queries.some((query) => query.seed_member===seedPerson)).toBe(true);
+  await page.getByRole("combobox", { name: "Testdienstbuch (nicht anmeldbar)", exact: true }).selectOption("");
+  await expect(page.getByRole("heading", { name: "Mein Dienstbuch", exact: true })).toBeVisible();
+});
+
 test("member reads own dutybook, opens read-only details and selects empty years without a fabricated quote", async ({ page }) => {
   const state = await connect(page, "MEMBER");
+  await expect(page.getByRole("combobox", { name: "Testdienstbuch (nicht anmeldbar)", exact: true })).toHaveCount(0);
   await expect(page.getByRole("combobox", { name: "Berichtsansicht" }).locator("option")).toHaveCount(1);
   await page.getByRole("button", { name: "Dienst öffnen: Synthetic bestätigter Dienst" }).click();
   const dialog = page.getByRole("dialog");
