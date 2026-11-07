@@ -10,6 +10,7 @@ export const reportsContextSchema = z.object({
   current_year: z.number().int(), years: z.array(z.number().int()).min(1),
   organization: z.boolean(), configure: z.boolean(),
   personal_units: z.array(reference), units: z.array(reference), functions: z.array(reference),
+  seed_people: z.array(reference.extend({ units: z.array(reference) })).default([]),
   event_types: z.array(z.object({ event_type: devEventTypeSchema, is_training_relevant: z.boolean() })),
 });
 export type ReportsContext = z.infer<typeof reportsContextSchema>;
@@ -38,6 +39,7 @@ export const yearReportSchema = z.object({
   members: z.array(z.object({ user_id: z.uuid(), name: z.string(), metrics: reportMetricsSchema })),
   units: z.array(reference.extend({ members: count, metrics: reportMetricsSchema })),
   events: z.array(reportEventSchema), page: count, event_count: count, has_more: z.boolean(),
+  seed_member: z.uuid().optional(),
 });
 export type YearReport = z.infer<typeof yearReportSchema>;
 export const reportQuerySchema = z.object({
@@ -47,8 +49,10 @@ export const reportQuerySchema = z.object({
   wanted_type: devEventTypeSchema.nullable(),
   page_number: z.number().int().min(0).max(1000),
   export_all: z.boolean(),
+  seed_member: z.uuid().optional(),
 }).refine((value) => !["unit", "function"].includes(value.report_scope) || value.target_scope !== null,
-  "Einheit beziehungsweise Funktion bewusst auswählen.");
+  "Einheit beziehungsweise Funktion bewusst auswählen.")
+  .refine((value) => !value.seed_member || value.report_scope==="personal", "Synthetisches Dienstbuch nur als persönlicher Bericht.");
 export type ReportQuery = z.infer<typeof reportQuerySchema>;
 
 export const reportNumber = (value: number) => value.toLocaleString("de-DE", { maximumFractionDigits: 2 });

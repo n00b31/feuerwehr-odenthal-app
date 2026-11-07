@@ -8,7 +8,7 @@ begin execute statement; raise exception 'FAIL: permission denial required'; exc
 select set_config('seed.approver','90000000-0000-4000-8000-000000000001',true);
 select set_config('seed.run','90000000-0000-4000-8000-000000000002',true);
 select set_config('seed.unit',(select id::text from public.units where code='scheuren'),true);
-select set_config('seed.other',(select id::text from public.units where code='odenthal'),true);
+select set_config('seed.other',(select id::text from public.units where code='scherf'),true);
 insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data)
 values(current_setting('seed.approver')::uuid,'synthetic.seed.approver@feuerwehr-odenthal.de',
   clock_timestamp(),'{"display_name":"Synthetic seed approver"}');
