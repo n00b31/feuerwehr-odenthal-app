@@ -74,12 +74,12 @@ test("membership, function and role audit resolves all scoped names", () => {
   let state = execute(createSeed(now), globalAdmin, { type: "member", userId: member, unitId: "unit-1", functionIds: ["clothing"] }, now);
   let display = auditDisplay(state, legacy(state.audit[0]));
   assert.equal(display.target, "Mitglied: Anna Berg");
-  assert.match(display.detail, /Einheit: Scheuren → Odenthal; Sonderfunktionen: Atemschutz, Gerätewarte → Kleiderkammer/);
+  assert.match(display.detail, /Einheit: Scheuren → Scherf; Sonderfunktionen: Atemschutz, Gerätewarte → Kleiderkammer/);
   state = execute(state, globalAdmin, { type: "functionMember", userId: member, functionId: "breathing", assigned: true }, now);
   assert.match(auditDisplay(state, legacy(state.audit[0])).detail, /^Atemschutz: zugeordnet/);
   state = execute(state, globalAdmin, { type: "roles", userId: member, roles: [{ role: "UNIT_ADMIN", scopeId: "unit-1" }, { role: "FUNCTION_ADMIN", scopeId: "breathing" }] }, now);
   display = auditDisplay(state, legacy(state.audit[0]));
-  assert.equal(display.detail, "Mitglied → Einheitsadministration · Odenthal, Funktionsadministration · Atemschutz");
+  assert.equal(display.detail, "Mitglied → Einheitsadministration · Scherf, Funktionsadministration · Atemschutz");
 });
 
 test("series and event edits display readable dates and scopes, preserving user-written descriptions", () => {

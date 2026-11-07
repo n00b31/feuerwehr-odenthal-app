@@ -12,8 +12,8 @@ import { dateLabel } from "@/domain/time";
 import { AppDialog } from "./app-dialog";
 import { Empty, Metric } from "./ui";
 
-type Filters = { scope: ReportScope; target: string; year: number | null; type: keyof typeof EVENT_TYPES | ""; page: number };
-const initialFilters: Filters = { scope: "personal", target: "", year: null, type: "", page: 0 };
+type Filters = { scope: ReportScope; target: string; subject: string; year: number | null; type: keyof typeof EVENT_TYPES | ""; page: number };
+const initialFilters: Filters = { scope: "personal", target: "", subject: "", year: null, type: "", page: 0 };
 
 export function SupabaseReports({ client, access, personalOnly = false }: {
   client: SupabaseClient; access: Access; personalOnly?: boolean;
@@ -34,14 +34,16 @@ export function SupabaseReports({ client, access, personalOnly = false }: {
     wanted_year: filters.year ?? context.current_year, report_scope: filters.scope,
     target_scope: filters.target || null, wanted_type: filters.type || null,
     page_number: filters.page, export_all: false,
+    seed_member: filters.subject || undefined,
   } : null;
   const queryKey = JSON.stringify(query);
   const report = loaded?.key === queryKey ? loaded.report : null;
   const selected = report?.events.find((event) => event.event_id === selectedId);
-  const targets = !context ? [] : filters.scope === "personal" ? context.personal_units
+  const seedPerson = context?.seed_people.find((person) => person.id===filters.subject);
+  const targets = !context ? [] : filters.scope === "personal" ? filters.subject ? seedPerson?.units ?? [] : context.personal_units
     : filters.scope === "function" ? context.functions : context.units;
   const authorized = !!context && (filters.scope === "personal"
-    ? !filters.target || context.personal_units.some((unit) => unit.id === filters.target)
+    ? (!filters.subject || (context.organization && !!seedPerson)) && (!filters.target || targets.some((unit) => unit.id === filters.target))
     : filters.scope === "organization" ? context.organization && (!filters.target || context.units.some((unit) => unit.id === filters.target))
     : targets.some((scope) => scope.id === filters.target));
 
@@ -105,12 +107,12 @@ export function SupabaseReports({ client, access, personalOnly = false }: {
       : b.metrics.training_present - a.metrics.training_present) ?? [];
   return <section className="dutybook" aria-label="Digitales Feuerwehr-Dienstbuch">
     <div className="section-heading"><div><div className="eyebrow">BESTÄTIGTE ANWESENHEIT · SUPABASE</div>
-      <h2>{filters.scope === "personal" ? "Mein Dienstbuch" : filters.scope === "organization" ? "Wehrleiter-Dashboard" : "Jahresstatistik"}</h2></div>
+      <h2>{filters.scope === "personal" ? filters.subject ? "Synthetisches Testdienstbuch" : "Mein Dienstbuch" : filters.scope === "organization" ? "Wehrleiter-Dashboard" : "Jahresstatistik"}</h2></div>
       <button className="button secondary" onClick={() => setReload((value) => value + 1)} disabled={exporting}><RefreshCw size={17} />Bericht aktualisieren</button>
     </div>
     {(contextError || error) && <div className="notice error" role="alert">{contextError || error}
       <button className="button secondary" onClick={() => setReload((value) => value + 1)}>Erneut laden</button>
-      {filters.scope !== "personal" && <button className="button secondary" onClick={() => change({ scope: "personal", target: "" })}>Mein Dienstbuch öffnen</button>}
+      {(filters.scope !== "personal" || filters.subject) && <button className="button secondary" onClick={() => change({ scope: "personal", target: "", subject: "" })}>Mein Dienstbuch öffnen</button>}
     </div>}
     {!context && !contextError && <p role="status">Berichtsberechtigungen werden geprüft …</p>}
     {context && <>
@@ -118,7 +120,7 @@ export function SupabaseReports({ client, access, personalOnly = false }: {
         {!personalOnly && <label>Berichtsansicht<select value={filters.scope} disabled={exporting}
           onChange={(event) => {
             const scope = event.target.value as ReportScope;
-            change({ scope, target: scope === "unit" ? context.units[0]?.id ?? "" : scope === "function" ? context.functions[0]?.id ?? "" : "" });
+            change({ scope, subject: "", target: scope === "unit" ? context.units[0]?.id ?? "" : scope === "function" ? context.functions[0]?.id ?? "" : "" });
           }}>
           <option value="personal">Mein Dienstbuch</option>
           {context.units.length>0 && <option value="unit">Jahresstatistik der Einheit</option>}
@@ -129,7 +131,12 @@ export function SupabaseReports({ client, access, personalOnly = false }: {
           onChange={(event) => change({ year: Number(event.target.value) })}>
           {context.years.map((year) => <option key={year} value={year}>{year}</option>)}
         </select></label>
-        {(filters.scope !== "personal" || context.personal_units.length>1) && <label>{filters.scope === "function" ? "Sonderfunktion" : "Einheit"}
+        {!personalOnly && filters.scope==="personal" && context.seed_people.length>0 && <label>Testdienstbuch (nicht anmeldbar)
+          <select value={filters.subject} disabled={exporting} onChange={(event) => change({ subject: event.target.value, target: "" })}>
+            <option value="">Mein eigenes Dienstbuch</option>
+            {context.seed_people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
+          </select></label>}
+        {(filters.scope !== "personal" || targets.length>1) && <label>{filters.scope === "function" ? "Sonderfunktion" : "Einheit"}
           <select value={filters.target} disabled={exporting} onChange={(event) => change({ target: event.target.value })}>
             {["personal","organization"].includes(filters.scope) && <option value="">Alle Einheiten</option>}
             {targets.map((target) => <option key={target.id} value={target.id}>{target.name}</option>)}
@@ -140,6 +147,7 @@ export function SupabaseReports({ client, access, personalOnly = false }: {
           {context.event_types.map((type) => <option key={type.event_type} value={type.event_type}>{EVENT_TYPES[type.event_type]}</option>)}
         </select></label>
       </div></div>
+      {filters.subject && <p className="notice"><strong>{seedPerson?.name}</strong> · Eindeutig synthetische DEV-Testidentität ohne Auth-Konto oder Anmeldung. Ausschließlich lesende organisationsweit berechtigte Berichtseinsicht; kein Profilwechsel und keine Anmeldung als diese Person.</p>}
       {busy && <p className="muted text-sm" role="status">Bericht wird aktualisiert; Auswahl und geöffnete Details bleiben erhalten …</p>}
       {report && authorized && <>
         <ReportCards report={report} />

@@ -4,7 +4,7 @@ import { belongs } from "../domain/permissions";
 
 export function createSeed(now = new Date()): DemoState {
   const { date, year } = berlinParts(now);
-  const units = ["Scheuren", "Odenthal", "Blecher", "Eikamp", "Voiswinkel"].map((name, i) => ({ id: `unit-${i}`, name }));
+  const units = ["Scheuren", "Scherf", "Blecher", "Eikamp", "Voiswinkel"].map((name, i) => ({ id: `unit-${i}`, name }));
   const functions = [
     { id: "equipment", name: "Gerätewarte" },
     { id: "clothing", name: "Kleiderkammer" },

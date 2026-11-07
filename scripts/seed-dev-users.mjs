@@ -10,8 +10,8 @@ const PLAN = [
   ["anna.test", "Anna Becker", "UNIT_ADMIN", "scheuren"],
   ["thomas.test", "Thomas Weber", "MEMBER", "scheuren"],
   ["lisa.test", "Lisa M\u00fcller", "MEMBER", "scheuren"],
-  ["peter.test", "Peter Schneider", "UNIT_ADMIN", "odenthal"],
-  ["sarah.test", "Sarah Fischer", "MEMBER", "odenthal"],
+  ["peter.test", "Peter Schneider", "UNIT_ADMIN", "scherf"],
+  ["sarah.test", "Sarah Fischer", "MEMBER", "scherf"],
 ].map(([local, display_name, role, unit_code]) => ({
   email: `${local}@feuerwehr-odenthal.de`, display_name, role, unit_code,
 }));

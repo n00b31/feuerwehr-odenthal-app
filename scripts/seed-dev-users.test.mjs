@@ -18,7 +18,7 @@ function fixture() {
   const members = locals.map((local, i) => ({
     email: `${local}.test@feuerwehr-odenthal.de`, display_name: names[i],
     role: [0, 1, 4].includes(i) ? "UNIT_ADMIN" : "MEMBER",
-    unit_code: i < 4 ? "scheuren" : "odenthal", unit_id: units[i < 4 ? 0 : 1],
+    unit_code: i < 4 ? "scheuren" : "scherf", unit_id: units[i < 4 ? 0 : 1],
     state: "missing", user_id: null,
   }));
   const users = [];
