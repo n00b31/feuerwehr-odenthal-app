@@ -274,7 +274,9 @@ function CalendarSettings({client,context,busy,run}:{client:SupabaseClient;conte
       <button className="button" disabled={busy}>Gerätehaus speichern</button>
     </form>
     <p className="muted text-sm">Ressourcentypen Raum, Fahrzeug und Material sind strukturell vorbereitet, keine Fahrzeugreservierung oder Genehmigung.</p>
-    <form className="form-grid" onSubmit={e=>{e.preventDefault();void run(()=>saveCalendarCategory(client,category,categoryId,categoryActive),"Kategorie gespeichert.");}}>
+    <form className="form-grid" onSubmit={e=>{e.preventDefault();void run(async()=>{
+      setCategoryId(await saveCalendarCategory(client,category,categoryId,categoryActive));
+    },"Kategorie gespeichert.");}}>
       <label>Kategorie bearbeiten<select value={categoryId ?? ""} onChange={e=>{
         const c=context.categories.find(c=>c.id===e.target.value);setCategoryId(c?.id ?? null);setCategory(c?.name ?? "");setCategoryActive(c?.active ?? true);
       }}><option value="">Neue Kategorie</option>{context.categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>

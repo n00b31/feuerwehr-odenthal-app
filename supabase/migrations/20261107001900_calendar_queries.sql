@@ -15,7 +15,7 @@ returns jsonb language sql stable security definer set search_path='' as $$
     left join public.units u on u.id=e.unit_id left join public.special_functions f on f.id=e.function_id
     left join public.profiles p on p.id=e.organizer_id
     left join public.calendar_categories cat on cat.id=c.category_id left join public.calendar_resources r on r.id=c.resource_id
-  where e.id=target and ff_private.can_view_event(e.id);
+  where e.id=target and c.archived_at is null and ff_private.can_view_event(e.id);
 $$;
 create function public.ff_calendar_page(lower_bound timestamptz,upper_bound timestamptz,scopes text[] default '{}',
   wanted_units uuid[] default '{}',wanted_types public.ff_event_type[] default '{}',wanted_kinds text[] default '{}',wanted_categories uuid[] default '{}',
@@ -61,6 +61,56 @@ begin
     'retained_events',coalesce((select jsonb_agg(summary order by summary->>'starts_at',summary->>'id')
       from (select ff_private.calendar_summary(id) summary from (select distinct unnest(retained_ids) id) x
         where not(id=any(ids[1:400]))) y where summary is not null),'[]'));
+end;
+$$;
+
+-- Preserve legacy editing behavior, but never let that API bypass calendar metadata.
+create or replace function public.ff_update_single_event(target_event uuid,expected_revision integer,input jsonb)
+returns void language plpgsql security definer set search_path='' as $$
+declare previous public.events;
+begin
+  select * into previous from public.events where id=target_event for update;
+  perform ff_private.require_rule(found and ff_private.manages_scope(previous.scope_kind,previous.unit_id,previous.function_id),
+    'Keine Terminverwaltung für diesen Bereich.');
+  perform ff_private.require_rule(not exists(select 1 from public.event_calendar where event_id=target_event),
+    'Organisatorische Einträge ausschließlich über die Kalenderverwaltung bearbeiten.');
+  perform ff_private.require_rule(previous.series_id is null and previous.status='scheduled'
+    and previous.starts_at>clock_timestamp(),'Nur zukünftige, geplante Einzeltermine sind bearbeitbar.');
+  if expected_revision is distinct from previous.revision then
+    raise exception 'Termin wurde zwischenzeitlich geändert. Bitte aktualisieren.' using errcode='40001';
+  end if;
+  perform ff_private.validate_single_event(input);
+  perform ff_private.require_rule((input->>'starts_at')::timestamptz>clock_timestamp(),'Der geänderte Beginn muss in der Zukunft liegen.');
+  perform ff_private.require_rule((input->>'unit_id')::uuid is not distinct from previous.unit_id,
+    'Einheit und Teilnehmerkreis bleiben bei bestehenden Terminen unverändert.');
+  update public.events set title=btrim(input->>'title'),description=coalesce(input->>'description',''),
+    event_type=(input->>'event_type')::public.ff_event_type,starts_at=(input->>'starts_at')::timestamptz,
+    ends_at=(input->>'ends_at')::timestamptz,location=btrim(input->>'location'),
+    response_deadline=nullif(input->>'response_deadline','')::timestamptz,revision=revision+1 where id=target_event;
+  perform ff_private.write_audit('event_updated',target_event,null,to_jsonb(previous),
+    (select to_jsonb(e) from public.events e where e.id=target_event));
+end;
+$$;
+create or replace function public.ff_cancel_single_event(target_event uuid,expected_revision integer,reason text)
+returns void language plpgsql security definer set search_path='' as $$
+declare previous public.events;
+begin
+  select * into previous from public.events where id=target_event for update;
+  perform ff_private.require_rule(found and ff_private.manages_scope(previous.scope_kind,previous.unit_id,previous.function_id),
+    'Keine Terminverwaltung für diesen Bereich.');
+  perform ff_private.require_rule(not exists(select 1 from public.event_calendar where event_id=target_event),
+    'Organisatorische Einträge ausschließlich über die Kalenderverwaltung absagen.');
+  perform ff_private.require_rule(previous.series_id is null and previous.status='scheduled','Nur geplante Einzeltermine können abgesagt werden.');
+  if expected_revision is distinct from previous.revision then
+    raise exception 'Termin wurde zwischenzeitlich geändert. Bitte aktualisieren.' using errcode='40001';
+  end if;
+  perform ff_private.require_rule(length(btrim(reason)) between 5 and 2000,'Absagegrund mit mindestens fünf Zeichen erforderlich.');
+  perform ff_private.require_rule(not exists(select 1 from public.actual_attendance where event_id=target_event)
+    and not exists(select 1 from public.attendance_confirmations where event_id=target_event),
+    'Termine mit erfasster Anwesenheit können nicht abgesagt werden.');
+  update public.events set status='cancelled',revision=revision+1 where id=target_event;
+  perform ff_private.write_audit('event_cancelled',target_event,null,to_jsonb(previous),
+    (select to_jsonb(e) from public.events e where e.id=target_event),btrim(reason));
 end;
 $$;
 

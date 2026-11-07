@@ -35,10 +35,10 @@ select public.ff_approve_member('a0500000-0000-4000-8000-000000000004',current_s
 select public.ff_approve_member('a0500000-0000-4000-8000-000000000005',current_setting('cal.unit')::uuid);
 select public.ff_approve_member('a0500000-0000-4000-8000-000000000006',current_setting('cal.other')::uuid);
 select public.ff_approve_member('a0500000-0000-4000-8000-000000000007',(select id from public.units where code='eikamp'));
-select public.ff_set_role('a0500000-0000-4000-8000-000000000003','UNIT_ADMIN',current_setting('cal.unit')::uuid,null,true,'Synthetic calendar role');
+select public.ff_set_role('a0500000-0000-4000-8000-000000000003','UNIT_ADMIN',current_setting('cal.unit')::uuid,null,true);
 select public.ff_set_function_membership('a0500000-0000-4000-8000-000000000005',current_setting('cal.function')::uuid,true,'Synthetic calendar function');
-select public.ff_set_role('a0500000-0000-4000-8000-000000000005','FUNCTION_ADMIN',null,current_setting('cal.function')::uuid,true,'Synthetic calendar role');
-select public.ff_set_role('a0500000-0000-4000-8000-000000000006','FIRE_CHIEF',null,null,true,'Synthetic calendar role');
+select public.ff_set_role('a0500000-0000-4000-8000-000000000005','FUNCTION_ADMIN',null,current_setting('cal.function')::uuid,true);
+select public.ff_set_role('a0500000-0000-4000-8000-000000000006','FIRE_CHIEF',null,null,true);
 select set_config('cal.resource',public.ff_save_calendar_resource(jsonb_build_object('name','Synthetic Scheuren building',
   'resource_type','building','unit_id',current_setting('cal.unit'),'active',true))::text,true);
 select set_config('cal.info',(public.ff_save_calendar_event(pg_temp.calendar_payload('Synthetic public information','information',null))->>'id'),true);
@@ -120,6 +120,52 @@ select public.ff_save_calendar_event(pg_temp.calendar_payload('Synthetic DST ful
 select pg_temp.calendar_assert(public.ff_year_report(2026)->'summary'->>'pending'='0','informational past events do not manufacture pending dutybooks');
 select pg_temp.calendar_assert(jsonb_array_length(public.ff_calendar_page('2026-03-28T23:00:00Z','2026-03-29T22:00:00Z',
   wanted_kinds=>array['information'])->'events')=1,'Berlin 23-hour day query includes all-day event');
+select public.ff_save_calendar_event(pg_temp.calendar_payload('Synthetic autumn full day','information',null)||
+  jsonb_build_object('all_day',true,'starts_at','2026-10-24T22:00:00Z','ends_at','2026-10-25T23:00:00Z'));
+select pg_temp.calendar_assert(jsonb_array_length(public.ff_calendar_page('2026-10-24T22:00:00Z','2026-10-25T23:00:00Z',
+  wanted_kinds=>array['information'])->'events')=1,'Berlin 25-hour day includes all-day event');
+select pg_temp.calendar_assert(jsonb_array_length(public.ff_calendar_conflicts(current_setting('cal.resource')::uuid,
+  (select max(e.ends_at) from public.events e join public.event_calendar c on c.event_id=e.id where c.resource_id=current_setting('cal.resource')::uuid),
+  (select max(e.ends_at)+interval '1 hour' from public.events e join public.event_calendar c on c.event_id=e.id where c.resource_id=current_setting('cal.resource')::uuid)))=0,
+  'back-to-back bookings do not overlap');
+select pg_temp.calendar_assert((select count(*)=2 from jsonb_array_elements(public.ff_calendar_page(
+  current_setting('cal.lower')::timestamptz,current_setting('cal.upper')::timestamptz,
+  wanted_types=>array['regular']::public.ff_event_type[],wanted_kinds=>array['information'])->'events') e
+  where e->>'id' in (current_setting('cal.service'),current_setting('cal.info'))),
+  'service type and organizational kind combine with OR within feature group');
+select pg_temp.calendar_assert((select count(*)=1 from jsonb_array_elements(public.ff_calendar_page(
+  current_setting('cal.lower')::timestamptz,current_setting('cal.upper')::timestamptz,
+  wanted_units=>array[current_setting('cal.unit')::uuid],wanted_kinds=>array['information'])->'events') e
+  where e->>'id'=current_setting('cal.multi')),'unit filter includes explicitly targeted multi-unit entry');
+select pg_temp.calendar_assert(jsonb_array_length(public.ff_calendar_page(current_setting('cal.lower')::timestamptz,
+  current_setting('cal.upper')::timestamptz,retained_ids=>array[current_setting('cal.own')::uuid])->'retained_events')=0,
+  'retained archived entry is explicitly no longer available');
+select pg_temp.calendar_denied($q$select public.ff_update_single_event(current_setting('cal.info')::uuid,0,
+  pg_temp.calendar_payload('Forged legacy editing','information',null)||jsonb_build_object('event_type','regular'))$q$);
+select pg_temp.calendar_denied($q$select public.ff_cancel_single_event(current_setting('cal.info')::uuid,0,'Forbidden legacy cancellation')$q$);
+select pg_temp.calendar_denied($q$insert into public.calendar_resources(name,resource_type) values('Forged direct write','building')$q$);
+do $$ begin
+  begin
+    perform public.ff_save_calendar_resource(jsonb_build_object('name','Synthetic stale resource','resource_type','building',
+      'unit_id',current_setting('cal.unit'),'active',true),current_setting('cal.resource')::uuid,99);
+    raise exception 'FAIL: stale resource accepted';
+  exception when serialization_failure then raise notice 'PASS: stale resource revision rejected';
+  end;
+end $$;
+do $$ declare i int; begin
+  for i in 1..401 loop
+    perform public.ff_save_calendar_event(pg_temp.calendar_payload('Synthetic cursor '||i,'information',null)||
+      jsonb_build_object('starts_at','2028-01-02T00:00:00Z'::timestamptz+i*interval '1 minute',
+        'ends_at','2028-01-02T01:00:00Z'::timestamptz+i*interval '1 minute'));
+  end loop;
+end $$;
+do $$ declare first jsonb; second jsonb; begin
+  first:=public.ff_calendar_page('2028-01-01T23:00:00Z','2028-01-02T23:00:00Z');
+  perform pg_temp.calendar_assert(jsonb_array_length(first->'events')=400 and first->'next_cursor'<>'null'::jsonb,'400-entry bounded first cursor page');
+  second:=public.ff_calendar_page('2028-01-01T23:00:00Z','2028-01-02T23:00:00Z',
+    after_start=>(first#>>'{next_cursor,starts_at}')::timestamptz,after_id=>(first#>>'{next_cursor,id}')::uuid);
+  perform pg_temp.calendar_assert(jsonb_array_length(second->'events')=1 and second->'next_cursor'='null'::jsonb,'final cursor page has remaining entry, no silent truncation');
+end $$;
 select pg_temp.calendar_denied($q$select public.ff_prepare_attendance(current_setting('cal.info')::uuid)$q$);
 select pg_temp.calendar_assert((select count(*)>0 from public.audit_entries where action like 'calendar_%'),'calendar changes audited');
 rollback;

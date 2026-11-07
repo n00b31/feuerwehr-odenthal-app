@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calendarRange,moveCalendar,calendarPayload,eventsOnDay,weekPlacement,type CalendarDraft,type CalendarEvent } from "./calendar";
+import { calendarRange,moveCalendar,calendarPayload,eventsOnDay,weekPlacement,weekColumns,type CalendarDraft,type CalendarEvent } from "./calendar";
 
 test("month grids are 42 Monday-based days including adjacent month events",() => {
   const range=calendarRange("2026-11-07","month");
@@ -15,6 +15,9 @@ test("weeks and chronological list ranges navigate independently",() => {
 const draft: CalendarDraft={title:"Synthetic calendar",description:"",location:"Test",start:"2026-03-29T00:00",end:"2026-03-29T00:00",
   all_day:true,entry_kind:"information",scope_kind:"organization",unit_id:"",function_id:"",organizer_id:"11000000-0000-4000-8000-000000000001",
   category_id:"21000000-0000-4000-8000-000000000001",resource_id:"",audience:"scope",unit_ids:[]};
+const fixture:CalendarEvent={...calendarPayload(draft),id:"31000000-0000-4000-8000-000000000001",
+  organizer_name:"Synthetic organizer",scope_name:"Organization",status:"scheduled",revision:0,
+  category_name:"Synthetic category",resource_name:null,can_manage:true};
 test("all-day events span actual 23/25-hour Berlin days, with exclusive stored end",() => {
   let value=calendarPayload(draft);
   assert.equal((Date.parse(value.ends_at)-Date.parse(value.starts_at))/3600000,23);
@@ -28,12 +31,17 @@ test("nonexistent DST wall clocks and invalid booking/scope combinations fail ex
   assert.throws(() => calendarPayload({...draft,audience:"units"}),/Zieleinheiten/);
 });
 test("cross-midnight events use half-open day intersections, no duplicate midnight event",() => {
-  const event={id:"1",starts_at:"2026-11-06T23:00:00Z",ends_at:"2026-11-07T23:00:00Z"} as CalendarEvent;
+  const event={...fixture,starts_at:"2026-11-06T23:00:00Z",ends_at:"2026-11-07T23:00:00Z"};
   assert.equal(eventsOnDay([event],"2026-11-07").length,1);
   assert.equal(eventsOnDay([event],"2026-11-08").length,0);
 });
 test("repeated autumn hours remain visible on the temporal week grid",() => {
-  const event={starts_at:"2026-10-25T00:30:00Z",ends_at:"2026-10-25T01:30:00Z"} as CalendarEvent;
+  const event={...fixture,starts_at:"2026-10-25T00:30:00Z",ends_at:"2026-10-25T01:30:00Z"};
   assert.equal(weekPlacement(event,"2026-10-25").top,75);
   assert.ok(weekPlacement(event,"2026-10-25").height>=44);
+});
+test("three concurrent week entries use separate visual lanes, all-day entries use the header",()=>{
+  const events=[1,2,3].map(i=>({...fixture,id:`31000000-0000-4000-8000-00000000000${i}`,all_day:false}));
+  assert.equal(weekColumns([...events,fixture],"2026-03-29").items.length,3);
+  assert.equal(weekColumns(events,"2026-03-29").lanes,3);
 });
