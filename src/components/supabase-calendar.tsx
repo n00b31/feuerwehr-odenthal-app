@@ -4,7 +4,7 @@ import { useCallback,useEffect,useRef,useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { CalendarDays,ChevronLeft,ChevronRight,Plus,RefreshCw } from "lucide-react";
 import { readCalendar,saveCalendarEvent,changeCalendarEvent,calendarConflicts,saveCalendarResource,saveCalendarCategory } from "@/data/supabase-calendar";
-import { calendarDateSchema,calendarDraft,calendarKindSchema,calendarPayload,calendarRange,calendarTime,eventsOnDay,
+import { calendarDateSchema,calendarDraft,calendarInterval,calendarKindSchema,calendarPayload,calendarRange,calendarTime,eventsOnDay,
   moveCalendar,weekColumns,emptyCalendarFilters,type CalendarView,type CalendarDraft,type CalendarEvent,
   type CalendarContext,type CalendarFilters,type CalendarConflict } from "@/domain/calendar";
 import { berlinParts,dateLabel } from "@/domain/time";
@@ -73,6 +73,7 @@ export function SupabaseCalendar({client,actorId,initialTime,openService}:{
   }
   const all=snapshot ? [...snapshot.events,...snapshot.retained_events.filter(e=>!snapshot.events.some(x=>x.id===e.id))] : [];
   const selectedEvent=all.find(e=>e.id===selected);
+  const week=view==="week" && snapshot ? range.days.map(day=>({day,...weekColumns(snapshot.events,day)})) : [];
   function edit(event?:CalendarEvent) {
     if(!snapshot) return;
     closeSelected();setConflicts([]);
@@ -132,14 +133,15 @@ export function SupabaseCalendar({client,actorId,initialTime,openService}:{
           const items=eventsOnDay(snapshot.events,d);
           const today=berlinParts(snapshot.server_now).date===d;
           return <div key={d} className={`calendar-cell ${d.slice(0,7)!==date.slice(0,7) ? "adjacent" : ""} ${today ? "today" : ""}`}>
-            <button className="calendar-day" aria-label={`Tagesübersicht ${dayName(d)}`} aria-current={today ? "date" : undefined} onClick={()=>setDay(d)}>{Number(d.slice(-2))}</button>
+            <button className="calendar-day" aria-label={`${Number(d.slice(-2))} · Tagesübersicht ${dayName(d)}`} aria-current={today ? "date" : undefined} onClick={()=>setDay(d)}>{Number(d.slice(-2))}</button>
             {items.slice(0,2).map(event=><CalendarChip key={event.id} event={event} choose={choose}/>)}
             {items.length>2 && <button className="calendar-more" onClick={()=>setDay(d)}>+{items.length-2} weitere</button>}
           </div>;
         })}
-      </div> : view==="week" ? <div className="calendar-week-scroll"><div className="calendar-week" aria-label="Wochenkalender">
-        {range.days.map(d=>{
-          const columns=weekColumns(snapshot.events,d);
+      </div> : view==="week" ? <div className="calendar-week-scroll"><div className="calendar-week" aria-label="Wochenkalender"
+        style={{gridTemplateColumns:week.map(columns=>`${Math.max(130,columns.lanes*60)}px`).join(" ")}}>
+        {week.map(columns=>{
+          const d=columns.day;
           return <section key={d}><button className="calendar-weekday calendar-day" onClick={()=>setDay(d)}>{dayName(d)}</button>
           <div className="calendar-week-all-day">{eventsOnDay(snapshot.events,d).filter(e=>e.all_day).map(e=><CalendarChip key={e.id} event={e} choose={choose}/>)}</div>
           <div className="calendar-hours" aria-label={`Zeitachse ${dayName(d)}`}>
@@ -156,7 +158,7 @@ export function SupabaseCalendar({client,actorId,initialTime,openService}:{
     {day && snapshot && <AppDialog title={`Termine ${dayName(day)}`} close={()=>setDay(null)}>
       <CalendarDayList events={snapshot.events} days={[day]} choose={choose}/></AppDialog>}
     {selectedEvent && <AppDialog title={selectedEvent.title} close={closeSelected}>
-      <p>{dayName(berlinParts(selectedEvent.starts_at).date)} · {selectedEvent.all_day ? "Ganztägig" : `${calendarTime(selectedEvent.starts_at)} – ${calendarTime(selectedEvent.ends_at)}`}</p>
+      <p>{calendarInterval(selectedEvent)}</p>
       <p>{selectedEvent.location} · {selectedEvent.scope_name} · {selectedEvent.status==="cancelled" ? "Abgesagt" : "Geplant"}</p>
       <p className="description">{selectedEvent.description}</p><p>Verantwortlich: {selectedEvent.organizer_name}</p>
       {selectedEvent.resource_name && <p>Gerätehaus: {selectedEvent.resource_name}</p>}

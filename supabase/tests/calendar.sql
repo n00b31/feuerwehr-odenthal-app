@@ -58,6 +58,11 @@ select pg_temp.calendar_assert((select count(*)=count(distinct e->>'id') from js
   current_setting('cal.lower')::timestamptz,current_setting('cal.upper')::timestamptz)->'events') e),'calendar introduces no duplicates');
 select pg_temp.calendar_assert((select count(*)=0 from jsonb_array_elements(public.ff_events_page()->'events') e
   where e->>'id'=current_setting('cal.info')),'information does not pollute legacy duty management');
+select pg_temp.calendar_assert((select count(*)=0 from jsonb_array_elements(public.ff_events_workspace()->'events') e
+  where e->>'id'=current_setting('cal.info')),'information also excluded from compatibility workspace');
+select pg_temp.calendar_assert((select after_data->'unit_ids' @> jsonb_build_array(current_setting('cal.unit'))
+  from public.audit_entries where event_id=current_setting('cal.multi')::uuid and action='calendar_event_saved' limit 1),
+  'audits capture explicit target unit identities');
 reset role;
 
 select set_config('request.jwt.claim.sub','a0500000-0000-4000-8000-000000000002',true);
@@ -128,6 +133,10 @@ select pg_temp.calendar_assert(jsonb_array_length(public.ff_calendar_conflicts(c
   (select max(e.ends_at) from public.events e join public.event_calendar c on c.event_id=e.id where c.resource_id=current_setting('cal.resource')::uuid),
   (select max(e.ends_at)+interval '1 hour' from public.events e join public.event_calendar c on c.event_id=e.id where c.resource_id=current_setting('cal.resource')::uuid)))=0,
   'back-to-back bookings do not overlap');
+select public.ff_change_calendar_event((select id from public.events where title='Synthetic overlap warning'),0,'cancel','Synthetic booking cancellation');
+select pg_temp.calendar_assert(jsonb_array_length(public.ff_calendar_conflicts(current_setting('cal.resource')::uuid,
+  current_setting('cal.lower')::timestamptz,current_setting('cal.upper')::timestamptz))=1,
+  'cancelled booking no longer contributes a resource conflict');
 select pg_temp.calendar_assert((select count(*)=2 from jsonb_array_elements(public.ff_calendar_page(
   current_setting('cal.lower')::timestamptz,current_setting('cal.upper')::timestamptz,
   wanted_types=>array['regular']::public.ff_event_type[],wanted_kinds=>array['information'])->'events') e

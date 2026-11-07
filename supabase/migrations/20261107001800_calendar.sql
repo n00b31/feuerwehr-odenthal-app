@@ -12,7 +12,7 @@ create table public.calendar_resources (
   unit_id uuid references public.units(id),
   active boolean not null default true,
   revision integer not null default 0 check(revision>=0),
-  unique(name,unit_id)
+  unique nulls not distinct(name,unit_id)
 );
 -- Only supplementary fields: title, times, scope and identity remain in events.
 create table public.event_calendar (
@@ -182,7 +182,7 @@ $$;
 
 create function public.ff_save_calendar_event(input jsonb,target_event uuid default null,expected_revision int default 0)
 returns jsonb language plpgsql security definer set search_path='' as $$
-declare previous public.events; previous_meta jsonb; result uuid; kind public.ff_scope;
+declare previous public.events; previous_meta jsonb; previous_targets jsonb; result uuid; kind public.ff_scope;
   unit uuid; func uuid; organizer uuid; resource uuid; category uuid; targets uuid[];
   start_time timestamptz; end_time timestamptz; wanted_audience text; conflicts jsonb:='[]';
 begin
@@ -226,6 +226,8 @@ begin
       'Nur aktive organisatorische Kalendereinträge bearbeiten; Dienste behalten ihre bestehende Verwaltung.');
     if previous.revision is distinct from expected_revision then raise exception 'Termin wurde zwischenzeitlich geändert.' using errcode='40001'; end if;
     select to_jsonb(c) into previous_meta from public.event_calendar c where event_id=target_event;
+    select coalesce(jsonb_agg(unit_id order by unit_id),'[]') into previous_targets
+      from public.calendar_event_units where event_id=target_event;
     update public.events set title=btrim(input->>'title'),description=coalesce(input->>'description',''),starts_at=start_time,
       ends_at=end_time,location=btrim(input->>'location'),scope_kind=kind,unit_id=unit,function_id=func,
       organizer_id=organizer,revision=revision+1 where id=target_event returning id into result;
@@ -242,8 +244,8 @@ begin
   insert into public.calendar_event_units(event_id,unit_id) select result,t from unnest(targets) t;
   if resource is not null then conflicts:=ff_private.calendar_conflicts(resource,start_time,end_time,result); end if;
   perform ff_private.write_audit('calendar_event_saved',result,null,
-    to_jsonb(previous)||jsonb_build_object('calendar',previous_meta),
-    (select to_jsonb(e)||jsonb_build_object('calendar',to_jsonb(c),'conflicts',conflicts)
+    to_jsonb(previous)||jsonb_build_object('calendar',previous_meta,'unit_ids',previous_targets),
+    (select to_jsonb(e)||jsonb_build_object('calendar',to_jsonb(c),'unit_ids',to_jsonb(targets),'conflicts',conflicts)
       from public.events e join public.event_calendar c on c.event_id=e.id where e.id=result));
   return jsonb_build_object('id',result,'conflicts',conflicts);
 end;

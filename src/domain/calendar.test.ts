@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calendarRange,moveCalendar,calendarPayload,eventsOnDay,weekPlacement,weekColumns,type CalendarDraft,type CalendarEvent } from "./calendar";
+import { calendarRange,moveCalendar,calendarPayload,calendarInterval,eventsOnDay,weekPlacement,weekColumns,type CalendarDraft,type CalendarEvent } from "./calendar";
 
 test("month grids are 42 Monday-based days including adjacent month events",() => {
   const range=calendarRange("2026-11-07","month");
@@ -44,4 +44,9 @@ test("three concurrent week entries use separate visual lanes, all-day entries u
   const events=[1,2,3].map(i=>({...fixture,id:`31000000-0000-4000-8000-00000000000${i}`,all_day:false}));
   assert.equal(weekColumns([...events,fixture],"2026-03-29").items.length,3);
   assert.equal(weekColumns(events,"2026-03-29").lanes,3);
+});
+test("multi-day details include the inclusive last day and repeated-hour offsets",()=>{
+  assert.match(calendarInterval({...fixture,ends_at:"2026-03-31T22:00:00Z"}),/31\./);
+  const interval=calendarInterval({...fixture,all_day:false,starts_at:"2026-10-25T00:30:00Z",ends_at:"2026-10-25T01:30:00Z"});
+  assert.match(interval,/MESZ/);assert.match(interval,/MEZ/);
 });

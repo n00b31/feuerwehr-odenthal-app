@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { addLocalDays, berlinParts, fromBerlin, localInput } from "./time";
+import { addLocalDays, berlinParts, dateLabel, fromBerlin, localInput } from "./time";
 import { devEventTypeSchema } from "./dev-events";
 
 export const calendarDateSchema = z.iso.date().refine((value) => Number(value.slice(0,4))>=2000 && Number(value.slice(0,4))<=2199);
@@ -89,6 +89,13 @@ export function eventsOnDay(events: CalendarEvent[], day: string) {
 }
 export function calendarTime(instant: string) {
   return new Intl.DateTimeFormat("de-DE",{ timeZone: "Europe/Berlin",hour: "2-digit",minute: "2-digit",timeZoneName: "short" }).format(new Date(instant));
+}
+export function calendarInterval(event:Pick<CalendarEvent,"starts_at"|"ends_at"|"all_day">) {
+  const start=berlinParts(event.starts_at).date;
+  const end=event.all_day ? addLocalDays(berlinParts(event.ends_at).date,-1) : berlinParts(event.ends_at).date;
+  const label=(day:string)=>dateLabel(`${day}T12:00:00Z`,{year:"numeric"});
+  return event.all_day ? `${label(start)}${end===start ? "" : ` – ${label(end)}`} · Ganztägig`
+    : `${label(start)} ${calendarTime(event.starts_at)} – ${end===start ? "" : `${label(end)} `}${calendarTime(event.ends_at)}`;
 }
 export function weekPlacement(event: CalendarEvent, day: string) {
   const start = berlinParts(event.starts_at), end = berlinParts(event.ends_at);

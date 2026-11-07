@@ -3,6 +3,8 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { readAccess, type Access } from "../src/data/supabase-repository";
 import { readReportsContext, readYearReport } from "../src/data/supabase-reports";
+import { readCalendar } from "../src/data/supabase-calendar";
+import { calendarRange, emptyCalendarFilters } from "../src/domain/calendar";
 
 let stage = "configuration";
 async function main() {
@@ -62,6 +64,17 @@ async function main() {
     stage = "existing ff_events_workspace";
     const events = await client.rpc("ff_events_workspace");
     assert(!events.error && Array.isArray(events.data?.events), "Existing event compatibility RPC failed.");
+    stage = "shared calendar context, range and canonical service identities";
+    const range = calendarRange("2026-11-07", "month");
+    const calendar = await readCalendar(client, range, emptyCalendarFilters);
+    assert(!calendar.context.organization && !calendar.context.configure, "Member/unit calendar gained technical or organization privileges.");
+    assert.deepEqual(calendar.context.manageable_units.map((u)=>u.id).sort(), context.units.map((u)=>u.id).sort());
+    assert(new Set(calendar.events.map((e)=>e.id)).size===calendar.events.length, "Calendar returned duplicate identities.");
+    const legacy = z.array(z.object({ id:z.uuid(), starts_at:z.string(), ends_at:z.string() })).parse(events.data.events);
+    for (const event of legacy.filter((e)=>Date.parse(e.starts_at)<Date.parse(range.upper_bound)
+      && Date.parse(e.ends_at)>Date.parse(range.lower_bound))) {
+      assert(calendar.events.some((e)=>e.id===event.id && e.entry_kind==="participation"), "Visible legacy service lost its canonical calendar identity.");
+    }
   }
   assert(syntheticId, "No authorized synthetic report identity discovered.");
   for (const { client } of records) {
@@ -72,7 +85,7 @@ async function main() {
     const logout = await client.auth.signOut({ scope: "local" });
     assert(!logout.error, "Discarding the temporary local test session failed.");
   }
-  console.log("PASS: six existing Auth logins; actual profile RLS, annual report RPCs, scoped denials and event compatibility. No new Auth users or business-data writes.");
+  console.log("PASS: six existing Auth logins; actual profile RLS, annual report RPCs, scoped denials, shared calendar and canonical event compatibility. No new Auth users or business-data writes.");
 }
 main().catch((error: unknown) => {
   console.error(`Live DEV history verification failed at ${stage} (${error instanceof Error ? error.name : "unknown error"}). Credentials and server payloads are omitted.`);

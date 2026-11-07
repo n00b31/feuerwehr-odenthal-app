@@ -130,7 +130,7 @@ test("calendar renders canonical services once, month/week/list, navigation and 
   await page.getByLabel("Übungsdienste / Ausbildung").check();
   await page.getByLabel("Organisatorische Information").check();
   await expect(page.locator(".calendar-chip")).toHaveCount(2);
-  await page.getByLabel("Einheitsfilter",{exact:true}).selectOption(unit);
+  await page.getByRole("combobox",{name:"Einheitsfilter",exact:true}).selectOption(unit);
   await expect(page.locator(".calendar-chip")).toHaveCount(1);
   expect(state.queries.at(-1)?.wanted_units).toEqual([unit]);
   await page.getByRole("button",{name:"Kalenderfilter zurücksetzen"}).click();
@@ -169,8 +169,8 @@ test("information create/edit/cancel/archive and warning-only building booking u
   await page.getByRole("button",{name:"Kalendereintrag erstellen"}).click();
   await page.getByLabel("Zweck / Titel").fill("Synthetic permitted overlap");
   await page.getByLabel("Ort",{exact:true}).fill("Synthetic building");
-  await page.getByLabel("Eintragsart",{exact:true}).selectOption("booking");
-  await page.getByLabel("Gerätehaus",{exact:true}).selectOption(resource);
+  await page.getByRole("combobox",{name:"Eintragsart",exact:true}).selectOption("booking");
+  await page.getByRole("combobox",{name:"Gerätehaus",exact:true}).selectOption(resource);
   await page.getByRole("button",{name:"Überschneidungen prüfen"}).click();
   await expect(page.getByRole("heading",{name:/Überschneidung erkannt/})).toBeVisible();
   await page.getByRole("button",{name:"Kalendereintrag speichern"}).click();
@@ -186,11 +186,11 @@ test("resource successive edits keep revisions, drafts and explicit refresh erro
   await expect(page.getByRole("status")).toContainText("Gerätehaus gespeichert");
   await page.getByLabel("Gerätehausname").fill("Synthetic twice renamed building");
   await page.getByRole("button",{name:"Gerätehaus speichern",exact:true}).click();
-  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(page.locator(".calendar").getByRole("alert")).toHaveCount(0);
   await expect(page.getByLabel("Gerätehausname")).toHaveValue("Synthetic twice renamed building");
   state.fail=true;
   await page.getByRole("button",{name:"Kalender aktualisieren"}).click();
-  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.locator(".calendar").getByRole("alert")).toBeVisible();
 });
 
 test("four simulated background intervals retain month/filter/native dialog and editor DOM",async({page})=>{
