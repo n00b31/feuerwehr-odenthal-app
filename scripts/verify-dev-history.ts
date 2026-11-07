@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
-import { PLAN, PROJECT, pinnedFetch } from "./seed-dev-users.mjs";
 import { readAccess, type Access } from "../src/data/supabase-repository";
 import { readReportsContext, readYearReport } from "../src/data/supabase-reports";
 
 let stage = "configuration";
 async function main() {
+  const { PLAN, PROJECT, pinnedFetch } = await import("./seed-dev-users.mjs");
   const env = process.env;
   const origin = `https://${PROJECT}.supabase.co`;
   const key = env.SUPABASE_DEV_PUBLISHABLE_KEY;
