@@ -1,5 +1,11 @@
 # Feuerwehr Odenthal · Supabase DEV und lokale Regression
 
+**DEV 0.4.1:** [Scherf-Korrektur und nicht anmeldbare historische Testdaten](docs/dev-history-seed.md).
+Die zusätzliche gehostete Profilmigration ist derzeit durch eine automatisch
+abgebrochene Client-Bestätigung blockiert; der Historien-Seed ist noch nicht
+im gehosteten DEV ausgeführt. Der vollständige Datensatz ist in isolierten
+PostgreSQL-/RPC-Tests validiert.
+
 Mobile-first Mitgliederportal mit **Next.js App Router, React, TypeScript und Tailwind CSS**. Inoffizieller DEV-Prototyp, keine produktive Anwendung. Die Supabase-Integration verwendet echte Authentifizierung und serverseitige Freigabe/RLS, aber ausschließlich autorisierte Testkonten und Testdaten. Kein vollständiger produktiver Backend-Funktionsumfang.
 
 ## Unabhängige Demo und DEV auf GitHub Pages

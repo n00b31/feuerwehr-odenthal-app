@@ -88,21 +88,6 @@ async function connect(page: Page, role: "MEMBER" | "UNIT_ADMIN" | "FIRE_CHIEF" 
         units: query.report_scope==="organization" ? units.filter((u) => !query.target_scope || u.id===query.target_scope)
           .map((u) => ({ ...u, members: 1, metrics: data })) : [],
       });
-      test("synthetic testbook is readonly overseer reporting, never a login or authenticated profile switch", async ({ page }) => {
-        const state = await connect(page, "FIRE_CHIEF");
-        const accessChecks = state.accessChecks;
-        await page.getByRole("combobox", { name: "Testdienstbuch (nicht anmeldbar)", exact: true }).selectOption(seedPerson);
-        await expect(page.getByRole("heading", { name: "Synthetisches Testdienstbuch", exact: true })).toBeVisible();
-        await expect(page.getByRole("heading", { name: "Hallo Synthetic Reporter", exact: true })).toBeVisible();
-        await expect(page.getByText(/ohne Auth-Konto oder Anmeldung/)).toBeVisible();
-        await expect(page.getByRole("link", { name: "Administration" })).toHaveCount(0);
-        await expect(page.getByRole("button", { name: "Dienst öffnen: Synthetic bestätigter Dienst" })).toBeVisible();
-        expect(state.calls.filter((call) => call==="/auth/v1/token")).toHaveLength(1);
-        expect(state.accessChecks).toBeGreaterThanOrEqual(accessChecks);
-        expect(state.queries.some((query) => query.seed_member===seedPerson)).toBe(true);
-        await page.getByRole("combobox", { name: "Testdienstbuch (nicht anmeldbar)", exact: true }).selectOption("");
-        await expect(page.getByRole("heading", { name: "Mein Dienstbuch", exact: true })).toBeVisible();
-      });
     }
     return respond({ message: `Unexpected synthetic endpoint: ${pathname}` }, 500);
   });
@@ -118,8 +103,26 @@ async function connect(page: Page, role: "MEMBER" | "UNIT_ADMIN" | "FIRE_CHIEF" 
   return state;
 }
 
+test("synthetic testbook is readonly overseer reporting, never a login or authenticated profile switch", async ({ page }) => {
+  const state = await connect(page, "FIRE_CHIEF");
+  await page.getByRole("combobox", { name: "Testdienstbuch (nicht anmeldbar)", exact: true }).selectOption(seedPerson);
+  await expect(page.getByRole("heading", { name: "Synthetisches Testdienstbuch", exact: true })).toBeVisible();
+  await expect(page.getByText(/ohne Auth-Konto oder Anmeldung/)).toBeVisible();
+  await expect(page.getByRole("link", { name: "Administration" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Dienst öffnen: Synthetic bestätigter Dienst" })).toBeVisible();
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Dienste als CSV", exact: true }).click();
+  const file = await download;
+  expect(await readFile((await file.path())!, "utf8")).toContain('"DEV TEST | Testmitglied Scheuren 01"');
+  expect(state.calls.filter((call) => call==="/auth/v1/token")).toHaveLength(1);
+  expect(state.queries.some((query) => query.seed_member===seedPerson)).toBe(true);
+  await page.getByRole("combobox", { name: "Testdienstbuch (nicht anmeldbar)", exact: true }).selectOption("");
+  await expect(page.getByRole("heading", { name: "Mein Dienstbuch", exact: true })).toBeVisible();
+});
+
 test("member reads own dutybook, opens read-only details and selects empty years without a fabricated quote", async ({ page }) => {
   const state = await connect(page, "MEMBER");
+  await expect(page.getByRole("combobox", { name: "Testdienstbuch (nicht anmeldbar)", exact: true })).toHaveCount(0);
   await expect(page.getByRole("combobox", { name: "Berichtsansicht" }).locator("option")).toHaveCount(1);
   await page.getByRole("button", { name: "Dienst öffnen: Synthetic bestätigter Dienst" }).click();
   const dialog = page.getByRole("dialog");
