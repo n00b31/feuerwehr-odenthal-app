@@ -34,7 +34,7 @@
 @media (max-width: 640px) {
   .calendar-month .calendar-chip { padding: 4px; font-size: 0.65rem; border-inline-start-width: 2px; }
   .calendar-month .calendar-chip strong { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .calendar-month .calendar-chip span { display: none; }
+  .calendar-month .calendar-chip > span:first-child { display: none; }
   .calendar-cell { min-height: 132px; padding: 2px; }
   .calendar-month .calendar-day { min-width: 32px; width: 100%; }
   .calendar .form-grid { grid-template-columns: minmax(0,1fr); }

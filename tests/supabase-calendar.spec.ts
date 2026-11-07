@@ -28,7 +28,7 @@ async function connect(page:Page,admin=true) {
   const state={queries:[] as Record<string,unknown>[],events:[
     event(service,"Synthetic existing service","participation",18),
     event(info,"Synthetic public information","information",19),
-  ],archived:new Set<string>(),conflict:false,fail:false,serviceQueries:0};
+  ],archived:new Set<string>(),conflict:false,fail:false,serviceQueries:0,nextId:9};
   const context:CalendarContext={organization:admin,configure:admin,
     units:[{id:unit,name:"Scheuren"}],manageable_units:admin ? [{id:unit,name:"Scheuren"}] : [],
     functions:[],organizers:[{id:actor,name:"Synthetic Calendar"}],categories:[{id:category,name:"Synthetic category",active:true}],
@@ -84,7 +84,7 @@ async function connect(page:Page,admin=true) {
     if(pathname.endsWith("/ff_calendar_conflicts")) return respond(conflicts());
     if(pathname.endsWith("/ff_save_calendar_event")) {
       const q=request.postDataJSON(),p=calendarPayloadSchema.parse(q.input);
-      const id=q.target_event ?? "e0500000-0000-4000-8000-000000000009";
+      const id=q.target_event ?? `e0500000-0000-4000-8000-${String(state.nextId++).padStart(12,"0")}`;
       const previous=state.events.find(e=>e.id===id);
       const row:CalendarEvent={...event(id,p.title,p.entry_kind,18),...p,revision:previous ? previous.revision+1 : 0};
       state.events=state.events.filter(e=>e.id!==id).concat(row);
@@ -161,6 +161,7 @@ test("information create/edit/cancel/archive and warning-only building booking u
   await page.getByLabel("Begründung für Absage / Archivierung").fill("Synthetic cancellation reason");
   await page.getByRole("button",{name:"Kalendereintrag absagen"}).click();
   await expect(page.locator(".calendar-chip").filter({hasText:"Synthetic edited information"})).toContainText("Abgesagt");
+  await expect(page.locator(".calendar-chip").filter({hasText:"Synthetic edited information"}).getByText("✕ Abgesagt",{exact:true})).toBeVisible();
   await page.locator(".calendar-chip").filter({hasText:"Synthetic edited information"}).click();
   await page.getByLabel("Begründung für Absage / Archivierung").fill("Synthetic archive reason");
   await page.getByRole("button",{name:"Kalendereintrag archivieren"}).click();
