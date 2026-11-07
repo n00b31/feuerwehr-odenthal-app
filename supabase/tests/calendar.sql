@@ -1,0 +1,125 @@
+begin;
+do $$ begin if current_database()<>'ff_dev_ci' then raise exception 'Disposable CI required'; end if; end $$;
+create function pg_temp.calendar_assert(value boolean,label text)
+returns void language plpgsql as $$ begin
+  if value is distinct from true then raise exception 'FAIL: %',label; end if;
+  raise notice 'PASS: %',label;
+end $$;
+create function pg_temp.calendar_denied(statement text)
+returns void language plpgsql as $$ begin
+  execute statement; raise exception 'FAIL: unauthorized statement succeeded';
+exception when insufficient_privilege then raise notice 'PASS: unauthorized calendar operation denied';
+end $$;
+create function pg_temp.calendar_payload(title text,kind text,unit uuid,resource uuid default null)
+returns jsonb language sql as $$
+  select jsonb_build_object('title',title,'description','Synthetic DEV 0.5 fixture','location','Synthetic location',
+    'entry_kind',kind,'all_day',false,'scope_kind',case when unit is null then 'organization' else 'unit' end,
+    'unit_id',unit,'function_id',null,'organizer_id',auth.uid(),'audience','scope','unit_ids','[]'::jsonb,
+    'resource_id',resource,'category_id',(select id from public.calendar_categories order by name limit 1),
+    'starts_at',clock_timestamp()+interval '2 days','ends_at',clock_timestamp()+interval '2 days 2 hours');
+$$;
+insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data)
+select ('a0500000-0000-4000-8000-'||lpad(i::text,12,'0'))::uuid,'synthetic.calendar.'||i||'@feuerwehr-odenthal.de',
+  clock_timestamp(),jsonb_build_object('display_name','Synthetic Calendar '||i) from generate_series(1,7) i;
+select set_config('cal.unit',(select id::text from public.units where code='scheuren'),true);
+select set_config('cal.other',(select id::text from public.units where code='blecher'),true);
+select set_config('cal.function',(select id::text from public.special_functions order by code limit 1),true);
+select set_config('cal.lower',((current_date+2)::timestamp at time zone 'Europe/Berlin')::text,true);
+select set_config('cal.upper',((current_date+5)::timestamp at time zone 'Europe/Berlin')::text,true);
+select ff_private.bootstrap_global_admin('a0500000-0000-4000-8000-000000000001',current_setting('cal.unit')::uuid);
+select set_config('request.jwt.claim.sub','a0500000-0000-4000-8000-000000000001',true);
+set local role authenticated;
+select public.ff_approve_member('a0500000-0000-4000-8000-000000000002',current_setting('cal.unit')::uuid);
+select public.ff_approve_member('a0500000-0000-4000-8000-000000000003',current_setting('cal.unit')::uuid);
+select public.ff_approve_member('a0500000-0000-4000-8000-000000000004',current_setting('cal.other')::uuid);
+select public.ff_approve_member('a0500000-0000-4000-8000-000000000005',current_setting('cal.unit')::uuid);
+select public.ff_approve_member('a0500000-0000-4000-8000-000000000006',current_setting('cal.other')::uuid);
+select public.ff_approve_member('a0500000-0000-4000-8000-000000000007',(select id from public.units where code='eikamp'));
+select public.ff_set_role('a0500000-0000-4000-8000-000000000003','UNIT_ADMIN',current_setting('cal.unit')::uuid,null,true,'Synthetic calendar role');
+select public.ff_set_function_membership('a0500000-0000-4000-8000-000000000005',current_setting('cal.function')::uuid,true,'Synthetic calendar function');
+select public.ff_set_role('a0500000-0000-4000-8000-000000000005','FUNCTION_ADMIN',null,current_setting('cal.function')::uuid,true,'Synthetic calendar role');
+select public.ff_set_role('a0500000-0000-4000-8000-000000000006','FIRE_CHIEF',null,null,true,'Synthetic calendar role');
+select set_config('cal.resource',public.ff_save_calendar_resource(jsonb_build_object('name','Synthetic Scheuren building',
+  'resource_type','building','unit_id',current_setting('cal.unit'),'active',true))::text,true);
+select set_config('cal.info',(public.ff_save_calendar_event(pg_temp.calendar_payload('Synthetic public information','information',null))->>'id'),true);
+select set_config('cal.private',(public.ff_save_calendar_event(pg_temp.calendar_payload('Synthetic leadership booking','booking',current_setting('cal.unit')::uuid,
+  current_setting('cal.resource')::uuid)||jsonb_build_object('audience','leadership'))->>'id'),true);
+select set_config('cal.multi',(public.ff_save_calendar_event(pg_temp.calendar_payload('Synthetic multiple units','information',null)||
+  jsonb_build_object('audience','units','unit_ids',jsonb_build_array(current_setting('cal.unit'),current_setting('cal.other'))))->>'id'),true);
+select set_config('cal.function_event',(public.ff_save_calendar_event(pg_temp.calendar_payload('Synthetic function event','information',null)||
+  jsonb_build_object('scope_kind','function','function_id',current_setting('cal.function'),'organizer_id','a0500000-0000-4000-8000-000000000005'))->>'id'),true);
+select set_config('cal.service',public.ff_create_single_event(jsonb_build_object('title','Synthetic existing service','description','',
+  'location','Test','unit_id',current_setting('cal.unit'),'event_type','regular',
+  'starts_at',clock_timestamp()+interval '2 days','ends_at',clock_timestamp()+interval '2 days 1 hour'))::text,true);
+select pg_temp.calendar_assert((select count(*)=0 from public.event_roster where event_id=current_setting('cal.info')::uuid),'information has no RSVP roster');
+select pg_temp.calendar_assert((select count(*)=1 from jsonb_array_elements(public.ff_calendar_page(current_setting('cal.lower')::timestamptz,
+  current_setting('cal.upper')::timestamptz)->'events') e where e->>'id'=current_setting('cal.service')),'existing service has one canonical calendar identity');
+select pg_temp.calendar_assert((select count(*)=count(distinct e->>'id') from jsonb_array_elements(public.ff_calendar_page(
+  current_setting('cal.lower')::timestamptz,current_setting('cal.upper')::timestamptz)->'events') e),'calendar introduces no duplicates');
+select pg_temp.calendar_assert((select count(*)=0 from jsonb_array_elements(public.ff_events_page()->'events') e
+  where e->>'id'=current_setting('cal.info')),'information does not pollute legacy duty management');
+reset role;
+
+select set_config('request.jwt.claim.sub','a0500000-0000-4000-8000-000000000002',true);
+set local role authenticated;
+select pg_temp.calendar_assert((select count(*)=1 from public.events where id=current_setting('cal.info')::uuid),'global information visible to member');
+select pg_temp.calendar_assert((select count(*)=0 from public.events where id=current_setting('cal.private')::uuid),'leadership booking hidden by event RLS');
+select pg_temp.calendar_assert((select count(*)=0 from public.event_calendar where event_id=current_setting('cal.private')::uuid),'metadata RLS also protects private event');
+select pg_temp.calendar_assert((select count(*)=1 from public.events where id=current_setting('cal.multi')::uuid),'target unit member sees multi-unit information');
+select pg_temp.calendar_assert((select count(*)=0 from public.events where id=current_setting('cal.function_event')::uuid),'function event protected');
+select pg_temp.calendar_assert(public.ff_calendar_conflicts(current_setting('cal.resource')::uuid,current_setting('cal.lower')::timestamptz,
+  current_setting('cal.upper')::timestamptz)#>>'{0,title}'='Bereits belegt (Details geschützt)','busy interval does not leak private title');
+select pg_temp.calendar_assert(public.ff_calendar_conflicts(current_setting('cal.resource')::uuid,current_setting('cal.lower')::timestamptz,
+  current_setting('cal.upper')::timestamptz)#>'{0,id}'='null'::jsonb,'busy interval does not leak private identity');
+select pg_temp.calendar_denied($q$select public.ff_save_calendar_event(pg_temp.calendar_payload('Unauthorized information','information',null))$q$);
+select pg_temp.calendar_denied($q$select public.ff_save_calendar_resource(jsonb_build_object('name','Forged resource','resource_type','building','active',true))$q$);
+select pg_temp.calendar_denied($q$select public.ff_set_response(current_setting('cal.info')::uuid,'yes')$q$);
+select public.ff_set_response(current_setting('cal.service')::uuid,'yes');
+reset role;
+
+select set_config('request.jwt.claim.sub','a0500000-0000-4000-8000-000000000003',true);
+set local role authenticated;
+select pg_temp.calendar_assert(jsonb_array_length(public.ff_save_calendar_event(pg_temp.calendar_payload('Synthetic overlap warning','booking',
+  current_setting('cal.unit')::uuid,current_setting('cal.resource')::uuid))->'conflicts')=1,'overlap warns without blocking permitted save');
+select set_config('cal.own',(public.ff_save_calendar_event(pg_temp.calendar_payload('Synthetic own information','information',current_setting('cal.unit')::uuid))->>'id'),true);
+select public.ff_save_calendar_event(pg_temp.calendar_payload('Synthetic changed information','information',current_setting('cal.unit')::uuid),
+  current_setting('cal.own')::uuid,0);
+select pg_temp.calendar_assert((select title='Synthetic changed information' and revision=1 from public.events where id=current_setting('cal.own')::uuid),'organizational editing increments revision');
+select public.ff_change_calendar_event(current_setting('cal.own')::uuid,1,'cancel','Synthetic cancellation');
+select public.ff_change_calendar_event(current_setting('cal.own')::uuid,2,'archive','Synthetic archive');
+select pg_temp.calendar_assert((select count(*)=0 from jsonb_array_elements(public.ff_calendar_page(
+  current_setting('cal.lower')::timestamptz,current_setting('cal.upper')::timestamptz)->'events') e
+  where e->>'id'=current_setting('cal.own')),'archived event leaves calendar without deletion');
+select pg_temp.calendar_denied($q$select public.ff_save_calendar_event(pg_temp.calendar_payload('Forged foreign unit','information',current_setting('cal.other')::uuid))$q$);
+select pg_temp.calendar_denied($q$select public.ff_save_calendar_category('Forged category')$q$);
+select pg_temp.calendar_denied($q$select public.ff_save_calendar_event(pg_temp.calendar_payload('Forged organization','information',null))$q$);
+reset role;
+
+select set_config('request.jwt.claim.sub','a0500000-0000-4000-8000-000000000006',true);
+set local role authenticated;
+select pg_temp.calendar_assert((public.ff_calendar_context()->>'organization')::boolean and not(public.ff_calendar_context()->>'configure')::boolean,
+  'FIRE_CHIEF has explicit organization calendar authority, no technical configuration');
+select public.ff_save_calendar_event(pg_temp.calendar_payload('Synthetic chief organization event','information',null));
+select pg_temp.calendar_denied($q$select public.ff_save_calendar_category('Forged chief category')$q$);
+select pg_temp.calendar_denied($q$select public.ff_set_account_status('a0500000-0000-4000-8000-000000000002','suspended','Forbidden chief suspension')$q$);
+reset role;
+select set_config('request.jwt.claim.sub','a0500000-0000-4000-8000-000000000007',true);
+set local role authenticated;
+select pg_temp.calendar_assert((select count(*)=0 from public.events where id=current_setting('cal.multi')::uuid),'unselected unit cannot see targeted event');
+reset role;
+select set_config('request.jwt.claim.sub','a0500000-0000-4000-8000-000000000005',true);
+set local role authenticated;
+select public.ff_save_calendar_event(pg_temp.calendar_payload('Synthetic function administration','information',null)||
+  jsonb_build_object('scope_kind','function','function_id',current_setting('cal.function')));
+select pg_temp.calendar_denied($q$select public.ff_save_calendar_event(pg_temp.calendar_payload('Forged function global event','information',null))$q$);
+reset role;
+select set_config('request.jwt.claim.sub','a0500000-0000-4000-8000-000000000001',true);
+set local role authenticated;
+select public.ff_save_calendar_event(pg_temp.calendar_payload('Synthetic DST full day','information',null)||
+  jsonb_build_object('all_day',true,'starts_at','2026-03-28T23:00:00Z','ends_at','2026-03-29T22:00:00Z'));
+select pg_temp.calendar_assert(public.ff_year_report(2026)->'summary'->>'pending'='0','informational past events do not manufacture pending dutybooks');
+select pg_temp.calendar_assert(jsonb_array_length(public.ff_calendar_page('2026-03-28T23:00:00Z','2026-03-29T22:00:00Z',
+  wanted_kinds=>array['information'])->'events')=1,'Berlin 23-hour day query includes all-day event');
+select pg_temp.calendar_denied($q$select public.ff_prepare_attendance(current_setting('cal.info')::uuid)$q$);
+select pg_temp.calendar_assert((select count(*)>0 from public.audit_entries where action like 'calendar_%'),'calendar changes audited');
+rollback;

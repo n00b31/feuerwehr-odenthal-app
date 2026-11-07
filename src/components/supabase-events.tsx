@@ -16,20 +16,23 @@ import { EVENT_TYPES } from "@/config/app";
 import { SupabaseAttendance } from "./supabase-attendance";
 import { attendanceLabels } from "@/domain/dev-attendance";
 import { defaultEventList, monthLabel, monthKeySchema, type EventListQuery } from "@/domain/dev-event-list";
+import { SupabaseCalendar } from "./supabase-calendar";
 
 export type EventEditorState = { id?: string; revision: number; draft: DevEventDraft };
 const responses: [DevResponse, string][] = [["yes", "Ich komme"], ["no", "Ich kann nicht"], ["maybe", "Vielleicht"]];
 const responseNames = { yes: "Zusage", no: "Absage", maybe: "Vielleicht" };
 
-export function SupabaseEvents({ client, initial, preferredUnit, editor, setEditor }: {
+export function SupabaseEvents({ client, initial, preferredUnit, editor, setEditor, actorId }: {
   client: SupabaseClient; initial: EventWorkspace; editor: EventEditorState | null;
-  preferredUnit: string | null;
+  preferredUnit: string | null; actorId: string;
   setEditor: (value: EventEditorState | null) => void;
 }) {
   const [workspace, setWorkspace] = useState<EventWorkspace | null>(initial);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [calendarVisible,setCalendarVisible]=useState(false);
+  const [calendarActivated,setCalendarActivated]=useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [serverTime, setServerTime] = useState(() => Date.parse(initial.server_now));
   const [query, setQuery] = useState<EventListQuery>(defaultEventList);
@@ -143,7 +146,25 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
         unit_id: workspace?.manageable_units.find((unit) => unit.id === preferredUnit)?.id ?? workspace?.manageable_units[0]?.id ?? "", start: "", end: "", deadline: "" },
     });
   }
-  return <section className="card section-card">
+  async function openService(id:string,editing:boolean) {
+    const result=await readEventWorkspace(client,query,null,[...new Set([...retained.current,id])]);
+    const item=[...result.events,...result.retained_events].find(e=>e.id===id);
+    if(!item) throw new Error("Dienst nicht mehr berechtigt sichtbar.");
+    if(editing && !item.can_manage) throw new Error("Keine bestehende Terminbearbeitung für diesen Dienst.");
+    retained.current=[...new Set([...retained.current,id])];
+    accept({result,version:++epoch.current.value});
+    if(editing) edit(item);
+    setCalendarVisible(false);
+    requestAnimationFrame(()=>document.getElementById(`event-${id}`)?.scrollIntoView({block:"start"}));
+  }
+  return <>
+    <div className="calendar-views dev-actions" aria-label="Terminbereich">
+      <button className="button secondary" aria-pressed={!calendarVisible} onClick={()=>setCalendarVisible(false)}>Dienstverwaltung</button>
+      <button className="button secondary" aria-pressed={calendarVisible} onClick={()=>{setCalendarActivated(true);setCalendarVisible(true);}}>Gemeinsamer Kalender</button>
+    </div>
+    {calendarActivated && <div hidden={!calendarVisible}><SupabaseCalendar client={client} actorId={actorId}
+      initialTime={initial.server_now} openService={openService}/></div>}
+    <section className="card section-card" hidden={calendarVisible}>
     <div className="event-card-top"><h2>Sichtbare DEV-Termine</h2><div className="dev-actions">
       <button className="button secondary" disabled={busy} onClick={() => void refresh()}><RefreshCw size={18} />Termine aktualisieren</button>
       {!!workspace?.manageable_units.length && !editor && <button className="button" disabled={busy} onClick={() => edit()}><CalendarPlus size={18} />Einzeltermin erstellen</button>}
@@ -191,7 +212,7 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
     {query.view === "month" && workspace.next_cursor && <button className="button secondary" disabled={busy} onClick={() => void loadMore()}>Weitere Termine laden</button>}
     {query.view !== "month" && workspace.has_more && <p className="muted text-sm">Weitere Termine sind über die Monatsansicht zugänglich.</p>}
     </>}
-  </section>;
+  </section></>;
 }
 
 function EventForm({ editor, units, busy, change, close, submit }: {
