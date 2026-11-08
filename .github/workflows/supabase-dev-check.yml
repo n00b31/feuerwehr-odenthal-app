@@ -149,6 +149,11 @@ jobs:
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/vehicle-invariants.sql
+      - name: Verify transactional series, CSV confirmation and protected historical snapshots
+        if: ${{ !cancelled() && steps.migrations.outcome == 'success' }}
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/series-csv.sql
       - name: Verify real parallel recovery limits and one-time PKCE claims
         if: ${{ !cancelled() && steps.migrations.outcome == 'success' }}
         env:

@@ -1,5 +1,28 @@
 # DEV 0.5: gemeinsamer Feuerwehrkalender
 
+## DEV 0.6.3 – Implementierungsplan
+
+1. Bestehende `events`/`event_series`, dynamische Mitgliedschaften und
+   Teilnahme-/Anwesenheits-RPCs weiterverwenden. Serieninstanzen behalten eigene
+   IDs. Neue Verwaltung ergänzt Vorschau/Bestätigung, keine zweite Terminquelle.
+2. Vorhandene Grenze von 52 Serieninstanzen pro Vorgang beibehalten;
+   maximal fünf Jahre Planungshorizont, CSV maximal 200 Termine/512 KiB.
+   Berlin-Ortszeiten explizit prüfen, nicht existierende Zeiten ablehnen,
+   doppelte Herbststunden wie bisher auf die frühere Ausprägung abbilden.
+3. Einheit/Funktion/Organisation bleiben exklusive bestehende Bereiche.
+   Keine Rechte für MEMBER oder bloße FIRE_CHIEF-Rolle erweitern.
+   Alle Vorschläge serverseitig erneut prüfen; atomare, wiederholbare
+   Bestätigung mit Duplikat-/Stale-Prüfung und Audit.
+4. Einzel-/Folge-/Gesamtserienänderungen erhalten IDs und rohe Antworten.
+   Begonnene oder eingefrorene Instanzen bleiben unverändert.
+   Bedeutungsänderungen zeigen Antwortinvalidierung vor Bestätigung an;
+   individuelle Ausnahmen bleiben bei gewöhnlicher Serienänderung geschützt.
+5. UTF-8-Semikolon-CSV mit deutschen/ISO-Daten, quotierten Feldern,
+   kommentierter Excel-Vorlage und zeilenbezogener Fehleranzeige.
+   Kein Schreiben bei Dateiauswahl oder Vorschau; keine stillen Teilimporte.
+6. Bestehende und neue Fach-/Browser-/SQL-/Konkurrenz-/Upgradeprüfungen
+   vor kontrollierter DEV-Migration und PR ohne automatischen Merge ausführen.
+
 ## DEV 0.6.2: dynamische Zuordnung und persönliche Rückmeldungen
 
 **DEV 0.6.2 veröffentlicht; die unten aufgeführten Browserergebnisse sind
