@@ -288,8 +288,8 @@ begin
     insert into public.vehicle_usage_units select result,u from unnest(usage) u;
   end if;
   perform ff_private.write_audit('vehicle_saved',null,null,previous,
-    (select to_jsonb(r)||to_jsonb(v)||jsonb_build_object('manager_ids',to_jsonb(managers),'usage_units',to_jsonb(usage))
-      from public.calendar_resources r join public.vehicles v on v.resource_id=r.id where r.id=result));
+    (select to_jsonb(rr)||to_jsonb(vv)||jsonb_build_object('manager_ids',to_jsonb(managers),'usage_units',to_jsonb(usage))
+      from public.calendar_resources rr join public.vehicles vv on vv.resource_id=rr.id where rr.id=result));
   return result;
 end;
 $$;
