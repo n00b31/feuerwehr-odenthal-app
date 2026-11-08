@@ -323,8 +323,8 @@ begin
   end if;
   result:=jsonb_build_object('event_ids',to_jsonb(ids),'series_id',series_id,'count',cardinality(ids),'replayed',false);
   insert into ff_private.event_plan_commits(request_id,actor_id,input_hash,result) values(request,auth.uid(),input_hash,result);
-  perform ff_private.write_audit('event_plan_committed',coalesce(series_id,ids[1]),null,null,
-    jsonb_build_object('request_id',request,'operation',input->>'operation','count',cardinality(ids)));
+  perform ff_private.write_audit('event_plan_committed',ids[1],null,null,
+    jsonb_build_object('request_id',request,'series_id',series_id,'operation',input->>'operation','count',cardinality(ids)));
   return result;
 end;
 $$;
@@ -356,10 +356,20 @@ language sql stable security definer set search_path='' as $$
     'series_exception',exists(select 1 from public.event_series_exceptions where event_id=e.id))
     from public.events e where e.id=target and ff_private.can_view_event(e.id);
 $$;
+alter function ff_private.calendar_summary(uuid) rename to calendar_summary_062;
+create function ff_private.calendar_summary(target uuid) returns jsonb
+language sql stable security definer set search_path='' as $$
+  select ff_private.calendar_summary_062(target)||jsonb_build_object('can_manage',
+    case when e.series_id is not null and not exists(select 1 from public.event_calendar where event_id=e.id)
+      then ff_private.manages_scope(e.scope_kind,e.unit_id,e.function_id)
+      else (ff_private.calendar_summary_062(target)->>'can_manage')::boolean end)
+    from public.events e where e.id=target and ff_private.can_view_event(e.id);
+$$;
 revoke all on function ff_private.plan_hash(jsonb),ff_private.berlin_instant(date,text),ff_private.plan_date(text),
   ff_private.series_dates(jsonb),ff_private.normalize_planned_event(jsonb),ff_private.planned_key(jsonb),ff_private.build_event_plan(jsonb),
   ff_private.create_single_event_062(jsonb),ff_private.update_single_event_062(uuid,integer,jsonb),
-  ff_private.event_summary_062(uuid),ff_private.event_summary(uuid) from public,anon,authenticated,service_role;
+  ff_private.event_summary_062(uuid),ff_private.event_summary(uuid),ff_private.calendar_summary_062(uuid),ff_private.calendar_summary(uuid)
+  from public,anon,authenticated,service_role;
 revoke all on function public.ff_event_planning_context(),public.ff_series_workspace(uuid),public.ff_preview_event_plan(jsonb),
   public.ff_commit_event_plan(jsonb,text,boolean),public.ff_create_single_event(jsonb),public.ff_update_single_event(uuid,integer,jsonb) from public,anon,authenticated;
 grant execute on function public.ff_event_planning_context(),public.ff_series_workspace(uuid),public.ff_preview_event_plan(jsonb),

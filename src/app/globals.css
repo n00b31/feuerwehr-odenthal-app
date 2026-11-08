@@ -471,6 +471,7 @@ label > input, label > select, label > textarea { font-weight: 400; }
 .document-card > p { color: var(--cp-text-muted); font-size: .875rem; margin: var(--cp-space-2) 0 var(--cp-space-5); flex: 1; }
 .doc-link { border-top: 1px solid var(--cp-border); margin-top: var(--cp-space-5); padding-top: var(--cp-space-2); }
 .table-scroll { position: relative; overflow: auto; }
+.planning-fields { border: 0; padding: 0; margin: var(--cp-space-4) 0; min-inline-size: 0; }
 table { width: 100%; border-collapse: collapse; text-align: left; font-size: .875rem; }
 th, td { padding: var(--cp-space-4) var(--cp-space-3); border-bottom: 1px solid var(--cp-border); vertical-align: middle; }
 thead th { color: var(--cp-text-muted); font-size: var(--cp-font-xs); font-weight: 600; background: var(--cp-bg-elevated); white-space: nowrap; }

@@ -20,9 +20,10 @@ function errorMessage(error:unknown) {
 }
 const dayName=(day:string) => dateLabel(`${day}T12:00:00Z`,{ year:"numeric" });
 
-export function SupabaseCalendar({client,actorId,preferredUnit,initialTime,openService,openVehicle}:{
+export function SupabaseCalendar({client,actorId,preferredUnit,initialTime,openService,openVehicle,refreshSignal=0}:{
   client:SupabaseClient; actorId:string; preferredUnit:string|null; initialTime:string; openService:(id:string,edit:boolean)=>Promise<void>;
   openVehicle:(id:string)=>void;
+  refreshSignal?:number;
 }) {
   const [date,setDate]=useState(()=>berlinParts(initialTime).date);
   const [view,setView]=useState<CalendarView>("month");
@@ -58,7 +59,7 @@ export function SupabaseCalendar({client,actorId,preferredUnit,initialTime,openS
     void reload();
     const timer=window.setInterval(()=>{if(!document.hidden && !working.current) void reload();},30_000);
     return ()=>{lifetime.value++;window.clearInterval(timer);};
-  },[reload]);
+  },[reload,refreshSignal]);
   async function run(operation:()=>Promise<unknown>,success:string) {
     if(working.current) return;
     working.current=true; setBusy(true);setError("");setMessage("");epoch.current.value++;
