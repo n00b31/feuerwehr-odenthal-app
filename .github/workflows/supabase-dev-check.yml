@@ -37,6 +37,7 @@ jobs:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/auth-fixture.sql
       - name: Apply versioned migrations to disposable PostgreSQL
+        id: migrations
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         shell: bash
@@ -47,66 +48,88 @@ jobs:
             docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < "$migration"
           done
       - name: Verify idempotent fire-station reference data migration
+        if: ${{ !cancelled() && steps.migrations.outcome == 'success' }}
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/migrations/20261108002000_firestations.sql
       - name: Verify RLS and server-side authorization
+        if: ${{ !cancelled() && steps.migrations.outcome == 'success' }}
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/authorization.sql
       - name: Verify single events and shared participation
+        if: ${{ !cancelled() && steps.migrations.outcome == 'success' }}
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/events.sql
       - name: Verify scoped member management and last administrator protection
+        if: ${{ !cancelled() && steps.migrations.outcome == 'success' }}
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/members.sql
       - name: Verify server-only DEV seed and seeded role boundaries
+        if: ${{ !cancelled() && steps.migrations.outcome == 'success' }}
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/dev-seed.sql
       - name: Verify attendance state, final-only RLS and delegated organizers
+        if: ${{ !cancelled() && steps.migrations.outcome == 'success' }}
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/attendance.sql
       - name: Verify bounded event lists, Berlin month pagination and preserved scopes
+        if: ${{ !cancelled() && steps.migrations.outcome == 'success' }}
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/event-list.sql
       - name: Verify final-only dutybooks, historical scopes and read-only FIRE_CHIEF reporting
+        if: ${{ !cancelled() && steps.migrations.outcome == 'success' }}
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/reports.sql
       - name: Verify isolated non-login historical seed, corrected units and protected originals
+        if: ${{ !cancelled() && steps.migrations.outcome == 'success' }}
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/history-seed.sql
       - name: Verify shared calendar, resource conflicts, scoped visibility and unchanged dutybooks
+        if: ${{ !cancelled() && steps.migrations.outcome == 'success' }}
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/calendar.sql
       - name: Verify scoped vehicle workflows, notifications, audit and idempotent DEV fixtures
+        if: ${{ !cancelled() && steps.migrations.outcome == 'success' }}
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/vehicles.sql
       - name: Verify recovery roles, shared atomic reservations and immutable audit
+        if: ${{ !cancelled() && steps.migrations.outcome == 'success' }}
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/password-recovery.sql
       - name: Verify dynamic memberships, fixed invitations and immutable attendance snapshots
+        if: ${{ !cancelled() && steps.migrations.outcome == 'success' }}
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/dynamic-memberships.sql
+      - name: Verify requester roles and direct-write booking invariants
+        if: ${{ !cancelled() && steps.migrations.outcome == 'success' }}
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/vehicle-invariants.sql
       - name: Verify real parallel recovery limits and one-time PKCE claims
+        if: ${{ !cancelled() && steps.migrations.outcome == 'success' }}
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: bash supabase/tests/recovery-concurrency.sh
       - name: Verify overlapping attendance initialization with two connections
+        id: attendance_concurrency
+        if: ${{ !cancelled() && steps.migrations.outcome == 'success' }}
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: bash supabase/tests/attendance-concurrency.sh
       - name: Verify two simultaneous vehicle approvers cannot double-book
+        if: ${{ !cancelled() && steps.attendance_concurrency.outcome == 'success' }}
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: bash supabase/tests/vehicle-concurrency.sh

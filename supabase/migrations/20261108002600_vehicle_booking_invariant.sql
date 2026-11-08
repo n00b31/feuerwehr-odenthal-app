@@ -78,13 +78,18 @@ create trigger vehicle_event_canonical_interval
 create function ff_private.vehicle_calendar_identity()
 returns trigger language plpgsql security definer set search_path='' as $$
 begin
+  if tg_op='DELETE' then
+    perform ff_private.require_rule(not exists(select 1 from public.vehicle_reservations q where q.event_id=old.event_id),
+      'Canonical calendar entry of an existing vehicle reservation cannot be removed.');
+    return old;
+  end if;
   perform ff_private.require_rule(not exists(select 1 from public.vehicle_reservations q where q.event_id=old.event_id)
     or (new.event_id=old.event_id and new.resource_id is not distinct from old.resource_id and new.entry_kind=old.entry_kind),
     'Canonical resource identity of a vehicle reservation is immutable.');
   return new;
 end;
 $$;
-create trigger vehicle_calendar_canonical_identity before update of resource_id,event_id,entry_kind on public.event_calendar
+create trigger vehicle_calendar_canonical_identity before update of resource_id,event_id,entry_kind or delete on public.event_calendar
   for each row execute function ff_private.vehicle_calendar_identity();
 
 revoke all on function ff_private.vehicle_reservation_interval(),ff_private.vehicle_event_interval(),ff_private.vehicle_calendar_identity()
