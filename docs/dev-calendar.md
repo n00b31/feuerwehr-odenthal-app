@@ -1,5 +1,54 @@
 # DEV 0.5: gemeinsamer Feuerwehrkalender
 
+## DEV 0.6.2: dynamische Zuordnung und persönliche Rückmeldungen
+
+**Backend nach erfolgreicher PostgreSQL-/Upgrade-Prüfung kontrolliert im DEV
+installiert; Frontend-Veröffentlichung und reale Abnahme stehen aus.**
+Der [Installations- und Prüfnachweis](dev-vehicles.md#kontrollierte-installation-und-prüfnachweis-am-08112026)
+dokumentiert unveränderte Altdaten und historische Berichte.
+Migrationen 028–032 ergänzen Mehrfachmitgliedschaften und die neue
+Zuordnungslogik. Ein zusätzliches aktuelles Einheitsintervall ist nur durch
+GLOBAL_ADMIN mit Änderungsgrund möglich. Die bisherige Wechselaktion
+ersetzt weiterhin die aktuellen Einheiten; Entfernen schließt nur die
+gewählte Mitgliedschaft. Bestehende Rollen werden nicht automatisch erweitert.
+
+Bei bereichsgebundenen zukünftigen Diensten bestimmt die gültige Einheits-,
+Organisations- oder Funktionsmitgliedschaft den Teilnehmerkreis neu.
+Mehrfachmitglieder erscheinen einmal. Explizite Einladungskreise werden nicht
+automatisch erweitert und behalten zusätzlich ihre Bereichsprüfung.
+Die erste Anwesenheitsinitialisierung bewertet den Kreis am Dienstbeginn,
+nicht mit der späteren heutigen Mitgliedschaft. Bereits initialisierte oder
+abgeschlossene Listen bleiben eingefroren: Personen, Einheits-Snapshot,
+Anwesenheiten, Bestätigungen und historische Zuordnung werden nicht ersetzt.
+
+Nicht mehr berechtigte zukünftige Rückmeldungen bleiben mit ursprünglichem
+Wert und Änderungszeitpunkt gespeichert, werden aber als ungültig markiert.
+Ein späterer Wiedereintritt reaktiviert sie nicht; eine neue ausdrücklich
+abgegebene Rückmeldung ist erforderlich. Unterbrechungsfreie organisatorische
+Zugehörigkeit bei einem Einheitswechsel bleibt erhalten. Die Initialisierung
+übernimmt nur gültiges Ja als vorläufig anwesend; alle anderen Fälle werden
+abwesend vorbelegt. Diese Vorbelegung ist keine bestätigte tatsächliche Teilnahme.
+
+Die Mitgliederverwaltung bietet eine Einheitsauswahl mit „Alle Einheiten“,
+behält die Namenssuche und sortiert nach Einheit und alphabetischem Namen.
+Mehrfachmitglieder erscheinen insgesamt einmal und sind in allen vom
+Verwaltungsbereich gelieferten aktuellen Einheiten filterbar. Bei mehreren
+Einheiten ist die alphabetisch erste die Sortiergruppe; im Einheitsfilter
+wird nur nach Namen sortiert. Einheitsdaten kommen aus dem Backend.
+Die Verwaltungsberechtigungen bleiben unverändert.
+
+Persönliche Zusagen sind grün mit Haken, Absagen rot mit X, Vielleicht
+bernsteinfarben mit Fragezeichen, fehlende Antworten neutral grau.
+Dashboard, Dienstübersicht, Details und Teilnahmeeinträge im gemeinsamen
+Kalender verwenden dieselbe Darstellung in Light und Dark Mode.
+Terminabsage und tatsächliche Anwesenheit bleiben davon getrennte Zustände.
+
+Manuell noch abzunehmen: Aufnahme nach Terminerstellung, Einheitswechsel,
+Mehrfachmitgliedschaft, Funktionswechsel, unabhängige Serieninstanzen,
+feste Einladungen, ungültige alte Rückmeldungen sowie unveränderte
+abgeschlossene Listen und Jahresberichte nach einem späteren Wechsel.
+Die bisherige manuelle DEV-0.5.1-Abnahme unten ist davon unabhängig.
+
 ## DEV 0.5.1 – Erfolgreiche manuelle Abnahme
 
 Der Projektverantwortliche hat am **08.11.2026** die reale Abnahme von

@@ -10,6 +10,11 @@ returns void language plpgsql as $$ begin
   execute statement; raise exception 'FAIL: unauthorized vehicle operation succeeded';
 exception when insufficient_privilege then raise notice 'PASS: vehicle rule/RLS denied';
 end $$;
+create function pg_temp.v_overlap(statement text)
+returns void language plpgsql as $$ begin
+  execute statement; raise exception 'FAIL: overlapping binding vehicle operation succeeded';
+exception when exclusion_violation then raise notice 'PASS: binding overlap rejected';
+end $$;
 create function pg_temp.v_spec(name text,owner uuid)
 returns jsonb language sql as $$
   select jsonb_build_object('name',name,'unit_id',owner,'type_key','mtf','call_sign','','location','Synthetic CI',
@@ -101,7 +106,7 @@ select pg_temp.v_denied($q$select public.ff_decide_vehicle(current_setting('v.se
 select pg_temp.v_denied($q$select public.ff_decide_vehicle(current_setting('v.second')::uuid,0,'REJECTED','')$q$);
 select pg_temp.v_denied($q$select public.ff_decide_vehicle(current_setting('v.first')::uuid,1,'CANCELLED','')$q$);
 select pg_temp.v_denied($q$select public.ff_decide_vehicle(current_setting('v.first')::uuid,1,'COMPLETED')$q$);
-select pg_temp.v_denied($q$select public.ff_request_vehicle(pg_temp.v_payload('Colliding maintenance','block'))$q$);
+select pg_temp.v_overlap($q$select public.ff_request_vehicle(pg_temp.v_payload('Colliding maintenance','block'))$q$);
 select pg_temp.v_denied($q$select public.ff_save_vehicle(pg_temp.v_spec('Wrong vehicle',current_setting('v.other')::uuid),current_setting('v.foreign')::uuid)$q$);
 select pg_temp.v_denied($q$select public.ff_save_vehicle(pg_temp.v_spec('Rights expansion',current_setting('v.unit')::uuid)
   ||jsonb_build_object('unit_admin_enabled',true),current_setting('v.vehicle')::uuid)$q$);

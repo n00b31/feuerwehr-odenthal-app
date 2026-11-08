@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { addLocalDays, berlinParts, dateLabel, fromBerlin, localInput } from "./time";
-import { devEventTypeSchema } from "./dev-events";
+import { devEventTypeSchema,devResponseSchema } from "./dev-events";
 
 export const calendarDateSchema = z.iso.date().refine((value) => Number(value.slice(0,4))>=2000 && Number(value.slice(0,4))<=2199);
 export type CalendarView = "month" | "week" | "list";
@@ -22,6 +22,7 @@ export const calendarEventSchema = z.object({
   event_type: devEventTypeSchema, status: z.enum(["scheduled","cancelled"]), revision: z.number().int().nonnegative(),
   scope_kind: z.enum(["organization","unit","function"]), unit_id: z.uuid().nullable(), function_id: z.uuid().nullable(),
   organizer_id: z.uuid(), organizer_name: z.string(), scope_name: z.string(),
+  own_response:devResponseSchema.nullable().optional(),
   entry_kind: z.enum(["participation","information","booking","vehicle"]), all_day: z.boolean(),
   vehicle_state: vehicleStateSchema.nullable().optional(), vehicle_kind: z.enum(["reservation","block"]).nullable().optional(),
   audience: z.enum(["scope","units","leadership"]), category_id: z.uuid().nullable(), category_name: z.string().nullable(),

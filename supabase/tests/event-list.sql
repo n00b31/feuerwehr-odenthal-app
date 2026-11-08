@@ -22,6 +22,8 @@ set local role authenticated;
 select public.ff_approve_member('83000000-0000-4000-8000-000000000002',current_setting('list.unit')::uuid);
 select public.ff_approve_member('83000000-0000-4000-8000-000000000003',current_setting('list.other')::uuid);
 reset role;
+update public.profiles set approved_at=clock_timestamp()-interval '2 days' where status='approved';
+update public.unit_memberships set valid_from=clock_timestamp()-interval '2 days';
 insert into public.events(id,title,event_type,starts_at,ends_at,location,scope_kind,unit_id,organizer_id,status)
 select ('85000000-0000-4000-8000-'||lpad(i::text,12,'0'))::uuid,'Synthetic upcoming '||i,'regular',
   clock_timestamp()+i*interval '1 hour',clock_timestamp()+(i+1)*interval '1 hour','Synthetic','unit',

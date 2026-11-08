@@ -4,9 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { Check, Trash2 } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  readMembersWorkspace, setUnitMembership, setFunctionMembership, changeMemberRole, changeMemberStatus,
+  readMembersWorkspace, setUnitMembership, addUnitMembership, setFunctionMembership, changeMemberRole, changeMemberStatus,
 } from "@/data/supabase-repository";
-import { memberErrorMessage, memberRoleSchema, type MembersWorkspace, type ManagedMember, type MemberRole } from "@/domain/dev-members";
+import { memberErrorMessage, memberRoleSchema, filterManagedMembers, currentMemberUnits,
+  type MembersWorkspace, type ManagedMember, type MemberRole } from "@/domain/dev-members";
 import { dateLabel } from "@/domain/time";
 import { DEV_ROLE_LABELS } from "@/config/app";
 import { requestPasswordRecovery } from "@/auth/recovery-client";
@@ -19,13 +20,15 @@ export function SupabaseMembers({ client, actorId, refreshAccess }: {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState("");
+  const [unitFilter,setUnitFilter]=useState("");
+  const [loadedAt,setLoadedAt]=useState(0);
   const working = useRef(false);
   const lifetime = useRef({ value: 0 });
   useEffect(() => {
     const epoch = lifetime.current;
     const version = ++epoch.value;
     void readMembersWorkspace(client).then((data) => {
-      if (version === epoch.value) setWorkspace(data);
+      if (version === epoch.value) { setLoadedAt(Date.now()); setWorkspace(data); }
     }).catch((cause: unknown) => { if (version === epoch.value) setError(memberErrorMessage(cause)); });
     return () => { epoch.value++; };
   }, [client]);
@@ -33,7 +36,7 @@ export function SupabaseMembers({ client, actorId, refreshAccess }: {
     const version = lifetime.current.value;
     try {
       const data = await readMembersWorkspace(client);
-      if (version === lifetime.current.value) setWorkspace(data);
+      if (version === lifetime.current.value) { setLoadedAt(Date.now()); setWorkspace(data); }
     } catch (cause) {
       if (version === lifetime.current.value) setWorkspace(null);
       throw cause;
@@ -54,6 +57,8 @@ export function SupabaseMembers({ client, actorId, refreshAccess }: {
       if (version === lifetime.current.value) setError(`${committed ? "Änderung gespeichert, erneutes Laden fehlgeschlagen: " : ""}${memberErrorMessage(cause)}`);
     } finally { working.current = false; if (version === lifetime.current.value) setBusy(false); }
   }
+  const displayTime=workspace?.server_now ? Date.parse(workspace.server_now) : loadedAt;
+  const visibleMembers=workspace ? filterManagedMembers(workspace,unitFilter,search,displayTime) : [];
   return <section className="card section-card">
     <div className="event-card-top"><h2>Mitgliederverwaltung</h2><button className="button secondary" disabled={busy || (!workspace && !error)}
       onClick={() => void run(reload, "Mitgliederliste aktualisiert.")}>Mitglieder aktualisieren</button></div>
@@ -67,17 +72,24 @@ export function SupabaseMembers({ client, actorId, refreshAccess }: {
       {!workspace.global_admin && <p className="notice">Nur eigene Einheiten: bestehende einfache Mitgliedschaften beenden oder wiederherstellen.
         Kein Einheitswechsel nach außerhalb, keine Rollen-, Sonderfunktions- oder Statusänderung. Administratorkonten sind schreibgeschützt.</p>}
       <label>Mitglieder suchen<input type="search" value={search} onChange={(e) => setSearch(e.target.value)} /></label>
+      <label>Mitglieder nach Einheit filtern<select value={unitFilter} onChange={e=>setUnitFilter(e.target.value)}>
+        <option value="">Alle Einheiten</option>{[...workspace.units].sort((a,b)=>a.name.localeCompare(b.name,"de")).map(unit=>
+          <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select></label>
+      <p className="muted text-sm">Nach Einheit und Namen sortiert. Mehrfachmitglieder erscheinen insgesamt einmal und sind in jeder aktuellen Einheit filterbar.</p>
       {workspace.members.length === 0 && <p>Keine Mitglieder im berechtigten Bereich.</p>}
-      {workspace.members.filter((person) => person.display_name.toLocaleLowerCase("de").includes(search.toLocaleLowerCase("de")))
+      {workspace.members.length>0 && !visibleMembers.length
+        && <p>Keine Mitglieder für diesen Einheitsfilter und Suchbegriff.</p>}
+      {visibleMembers
         .map((person) => <MemberRow key={person.user_id} person={person} workspace={workspace} busy={busy}
-          run={(operation, success) => run(operation, success, person.user_id)} client={client} />)}
+          run={(operation, success) => run(operation, success, person.user_id)} client={client} displayTime={displayTime}/>)}
     </>}
   </section>;
 }
 
-function MemberRow({ person, workspace, client, busy, run }: {
+function MemberRow({ person, workspace, client, busy, run,displayTime }: {
   person: ManagedMember; workspace: MembersWorkspace; client: SupabaseClient; busy: boolean;
   run: (operation: () => Promise<void>, success: string) => Promise<void>;
+  displayTime:number;
 }) {
   const [unit, setUnit] = useState(person.unit_id ?? workspace.units[0]?.id ?? "");
   const [role, setRole] = useState<MemberRole>("UNIT_ADMIN");
@@ -93,8 +105,9 @@ function MemberRow({ person, workspace, client, busy, run }: {
   const roleAssigned = selectionComplete && person.roles.some((item) => item.role === role
     && item.unit_id === (role === "UNIT_ADMIN" ? scope : null)
     && item.function_id === (role === "FUNCTION_ADMIN" ? scope : null));
+  const currentUnits=currentMemberUnits(person,workspace.units,displayTime);
   return <details className="dev-member">
-    <summary><strong>{person.display_name}</strong> · {person.unit_name ?? "Ohne aktuelle Einheit"} · {person.status === "approved" ? "Freigegeben" : person.status === "suspended" ? "Deaktiviert" : person.status === "pending" ? "Wartet auf Freigabe" : "Abgelehnt"}</summary>
+    <summary><strong>{person.display_name}</strong> · {currentUnits.map(unit=>unit.name).join(" / ") || "Ohne aktuelle Einheit"} · {person.status === "approved" ? "Freigegeben" : person.status === "suspended" ? "Deaktiviert" : person.status === "pending" ? "Wartet auf Freigabe" : "Abgelehnt"}</summary>
     <p>{person.access_granted ? "Serverseitiger Zugang aktiv." : "Kein serverseitiger Mitgliederzugriff."}</p>
     <ul>{person.unit_history.map((item, index) => <li key={`${item.unit_id}-${index}`}>{item.unit_name} · seit {dateLabel(item.valid_from, { year: "numeric" })}
       {item.valid_until ? ` · beendet ${dateLabel(item.valid_until, { year: "numeric" })}` : " · aktuell"}</li>)}</ul>
@@ -106,6 +119,12 @@ function MemberRow({ person, workspace, client, busy, run }: {
       <label>Einheit für {person.display_name}<select value={unit} onChange={(e) => setUnit(e.target.value)} required disabled={busy}>
         <option value="">Einheit auswählen</option>{workspace.units.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
       <button className="button" disabled={!ready || !unit || !canAssign}>Einheitszuordnung speichern</button>
+      {workspace.global_admin && <><p className="span-2 muted text-sm">Einheitszuordnung speichern ersetzt alle aktuellen Einheiten.
+        Eine zusätzliche Mitgliedschaft erhält die bestehenden Zuordnungen.</p>
+        <button type="button" className="button secondary" disabled={!ready || !unit || !person.access_granted
+          || person.unit_history.some(item=>item.unit_id===unit && item.valid_until===null)}
+          onClick={()=>void run(()=>addUnitMembership(client,person.user_id,unit,reason),
+            "Zusätzliche Einheitsmitgliedschaft gespeichert; bestehende Zuordnungen erhalten.")}>Zusätzliche Einheit hinzufügen</button></>}
       {currentUnit && <button type="button" className="button secondary danger-button" disabled={!ready}
         onClick={() => void run(() => setUnitMembership(client, person.user_id, currentUnit, false, reason), "Mitgliedschaft beendet; Historie erhalten.")}>Aktuelle Mitgliedschaft beenden</button>}
     </form>}

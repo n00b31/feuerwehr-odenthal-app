@@ -23,6 +23,47 @@ function event(id:string,title:string,kind:CalendarEvent["entry_kind"],hour:numb
     can_manage:true,unit_ids:[]};
 }
 
+test("browser back releases a native calendar dialog while retaining the selected event",async({page})=>{
+  await connect(page,"member");
+  await page.locator(".calendar-chip").filter({hasText:"Synthetic public information"}).click();
+  await expect(page.getByRole("dialog",{name:"Synthetic public information"})).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("button",{name:"Dienstverwaltung",exact:true})).toHaveAttribute("aria-pressed","true");
+  await page.getByRole("button",{name:"Gemeinsamer Kalender",exact:true}).click();
+  await expect(page.getByRole("dialog",{name:"Synthetic public information"})).toBeVisible();
+  await page.getByRole("button",{name:"Dialog schließen"}).click();
+  await expect(page.getByLabel("Kalendermonat")).toBeVisible();
+});
+test("calendar participation chips and details preserve personal status colors in light and dark mode",async({page})=>{
+  const state=await connect(page,"member");
+  for(const theme of ["light","dark"]){
+    if(await page.locator("html").getAttribute("data-theme")!==theme)
+      await page.getByRole("button",{name:"Farbschema wechseln"}).click();
+    for(const response of ["yes","no","maybe",null] as const){
+      state.events[0].own_response=response;
+      await page.getByRole("button",{name:"Kalender aktualisieren",exact:true}).click();
+      const chip=page.locator(".calendar > .calendar-month .calendar-chip").filter({hasText:"Synthetic existing service"});
+      await expect(chip).toHaveClass(new RegExp(`response-${response ?? "unanswered"}`));
+      const token=response==="yes" ? "--cp-success" : response==="no" ? "--cp-danger" :
+        response==="maybe" ? "--cp-warning" : "--cp-border-strong";
+      const colors=await chip.evaluate((element,variable)=>{
+        const probe=document.createElement("i");probe.style.color=`var(${variable})`;
+        probe.style.backgroundColor=`color-mix(in srgb, var(${variable}) 12%, var(--cp-surface))`;
+        document.body.append(probe);
+        const actual=getComputedStyle(element),expected=getComputedStyle(probe);
+        const result={accent:actual.borderInlineStartColor,expectedAccent:expected.color,
+          background:actual.backgroundColor,expectedBackground:expected.backgroundColor};
+        probe.remove();return result;
+      },token);
+      expect(colors.accent).toBe(colors.expectedAccent);expect(colors.background).toBe(colors.expectedBackground);
+      await chip.click();
+      await expect(page.getByRole("dialog").locator(".personal-response-label")).toHaveClass(new RegExp(`response-${response ?? "unanswered"}`));
+      await page.getByRole("button",{name:"Dialog schließen",exact:true}).click();
+    }
+  }
+});
+
 // Intercepted protocol fixtures, not real authentication or hosted RLS proof.
 async function connect(page:Page,role:"global"|"unit"|"member"="global",stations:"single"|"five"|"none"="single") {
   const admin=role!=="member",global=role==="global";
@@ -294,7 +335,10 @@ test("four simulated background intervals retain month/filter/native dialog and 
   await page.locator(".calendar-chip").filter({hasText:"Synthetic public information"}).click();
   await page.getByRole("dialog").evaluate(node=>node.setAttribute("data-retention-proof","same-node"));
   const before=state.queries.length;
-  await page.clock.runFor(130_000);
+  for(let interval=1;interval<=4;interval++){
+    await page.clock.runFor(32_500);
+    await expect.poll(()=>state.queries.length).toBeGreaterThanOrEqual(before+interval);
+  }
   await expect(page.getByRole("dialog")).toHaveAttribute("data-retention-proof","same-node");
   await expect(page.getByLabel("Organisatorische Information")).toBeChecked();
   await expect(page.getByLabel("Kalendermonat")).toHaveValue("2026-11");

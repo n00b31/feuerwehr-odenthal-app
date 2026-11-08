@@ -22,6 +22,7 @@ export const vehicleSchema=resourceSchema.extend({
 export type Vehicle=z.infer<typeof vehicleSchema>;
 export const vehicleReservationSchema=z.object({
   id:z.uuid(),event_id:z.uuid(),vehicle_id:z.uuid(),vehicle_name:z.string(),requester_id:z.uuid(),requester_name:z.string(),
+  actor_id:z.uuid().optional(),actor_name:z.string().optional(),
   responsible_id:z.uuid(),responsible_name:z.string(),unit_id:z.uuid(),unit_name:z.string(),
   kind:z.enum(["reservation","block"]),state:vehicleStateSchema,title:z.string(),description:z.string(),
   starts_at:instant,ends_at:instant,requested_at:instant,purpose_key:z.string().nullable(),
@@ -39,7 +40,10 @@ export const vehicleWorkspaceSchema=z.object({
     id:z.uuid(),recipient_id:z.uuid(),event_id:z.uuid(),message:z.string(),created_at:instant,read_at:instant.nullable(),
   })),
 });
-export type VehicleWorkspace=z.infer<typeof vehicleWorkspaceSchema>;
+export const vehicleRequesterContextSchema=z.object({
+  actor_name:z.string(),request_units:z.array(option),requesters:z.array(option.extend({units:z.array(z.uuid())})),
+});
+export type VehicleWorkspace=z.infer<typeof vehicleWorkspaceSchema>&z.infer<typeof vehicleRequesterContextSchema>;
 export const vehicleInputSchema=z.object({
   name:z.string().trim().min(2).max(120),unit_id:z.uuid(),type_key:z.string().min(2).max(40),
   call_sign:z.string().max(80),location:z.string().max(200),description:z.string().max(2000),
@@ -50,6 +54,7 @@ export const vehicleInputSchema=z.object({
 export type VehicleInput=z.infer<typeof vehicleInputSchema>;
 export const vehicleRequestSchema=z.object({
   vehicle_id:z.uuid(),unit_id:z.uuid(),responsible_id:z.uuid(),kind:z.enum(["reservation","block"]),
+  requester_id:z.uuid().optional(),
   title:z.string().trim().min(3).max(120),description:z.string().max(2000),destination:z.string().max(200),notes:z.string().max(2000),
   purpose_key:z.string().nullable(),starts_at:instant,ends_at:instant,
 }).refine(v=>v.kind==="block" || !!v.purpose_key,"Verwendungszweck erforderlich.")

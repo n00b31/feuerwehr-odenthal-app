@@ -154,6 +154,11 @@ export async function setUnitMembership(client: SupabaseClient, userId: string, 
     assign: z.boolean().parse(assign), reason: memberReasonSchema.parse(reason),
   }));
 }
+export async function addUnitMembership(client: SupabaseClient, userId: string, unitId: string, reason: string) {
+  checked(await client.rpc("ff_add_unit_membership", {
+    target_user:z.uuid().parse(userId),target_unit:z.uuid().parse(unitId),reason:memberReasonSchema.parse(reason),
+  }));
+}
 export async function setFunctionMembership(client: SupabaseClient, userId: string, functionId: string, assign: boolean, reason: string) {
   checked(await client.rpc("ff_set_function_membership", {
     target_user: z.uuid().parse(userId), target_function: z.uuid().parse(functionId),

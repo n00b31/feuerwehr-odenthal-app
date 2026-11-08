@@ -274,6 +274,89 @@ function attendanceEvent(state: Store, delay = -1000): StoredEvent {
     ends_at: new Date(state.now + delay + 7200000).toISOString(), status: "scheduled", revision: 0 };
 }
 
+test("personal response cards use the correct computed accent and background on dashboard and events in both themes",async({browser})=>{
+  const state=store();
+  const statuses=["yes","no","maybe",null] as const;
+  state.events=statuses.map((response,index)=>{
+    const item={...attendanceEvent(state,86400000),id:`30000000-0000-4000-8000-${String(index+10).padStart(12,"0")}`,
+      title:`Synthetic response ${response ?? "unanswered"}`};
+    if(response)state.answers.set(`${item.id}:${member}`,response);
+    return item;
+  });
+  const context=await browser.newContext();
+  await connect(context,state,member);
+  const page=await context.newPage();
+  await login(page,false);
+  for(const route of ["/","/termine/"]){
+    await page.goto(publicPath(route));
+    for(const theme of ["light","dark"]){
+      if(await page.locator("html").getAttribute("data-theme")!==theme)
+        await page.getByRole("button",{name:"Farbschema wechseln"}).click();
+      for(const [index,response] of statuses.entries()){
+        const row=page.locator(`.dev-event[aria-labelledby="event-${state.events[index].id}"]`);
+        const key=response ?? "unanswered",token=response==="yes" ? "--cp-success" : response==="no" ? "--cp-danger" :
+          response==="maybe" ? "--cp-warning" : "--cp-border-strong";
+        await expect(row).toHaveClass(new RegExp(`response-${key}`));
+        await expect(row.locator(".personal-response-label")).toContainText(
+          response==="yes" ? "Zugesagt" : response==="no" ? "Abgesagt" : response==="maybe" ? "Vielleicht" : "Keine Rückmeldung");
+        const colors=await row.evaluate((element,variable)=>{
+          const probe=document.createElement("i");
+          probe.style.color=`var(${variable})`;
+          probe.style.backgroundColor=`color-mix(in srgb, var(${variable}) 12%, var(--cp-surface))`;
+          document.body.append(probe);
+          const actual=getComputedStyle(element),expected=getComputedStyle(probe);
+          const result={accent:actual.borderInlineStartColor,expectedAccent:expected.color,
+            background:actual.backgroundColor,expectedBackground:expected.backgroundColor};
+          probe.remove();return result;
+        },token);
+        expect(colors.accent).toBe(colors.expectedAccent);
+        expect(colors.background).toBe(colors.expectedBackground);
+      }
+    }
+  }
+  expect(state.audit).toHaveLength(0);
+  expect(state.answers.size).toBe(3);
+  await context.close();
+});
+
+test("unit filter preserves search, sorts within a selected unit and lists multi-members only once",async({browser})=>{
+  const state=store(),context=await browser.newContext();
+  await connect(context,state,admin);
+  const units=[{id:unit,name:"Scheuren"},{id:otherUnit,name:"Eikamp"},
+    {id:"20000000-0000-4000-8000-000000000003",name:"Scherf"},
+    {id:"20000000-0000-4000-8000-000000000004",name:"Blecher"},
+    {id:"20000000-0000-4000-8000-000000000005",name:"Voiswinkel"}];
+  const person=(id:string,name:string,memberships:string[])=>({
+    user_id:id,display_name:name,status:"approved",access_granted:true,
+    unit_id:memberships[0],unit_name:units.find(u=>u.id===memberships[0])!.name,
+    can_change_membership:true,roles:[],functions:[],
+    unit_history:memberships.map(unit_id=>({unit_id,unit_name:units.find(u=>u.id===unit_id)!.name,
+      valid_from:new Date(state.now-86400000).toISOString(),valid_until:null})),
+  });
+  const anna=person(member,"Anna",[unit,otherUnit]),bernd=person("10000000-0000-4000-8000-000000000003","Bernd",[otherUnit]),
+    zara=person("10000000-0000-4000-8000-000000000004","Zara",[unit]);
+  await context.route(`${api}/rest/v1/rpc/ff_members_workspace`,route=>route.fulfill({
+    status:200,contentType:"application/json",body:JSON.stringify({server_now:new Date(state.now).toISOString(),
+      global_admin:true,units,functions:[],members:[zara,anna,bernd,anna]}),
+  }));
+  const page=await context.newPage();
+  await login(page,true);
+  await page.goto(publicPath("/administration/"));
+  const rows=page.locator(".dev-member > summary strong"),filter=page.getByLabel("Mitglieder nach Einheit filtern");
+  await expect(filter.locator("option")).toHaveText(["Alle Einheiten","Blecher","Eikamp","Scherf","Scheuren","Voiswinkel"]);
+  await expect(rows).toHaveText(["Anna","Bernd","Zara"]);
+  await filter.selectOption(unit);
+  await expect(rows).toHaveText(["Anna","Zara"]);
+  await filter.selectOption(otherUnit);
+  await expect(rows).toHaveText(["Anna","Bernd"]);
+  await page.getByLabel("Mitglieder suchen").fill("Anna");
+  await page.getByRole("button",{name:"Mitglieder aktualisieren",exact:true}).click();
+  await expect(filter).toHaveValue(otherUnit);
+  await expect(page.getByLabel("Mitglieder suchen")).toHaveValue("Anna");
+  await expect(rows).toHaveText(["Anna"]);
+  await context.close();
+});
+
 test("attendance prefill, filters, explicit completion, own final data and reasoned correction survive reload across themes", async ({ browser }) => {
   const state = store(); state.events = [attendanceEvent(state)];
   const maybe = "10000000-0000-4000-8000-000000000003", unanswered = "10000000-0000-4000-8000-000000000004";
