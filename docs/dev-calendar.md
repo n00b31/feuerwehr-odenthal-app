@@ -278,3 +278,90 @@ SDK-/Fach-/Browserregressionen, eigene Vorauswahl, Fremdauswahl,
 leere/deaktivierte Ressourcen und Belegungs-CRUD prüfen; anschließend
 kontrollierte DEV-Anwendung, zurückgerollte echte RPC-/RLS-Prüfung und
 signierte Leseprüfung mit den sechs bestehenden Testkonten.
+
+### Tatsächliche DEV-Anwendung und Erhaltung
+
+Migration 020 wurde am 08.11.2026 über das projektgebundene Supabase-MCP
+im bestätigten Projekt `orxinqhhbtjpkzwlfaxq` angewendet:
+`20261108100532` / `ff_020_unit_firestations`.
+Quelle aus Commit `49d4c8e2c80eda9352d9e9d35ae074bcbb3a38f8`,
+SHA256 `dffc951d210c8974d972ccf68e370ffbceb93881fe5816fb54a432e1d7ffd0bd`.
+Die gespeicherte Originalquelle stimmt bytegenau überein:
+MD5 `9ea8dc65751f81032c4f157b3a4811dc`.
+
+| Aktive Ressource | Vorhandene Einheits-ID |
+|---|---|
+| Gerätehaus Scheuren | `72bd86e8-2017-451b-8523-59d9d1c871ef` |
+| Gerätehaus Scherf | `458dae15-ba37-43eb-9e75-b2296092aed7` |
+| Gerätehaus Blecher | `e07f979e-adde-4785-b005-95f24a4f92fc` |
+| Gerätehaus Voiswinkel | `c8495f81-857a-434a-be67-d9e3da06955d` |
+| Gerätehaus Eikamp | `b61593b7-df4e-4692-b8df-8026cc512c67` |
+
+Vor und nach der Migration unverändert:
+Fachdaten-Hash `71464984bbfba52a38576bb70ba028e0`
+über Profile, Einheiten, Rollen, Mitgliedschaften, Termine, Roster, Antworten,
+Anwesenheiten, Bestätigungen und Kalenderzusatzdaten; ursprünglicher
+Audit-Hash `63ec8940792a46e6c3dd0afd089036db`; Historien-Fingerprint
+`6fd6737be8dab684db406d63507b7989`.
+Es wurden ausschließlich fünf Ressourcen und fünf entsprechend markierte
+Audit-Einträge ergänzt. Acht Auth-Konten, 2.639 bestätigte Anwesenheiten
+und zwei bestehende organisatorische Kalendereinträge bleiben erhalten.
+Auth-Zeilen waren unmittelbar vor/nach Stammdatenanlage ebenfalls identisch;
+spätere echte Testanmeldungen dürfen Auth-Metadaten aktualisieren.
+
+Die gehostete RPC-/RLS-Transaktion mit vorhandenen freigegebenen Akteuren
+prüfte Anlage, Kalenderanzeige, Warnung, Bearbeitung, Absage und Audit einer
+Belegung, MEMBER-Lesezugriff, fremde Ressourcen-/Ereignissperren, direkte
+Schreibsperren sowie organisationsweiten FIRE_CHIEF-Lesezugriff ohne
+technische Ressourcenrechte. Sie wurde vollständig zurückgerollt,
+einschließlich der temporären FIRE_CHIEF-Rolle. Keine Probeeinträge verblieben.
+Fachdaten-/Audit-/Historien-Hashes waren danach weiterhin identisch.
+Diese SQL-Prüfung verwendet transaktionslokale Claims und ist kein signierter
+HTTP-Schreibtest.
+
+### Tests und erneute Abnahme
+
+| Nr. | Angeforderter Test | Tatsächlicher Nachweis |
+|---|---|---|
+| 1 | Genau fünf Gerätehäuser | Gehostete Bestandsabfrage und PostgreSQL-CI |
+| 2 | Jeweils einer Einheit zugeordnet | Gehostete FK-/Einheitsabfrage und CI |
+| 3 | Keine Duplikate | Migration zweimal in CI, weiterhin fünf Ressourcen/fünf Audit-Einträge |
+| 4 | GLOBAL_ADMIN sieht alle | Gehostete authentifizierte SQL-RLS/Context-Prüfung und Browser |
+| 5 | UNIT_ADMIN sieht berechtigte | Gehostete SQL-Prüfung und echte signierte Ressourcen-RLS; aktuelle Mitgliedschaften und Rollenbereiche berücksichtigt |
+| 6 | MEMBER darf nicht administrieren | Gehostete RPC-Sperren, CI und Browser |
+| 7 | Auswahl und eigene Vorauswahl | Vier neue Browserfälle und Fachtests, inklusive Fremd-/Leer-/Inaktiv-Auswahl |
+| 8 | Belegung erstellen | Gehosteter RPC, CI und Browser |
+| 9 | Anzeige im Kalender | Gehosteter RPC, Browser einschließlich Neuladen |
+| 10 | Überschneidung | Gehosteter RPC, CI und Browser; Warnung blockiert nicht |
+| 11 | Bearbeitung | Gehosteter RPC mit Revision/Audit, CI und Browser |
+| 12 | RLS-/Schreibschutz | Gehostete Rollen-/RPC-/DML-Prüfung und CI |
+| 13 | Kalenderregressionen | Alle 39 DEV-Browserfälle und bestehende SQL-/Fachtests bestanden |
+| 14 | Pages Static Export | DEV-/Demo-Builds bestanden; abschließender Export und PR-CI separat nachvollziehbar |
+
+104 Fach-/Konfigurations-/Auth-Tests und 17 Skripttests sind erfolgreich;
+Lint und TypeScript ebenfalls. Die 19 lokalen Demo-Browserregressionen
+bestanden ohne Änderung am separaten Demo-Repository.
+SQL-CI einschließlich doppelter Stammdatenmigration:
+[42469638986](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42469638986).
+Echte sechs bestehende Auth-Anmeldungen mit signierten Profil-/Mitgliedschafts-/
+Ressourcen-RLS- und Kalender-/Berichtsabfragen:
+[42470421896](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42470421896).
+Dieser Lauf ist ausschließlich lesend, ohne Service-Role-Key oder neue Konten.
+
+Ein erster zusätzlicher Live-Prüflauf erwartete genau eine Ressource pro
+Testkonto. Bestehende manuelle Mitgliedschaftsänderungen und getrennt
+vergebene Einheitsrollen können aber mehrere berechtigte Lesebereiche ergeben.
+Der Prüfer wurde auf aktuelle Mitgliedschaften **und** tatsächliche Rollenbereiche
+korrigiert, nicht die Berechtigungen oder Mitgliederdaten.
+Ein Testaufruf mit einer nicht mehr aktiven Zielgruppen-Mitgliedschaft als
+verantwortlicher Person wurde vom bestehenden RPC korrekt abgewiesen.
+Die erfolgreiche Belegungsprüfung verwendet eine tatsächlich aktuelle
+freigeschaltete verantwortliche Person.
+
+Browserfälle verwenden abgefangene Supabase-Protokollantworten. Die erneute
+manuelle Abnahme C auf der veröffentlichten Anwendung ist davon getrennt:
+Kalender aktualisieren, Gerätehaus auswählen, Datum/Zweck/Verantwortliche
+eintragen, speichern, öffnen, bearbeiten und absagen; zweite zeitgleiche
+Belegung mit Warnung prüfen. Stammdaten sind bereits im DEV vorhanden;
+die verbesserte Vorauswahl und Fehlermeldung werden erst nach Benutzermerge
+und Pages-Deployment sichtbar. Kein automatischer Merge oder Deployment.

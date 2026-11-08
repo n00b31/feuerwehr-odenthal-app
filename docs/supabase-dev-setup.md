@@ -1,5 +1,12 @@
 # Supabase DEV – Verbindung, Authentifizierung und Freigabe
 
+**DEV 0.5.1:** Fünf aktive Gerätehäuser aus den bestehenden Einheiten
+Scheuren, Scherf, Blecher, Voiswinkel und Eikamp wurden idempotent ergänzt.
+Migration 020 ist als `20261108100532` / `ff_020_unit_firestations` im DEV
+registriert. Bestehende Rollen, Kalenderdaten und Bestätigungen sind erhalten.
+Ursache, Quellenprüfsummen, Berechtigungs-/Belegungstests und Abnahme:
+[DEV-Kalender / Gerätehauskorrektur](dev-calendar.md#dev-051-ger%C3%A4tehaus-stammdaten-und-auswahl).
+
 **DEV 0.5:** Additive Kalender-Migrationen 018/019 sind am 08.11.2026
 kontrolliert im bestehenden DEV angewendet. Gemeinsame Terminquelle,
 Informations-/Gerätehauseinträge, Bereichs-RLS, Quellenprüfsummen,
