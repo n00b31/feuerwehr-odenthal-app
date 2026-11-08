@@ -47,6 +47,14 @@ verhindert neue Anfragen/Genehmigungen, löscht aber keine Historie oder
 bestehenden Buchungen. Benachrichtigungen sind transaktional gespeicherte
 App-Datensätze, keine E-Mail, SMS oder Push-Nachricht.
 
+Die Installation der Datenbank darf den weiterhin veröffentlichten
+DEV-0.5.1-Client nicht beschädigen. Dessen Kalender-/Kontext-RPCs behalten
+Gerätehäuser und bisherige Eintragsarten. DEV 0.6 verhandelt über
+`vehicle_calendar` ausdrücklich die neuen `ff_calendar_vehicle_context`-
+und `ff_calendar_vehicle_page`-RPCs. Erst dieser Client zeigt verbindliche
+Fahrzeugvorgänge im gemeinsamen Kalender. Beide Wege verwenden dieselben
+Termin-IDs, Sichtbarkeitsprüfungen und Cursor; keine Termin-Kopie.
+
 Synthetische DEV-Daten sind ausdrücklich als solche bezeichnet. Keine echten
 Kennzeichen oder Funkrufzeichen werden erfunden. Eine wiederholbare,
 operatorgeschützte Einrichtung verwendet vorhandene freigegebene DEV-Akteure,

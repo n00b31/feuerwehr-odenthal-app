@@ -24,7 +24,7 @@ async function connect(page:Page,role:"global"|"member"|"manager"|"chief"="membe
       completed_at:null,completed_by:null};
   }
   if(preload)state.items.push(row("d0600000-0000-4000-8000-000000000001","Synthetic approval task"));
-  const context={organization:global,configure:global,units:[{id:unit,name:"Scheuren"}],
+  const context={vehicle_calendar:true,organization:global,configure:global,units:[{id:unit,name:"Scheuren"}],
     manageable_units:global ? [{id:unit,name:"Scheuren"}] : [],functions:[],organizers:[{id:actor,name:"Synthetic Vehicles"}],
     resources:vehicles,categories:[{id:"e0600000-0000-4000-8000-000000000001",name:"Fahrzeugreservierung",active:true}]};
   const user={id:actor,aud:"authenticated",role:"authenticated",email:"synthetic.vehicles@feuerwehr-odenthal.de",
@@ -42,8 +42,8 @@ async function connect(page:Page,role:"global"|"member"|"manager"|"chief"="membe
     if(path.endsWith("/units"))return respond(context.units);
     if(path.endsWith("/document_areas") || path.endsWith("/ff_pending_registrations"))return respond([]);
     if(path.endsWith("/ff_events_page"))return respond({server_now:now,manageable_units:context.manageable_units,events:[],retained_events:[],has_more:false,next_cursor:null});
-    if(path.endsWith("/ff_calendar_context"))return respond(context);
-    if(path.endsWith("/ff_calendar_page")){
+    if(path.endsWith("/ff_calendar_context") || path.endsWith("/ff_calendar_vehicle_context"))return respond(context);
+    if(path.endsWith("/ff_calendar_page") || path.endsWith("/ff_calendar_vehicle_page")){
       const q=request.postDataJSON();
       const events=state.items.filter(i=>i.state==="APPROVED").map(i=>({id:i.id,title:i.title,description:i.description,
         starts_at:i.starts_at,ends_at:i.ends_at,location:"Synthetic DEV",event_type:"other",status:"scheduled",revision:i.revision,
@@ -96,6 +96,7 @@ async function connect(page:Page,role:"global"|"member"|"manager"|"chief"="membe
   await page.getByLabel("Feuerwehr-E-Mail").fill(user.email);
   await page.getByLabel("Passwort",{exact:true}).fill("synthetic-not-a-real-password");
   await page.getByRole("button",{name:"Anmelden",exact:true}).click();
+  await page.getByRole("button",{name:"Gemeinsamer Kalender",exact:true}).click();
   await page.getByRole("button",{name:"Fahrzeuge und Reservierungen öffnen"}).click();
   await expect(page.getByLabel("Fahrzeug auswählen")).toBeVisible();
   return state;

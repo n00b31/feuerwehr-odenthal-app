@@ -60,6 +60,10 @@ select set_config('request.jwt.claim.sub','a0600000-0000-4000-8000-000000000002'
 set local role authenticated;
 select set_config('v.first',(public.ff_request_vehicle(pg_temp.v_payload('Synthetic first request'))->>'id'),true);
 select set_config('v.second',(public.ff_request_vehicle(pg_temp.v_payload('Synthetic overlapping request'))->>'id'),true);
+select set_config('v.cross',(public.ff_request_vehicle(pg_temp.v_payload('Synthetic shared foreign vehicle')
+  ||jsonb_build_object('vehicle_id',current_setting('v.foreign')))->>'id'),true);
+select pg_temp.v_assert((select state='REQUESTED' and requester_id=auth.uid() from public.vehicle_reservations
+  where event_id=current_setting('v.cross')::uuid),'MEMBER requests explicitly shared vehicle owned by another unit');
 select pg_temp.v_assert((select state='REQUESTED' from public.vehicle_reservations where event_id=current_setting('v.first')::uuid),'MEMBER creates REQUESTED');
 select pg_temp.v_assert((select count(*)=0 from public.events where id=current_setting('v.first')::uuid),'REQUESTED is not exposed as booked shared-calendar event');
 select pg_temp.v_assert((public.ff_vehicle_workspace(current_setting('v.start')::timestamptz,current_setting('v.end')::timestamptz,
@@ -172,10 +176,32 @@ set local role authenticated;
 select public.ff_decide_vehicle(current_setting('v.completed')::uuid,1,'COMPLETED');
 select pg_temp.v_assert((select state='COMPLETED' and completed_at is not null and completed_by=auth.uid()
   from public.vehicle_reservations where event_id=current_setting('v.completed')::uuid),'successful completion documents actor/time only');
+select public.ff_save_vehicle(pg_temp.v_spec('Synthetic foreign HLF',current_setting('v.other')::uuid)
+  ||jsonb_build_object('type_key','hlf','manager_ids',jsonb_build_array(auth.uid()),'usage_units',jsonb_build_array(current_setting('v.other'))),
+  current_setting('v.foreign')::uuid,0);
 reset role;
+select set_config('request.jwt.claim.sub','a0600000-0000-4000-8000-000000000002',true);
+set local role authenticated;
+select pg_temp.v_assert((select count(*)=0 from public.calendar_resources where id=current_setting('v.foreign')::uuid),'revoked usage hides current foreign vehicle resource');
+select pg_temp.v_assert((select count(*)=1 from public.vehicle_reservations where event_id=current_setting('v.cross')::uuid),'own request history survives usage revocation');
+select pg_temp.v_denied($q$select public.ff_request_vehicle(pg_temp.v_payload('Revoked cross-unit usage')
+  ||jsonb_build_object('vehicle_id',current_setting('v.foreign')))$q$);
+select pg_temp.v_assert(not exists(select 1 from public.vehicle_reservations where event_id=current_setting('v.completed')::uuid),'own old request does not grant future foreign reservation visibility');
+reset role;
+select set_config('request.jwt.claim.sub','a0600000-0000-4000-8000-000000000001',true);
 select pg_temp.v_assert(ff_private.seed_dev_vehicles('orxinqhhbtjpkzwlfaxq')='{"vehicles":4,"reservations":5}'::jsonb,'operator-only reproducible synthetic DEV fixtures');
 select set_config('v.seedhash',(select md5(string_agg(to_jsonb(q)::text,'' order by q.event_id)) from public.vehicle_reservations q where dev_seed_key like 'DEV060-%'),true);
 select pg_temp.v_assert(ff_private.seed_dev_vehicles('orxinqhhbtjpkzwlfaxq')='{"vehicles":4,"reservations":5}'::jsonb,'repeat seed creates no duplicates');
 select pg_temp.v_assert(current_setting('v.seedhash')=(select md5(string_agg(to_jsonb(q)::text,'' order by q.event_id))
   from public.vehicle_reservations q where dev_seed_key like 'DEV060-%'),'repeat seed preserves existing fixture rows');
+set local role authenticated;
+select pg_temp.v_assert(jsonb_array_length(public.ff_calendar_context()->'resources')=5,'legacy DEV0.5.1 context retains five buildings only');
+select pg_temp.v_assert(not exists(select 1 from jsonb_array_elements(public.ff_calendar_page(
+  current_date::timestamp at time zone 'Europe/Berlin',(current_date+14)::timestamp at time zone 'Europe/Berlin')->'events') e
+  where e->>'entry_kind'='vehicle'),'legacy DEV0.5.1 calendar API remains compatible before frontend merge');
+select pg_temp.v_assert((select count(*)=2 from jsonb_array_elements(public.ff_calendar_vehicle_page(
+  current_date::timestamp at time zone 'Europe/Berlin',(current_date+14)::timestamp at time zone 'Europe/Berlin',
+  wanted_kinds=>array['vehicle'])->'events') e where e->>'id' in
+  (select event_id::text from public.vehicle_reservations where dev_seed_key in ('DEV060-reservation-2','DEV060-reservation-5'))),
+  'negotiated DEV0.6 calendar exposes canonical approved reservation and block, not requests');
 rollback;

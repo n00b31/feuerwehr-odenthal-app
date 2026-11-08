@@ -46,7 +46,7 @@ returns jsonb language sql stable security definer set search_path='' as $$
     left join public.calendar_resources r on r.id=c.resource_id
   where e.id=target and c.archived_at is null and ff_private.can_view_event(e.id);
 $$;
-create or replace function public.ff_calendar_page(lower_bound timestamptz,upper_bound timestamptz,scopes text[] default '{}',
+create function public.ff_calendar_vehicle_page(lower_bound timestamptz,upper_bound timestamptz,scopes text[] default '{}',
   wanted_units uuid[] default '{}',wanted_types public.ff_event_type[] default '{}',wanted_kinds text[] default '{}',wanted_categories uuid[] default '{}',
   wanted_resources uuid[] default '{}',show_cancelled boolean default true,after_start timestamptz default null,
   after_id uuid default null,retained_ids uuid[] default '{}')
@@ -93,5 +93,49 @@ begin
         where not(id=any(ids[1:400]))) y where summary is not null),'[]'));
 end;
 $$;
+
+alter function public.ff_calendar_page(timestamptz,timestamptz,text[],uuid[],public.ff_event_type[],text[],uuid[],uuid[],boolean,timestamptz,uuid,uuid[])
+  set schema ff_private;
+alter function ff_private.ff_calendar_page(timestamptz,timestamptz,text[],uuid[],public.ff_event_type[],text[],uuid[],uuid[],boolean,timestamptz,uuid,uuid[])
+  rename to legacy_calendar_page;
+revoke all on function ff_private.legacy_calendar_page(timestamptz,timestamptz,text[],uuid[],public.ff_event_type[],text[],uuid[],uuid[],boolean,timestamptz,uuid,uuid[])
+  from public,anon,authenticated;
+create function public.ff_calendar_page(lower_bound timestamptz,upper_bound timestamptz,scopes text[] default '{}',
+  wanted_units uuid[] default '{}',wanted_types public.ff_event_type[] default '{}',wanted_kinds text[] default '{}',wanted_categories uuid[] default '{}',
+  wanted_resources uuid[] default '{}',show_cancelled boolean default true,after_start timestamptz default null,
+  after_id uuid default null,retained_ids uuid[] default '{}')
+returns jsonb language plpgsql stable security definer set search_path='' as $$
+declare result jsonb;
+begin
+  result:=ff_private.legacy_calendar_page(lower_bound,upper_bound,scopes,wanted_units,wanted_types,wanted_kinds,wanted_categories,
+    wanted_resources,show_cancelled,after_start,after_id,retained_ids);
+  return result||jsonb_build_object(
+    'events',coalesce((select jsonb_agg(item order by position) from jsonb_array_elements(result->'events') with ordinality x(item,position)
+      where item->>'entry_kind' is distinct from 'vehicle'),'[]'),
+    'retained_events',coalesce((select jsonb_agg(item order by position) from jsonb_array_elements(result->'retained_events') with ordinality x(item,position)
+      where item->>'entry_kind' is distinct from 'vehicle'),'[]'));
+end;
+$$;
+alter function public.ff_calendar_context() set schema ff_private;
+alter function ff_private.ff_calendar_context() rename to base_calendar_context;
+revoke all on function ff_private.base_calendar_context() from public,anon,authenticated;
+create function public.ff_calendar_context()
+returns jsonb language sql stable security definer set search_path='' as $$
+  select result||jsonb_build_object('vehicle_calendar',true,'resources',coalesce((
+    select jsonb_agg(item order by item->>'name') from jsonb_array_elements(result->'resources') item
+      where item->>'resource_type'<>'vehicle'),'[]')) from (select ff_private.base_calendar_context() result) x;
+$$;
+create function public.ff_calendar_vehicle_context()
+returns jsonb language sql stable security definer set search_path='' as $$
+  select ff_private.base_calendar_context()||jsonb_build_object('vehicle_calendar',true);
+$$;
+revoke all on function public.ff_calendar_context(),public.ff_calendar_vehicle_context(),
+  public.ff_calendar_vehicle_page(timestamptz,timestamptz,text[],uuid[],public.ff_event_type[],text[],uuid[],uuid[],boolean,timestamptz,uuid,uuid[]),
+  public.ff_calendar_page(timestamptz,timestamptz,text[],uuid[],public.ff_event_type[],text[],uuid[],uuid[],boolean,timestamptz,uuid,uuid[])
+  from public,anon,authenticated;
+grant execute on function public.ff_calendar_context(),public.ff_calendar_vehicle_context(),
+  public.ff_calendar_vehicle_page(timestamptz,timestamptz,text[],uuid[],public.ff_event_type[],text[],uuid[],uuid[],boolean,timestamptz,uuid,uuid[]),
+  public.ff_calendar_page(timestamptz,timestamptz,text[],uuid[],public.ff_event_type[],text[],uuid[],uuid[],boolean,timestamptz,uuid,uuid[])
+  to authenticated;
 notify pgrst,'reload schema';
 commit;

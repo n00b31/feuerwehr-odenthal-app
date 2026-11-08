@@ -13,6 +13,7 @@ export const calendarContextSchema = z.object({
   organization: z.boolean(), configure: z.boolean(), units: z.array(option), manageable_units: z.array(option),
   functions: z.array(option.extend({ manage: z.boolean() })), resources: z.array(resourceSchema),
   categories: z.array(option.extend({ active: z.boolean() })), organizers: z.array(option),
+  vehicle_calendar:z.boolean().optional(),
 });
 export type CalendarContext = z.infer<typeof calendarContextSchema>;
 export const vehicleStateSchema = z.enum(["REQUESTED","APPROVED","REJECTED","CANCELLED","COMPLETED"]);
