@@ -2,10 +2,50 @@
 
 ## DEV 0.6.2: verbindliche Reservierung und explizite Antragsteller
 
-**Backend kontrolliert im Supabase DEV installiert; Frontend noch nicht
-veröffentlicht, reale manuelle Abnahme offen.** Die Migrationen 026–032 wurden
-zuerst in isoliertem PostgreSQL geprüft. Der veröffentlichte Client bleibt
-bis zum manuellen Merge DEV 0.6.1. Die unabhängige Demo wurde nicht verändert.
+**DEV 0.6.2 veröffentlicht und vom Projektverantwortlichen manuell bestätigt.**
+Migrationen 026–032 sind kontrolliert im Supabase DEV installiert.
+Die unabhängige Demo wurde nicht verändert.
+
+### DEV 0.6.2 – Erfolgreiche manuelle Abnahme
+
+Der Projektverantwortliche hat mit seinem Auftrag vom **08.11.2026** folgende
+reale Browserergebnisse ausdrücklich manuell bestätigt. Dies ist das
+Bestätigungs-/Dokumentationsdatum; eine genaue Uhrzeit der Tests wurde nicht
+angegeben. Diese Ergebnisse werden nicht aus synthetischen Tests abgeleitet.
+
+| Test | Manuell bestätigtes Ergebnis |
+|---|---|
+| A – Navigation | Erfolgreich: Dienstverwaltung, gemeinsamer Kalender und direkt erreichbarer Fahrzeugkalender. |
+| B – Fahrzeugreservierungen | Erfolgreich: MEMBER beantragt nur für sich, berechtigte Führungskräfte für andere Mitglieder, serverseitiger Doppelbuchungsschutz. |
+| C – Dynamische Terminzuordnung | Erfolgreich: neue Mitglieder sehen relevante zukünftige Termine, Einheitswechsel aktualisieren diese, historische Anwesenheiten bleiben erhalten. |
+| D – Mitgliederverwaltung | Erfolgreich: Einheitsfilter, alphabetische Sortierung, keine doppelten Mitglieder durch Mehrfachmitgliedschaften. |
+| E – Terminfarben | Erfolgreich: Zusage grün, Absage rot, Vielleicht gelb, keine Rückmeldung neutral. |
+| F – Stornierung | Erfolgreich: Stornierung, Verarbeitung der Begründung und Freigabe des Zeitraums. |
+
+Abgenommener main-/Merge-Commit von
+[PR #20](https://github.com/n00b31/feuerwehr-odenthal-app/pull/20):
+`84037cf3fc5d2281d2493ccf9b3b7571cef9c3c7`.
+Annotierter und zu GitHub gepushter Tag:
+**`v0.6.2-vehicles-memberships-dev`**.
+Beschreibung: "Feuerwehr Odenthal DEV 0.6.2 – Vehicle reservation fixes,
+dynamic memberships and UI improvements validated."
+
+[Pages-Lauf 42515134524](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42515134524)
+bestand Build, Auth, echten DEV-Export und Deployment auf genau diesem Commit.
+Deployment `7640714241` meldete `success` am 08.11.2026, 19:31:50 UTC.
+Öffentliches `release.json`: DEV 0.6.2, derselbe vollständige Commit,
+`sourceDirty=false`, Build-ID
+`84037cf3fc5d-017065cf-ed50-410f-af41-b72af8eba4cb`.
+Der öffentlich ausgelieferte PWA-Service-Worker enthält dieselbe Build-ID.
+Der [PostgreSQL-Lauf 42515134432](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42515134432)
+auf main war ebenfalls erfolgreich.
+
+**Noch offen:** native installierte iPhone-/Android-PWA-Gerätetests.
+Weitere spezielle Testfälle aus der Prüfanleitung unten sind durch die
+sechs Bestätigungen nicht automatisch zusätzlich abgenommen.
+Diese Dokumentation wird vor der DEV-0.6.3-Implementierung separat committed
+und im DEV-0.6.3-PR mitgesichert; ein zusätzlicher Dokumentations-PR ist
+nicht erforderlich. Spätere Dokumentationscommits verschieben den Tag nicht.
 
 Die Bestandsprüfung im DEV zeigte keine verbindlichen Überschneidungen.
 Die bisherigen Genehmigungs-RPCs sperrten bereits die Fahrzeugzeile; es fehlte

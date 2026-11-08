@@ -1,5 +1,25 @@
 # Supabase DEV – Verbindung, Authentifizierung und Freigabe
 
+## DEV 0.6.2 – Erfolgreiche manuelle Abnahme
+
+Am 08.11.2026 vom Projektverantwortlichen manuell bestätigt:
+Navigation, Fahrzeugreservierungen/Antragstellerrechte/Doppelbuchungsschutz,
+dynamische Terminzuordnung bei neuen Mitgliedern und Einheitswechseln,
+Mitgliederfilter/-sortierung ohne Doppelnennungen, Rückmeldungsfarben und
+begründete Fahrzeugstornierung mit erneut verfügbarem Zeitraum.
+Ein genauer Testzeitpunkt wurde nicht angegeben.
+
+Migrationen 026–032 sind bereits kontrolliert im bestehenden Supabase DEV
+installiert. Bestehende Authentifizierung, Rollen, historische Daten und
+Berichte wurden erhalten. [Installation und vollständige Abnahme](dev-vehicles.md).
+Abgenommener main-/PR-20-Merge-Commit:
+`84037cf3fc5d2281d2493ccf9b3b7571cef9c3c7`.
+Unveränderlicher annotierter Tag: `v0.6.2-vehicles-memberships-dev`.
+Öffentlicher Client und PWA-Cache melden DEV 0.6.2 / Build-ID
+`84037cf3fc5d-017065cf-ed50-410f-af41-b72af8eba4cb`;
+Pages-Lauf `42515134524`, erfolgreiches Deployment `7640714241`.
+Native iPhone-/Android-PWA-Gerätetests bleiben offen.
+
 **DEV 0.6.1 – unabhängiger Auth-Hotfix:** Passwortbestätigung, Self-Service und
 GLOBAL_ADMIN-Wiederherstellung über einen geschützten serverseitigen PKCE-
 Versandpfad. Integrierter DEV-Mailversand bleibt erhalten; zusätzliche atomare

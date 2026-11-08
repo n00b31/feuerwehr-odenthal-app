@@ -2,8 +2,8 @@
 
 ## DEV 0.6.2: dynamische Zuordnung und persönliche Rückmeldungen
 
-**Backend nach erfolgreicher PostgreSQL-/Upgrade-Prüfung kontrolliert im DEV
-installiert; Frontend-Veröffentlichung und reale Abnahme stehen aus.**
+**DEV 0.6.2 veröffentlicht; die unten aufgeführten Browserergebnisse sind
+vom Projektverantwortlichen manuell bestätigt.**
 Der [Installations- und Prüfnachweis](dev-vehicles.md#kontrollierte-installation-und-prüfnachweis-am-08112026)
 dokumentiert unveränderte Altdaten und historische Berichte.
 Migrationen 028–032 ergänzen Mehrfachmitgliedschaften und die neue
@@ -43,11 +43,26 @@ Dashboard, Dienstübersicht, Details und Teilnahmeeinträge im gemeinsamen
 Kalender verwenden dieselbe Darstellung in Light und Dark Mode.
 Terminabsage und tatsächliche Anwesenheit bleiben davon getrennte Zustände.
 
-Manuell noch abzunehmen: Aufnahme nach Terminerstellung, Einheitswechsel,
-Mehrfachmitgliedschaft, Funktionswechsel, unabhängige Serieninstanzen,
-feste Einladungen, ungültige alte Rückmeldungen sowie unveränderte
-abgeschlossene Listen und Jahresberichte nach einem späteren Wechsel.
-Die bisherige manuelle DEV-0.5.1-Abnahme unten ist davon unabhängig.
+### DEV 0.6.2 – Erfolgreiche manuelle Abnahme
+
+Mit dem Auftrag vom 08.11.2026 manuell bestätigt: Navigation aller drei
+Terminbereiche; relevante zukünftige Termine für neue Mitglieder und nach
+Einheitswechsel bei erhaltener Anwesenheitshistorie; Einheitsfilter,
+alphabetische Sortierung und deduplizierte Mehrfachmitgliedschaften;
+grüne/rote/gelbe/neutrale Rückmeldungsfarben. Fahrzeugreservierungen,
+Antragstellerrechte, Doppelbuchungsschutz und begründete Stornierung mit
+Freigabe des Zeitraums wurden ebenfalls bestätigt.
+
+Abgenommener Commit: `84037cf3fc5d2281d2493ccf9b3b7571cef9c3c7`.
+Tag: `v0.6.2-vehicles-memberships-dev`. Veröffentlicht: DEV 0.6.2,
+Pages-Lauf `42515134524`, Deployment `7640714241`.
+Der [vollständige manuelle Nachweis](dev-vehicles.md#dev-062--erfolgreiche-manuelle-abnahme)
+enthält die sechs Testergebnisse, Bestätigungsdatum, PWA-Build-ID und offene
+native iPhone-/Android-PWA-Gerätetests.
+
+Nicht zusätzlich behauptet: gesonderte reale Tests für Funktionswechsel,
+feste Einladungen, ungültige alte Antworten und alle speziellen
+Jahresberichts-/Serienfälle. Die DEV-0.5.1-Abnahme unten bleibt unabhängig.
 
 ## DEV 0.5.1 – Erfolgreiche manuelle Abnahme
 
