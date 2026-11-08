@@ -5,6 +5,7 @@
 .vehicles .calendar-month { grid-template-columns: repeat(7,minmax(140px,1fr)); overflow-x: auto; max-width: 100%; }
 .vehicles .calendar-cell { padding: 8px; overflow-wrap: anywhere; }
 .vehicles .calendar-chip .badge { color: var(--cp-text); display: inline-flex; }
+.vehicles .calendar-month .calendar-chip > span.badge:first-child { display: inline-flex; }
 .vehicles details { margin-block: 16px; }
 .vehicles summary { cursor: pointer; min-height: 48px; padding: 12px; }
 .vehicles .notice-row { overflow-wrap: anywhere; }

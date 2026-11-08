@@ -6,7 +6,7 @@ import {Truck,ChevronLeft,ChevronRight,RefreshCw,Bell} from "lucide-react";
 import {readVehicles,requestVehicle,decideVehicle,saveVehicle,readVehicleNotification,saveVehicleOption} from "@/data/supabase-vehicles";
 import {vehicleStatus,bindingVehicle,vehicleOverlap,vehicleRequestPayload,type VehicleWorkspace,type Vehicle,
   type VehicleReservation,type VehicleRequestDraft,type VehicleInput,type VehicleState} from "@/domain/vehicles";
-import {calendarRange,moveCalendar,calendarInterval,type CalendarView} from "@/domain/calendar";
+import {calendarRange,moveCalendar,calendarInterval,calendarDateSchema,type CalendarView} from "@/domain/calendar";
 import {addLocalDays,berlinParts,dateLabel,fromBerlin} from "@/domain/time";
 import {eventErrorMessage} from "@/domain/dev-events";
 import {AppDialog} from "./app-dialog";
@@ -22,29 +22,33 @@ export function SupabaseVehicles({client,actorId,initialTime,initialEventId=null
   const [selected,setSelected]=useState<string|null>(initialEventId),[draft,setDraft]=useState<VehicleRequestDraft|null>(null);
   const [editing,setEditing]=useState<{vehicle?:Vehicle;input:VehicleInput}|null>(null),[reason,setReason]=useState("");
   const [error,setError]=useState(""),[message,setMessage]=useState(""),[busy,setBusy]=useState(false);
-  const epoch=useRef(0),working=useRef(false);
-  useEffect(()=>{if(initialEventId){setSelected(initialEventId);setReason("");}},[initialEventId]);
-  const reload=useCallback(async()=>{
-    const version=++epoch.current;
-    try{
-      const data=await readVehicles(client,calendarRange(date,view),vehicleId,selected);
-      if(version!==epoch.current)return;
+  const epoch=useRef({value:0}),working=useRef(false);
+  const [observedEvent,setObservedEvent]=useState(initialEventId);
+  if(initialEventId!==observedEvent){
+    setObservedEvent(initialEventId);
+    if(initialEventId){setSelected(initialEventId);setReason("");}
+  }
+  const reload=useCallback(()=>{
+    const version=++epoch.current.value;
+    return readVehicles(client,calendarRange(date,view),vehicleId,selected).then(data=>{
+      if(version!==epoch.current.value)return;
       setSnapshot(data);setError("");
       if(!vehicleId && data.vehicles.length) setVehicleId(data.vehicles[0].id);
       if(selected && !data.retained){setSelected(null);setMessage("Vorgang nicht mehr berechtigt verfügbar.");}
-    }catch(cause){
-      if(version!==epoch.current)return;
+    }).catch(cause=>{
+      if(version!==epoch.current.value)return;
       setSnapshot(null);setError(cause && typeof cause==="object" && "code" in cause && cause.code==="PGRST202"
         ? "Fahrzeugverwaltung noch nicht verfügbar. DEV-Migrationen 021 bis 023 müssen installiert sein." : eventErrorMessage(cause));
-    }
+    });
   },[client,date,view,vehicleId,selected]);
   useEffect(()=>{
+    const lifetime=epoch.current;
     void reload();const timer=window.setInterval(()=>{if(!document.hidden && !working.current)void reload();},30_000);
-    return()=>{epoch.current++;window.clearInterval(timer);};
+    return()=>{lifetime.value++;window.clearInterval(timer);};
   },[reload]);
   async function run(operation:()=>Promise<unknown>,success:string){
     if(working.current)return;
-    working.current=true;setBusy(true);setError("");setMessage("");epoch.current++;
+    working.current=true;setBusy(true);setError("");setMessage("");epoch.current.value++;
     try{const result=await operation();setMessage(typeof result==="string" ? result : success);await reload();}
     catch(cause){setError(eventErrorMessage(cause));}
     finally{working.current=false;setBusy(false);}
@@ -52,6 +56,10 @@ export function SupabaseVehicles({client,actorId,initialTime,initialEventId=null
   const vehicle=snapshot?.vehicles.find(v=>v.id===vehicleId);
   const item=snapshot?.retained ?? snapshot?.items.find(i=>i.id===selected);
   const range=calendarRange(date,view),items=snapshot?.items.filter(i=>i.vehicle_id===vehicleId) ?? [];
+  function navigate(direction:number){
+    try{setDate(moveCalendar(date,view,direction));}
+    catch(cause){setError(eventErrorMessage(cause));}
+  }
   function createRequest(block=false){
     if(!snapshot || !vehicle)return;
     const unit=block ? vehicle.unit_id : snapshot.own_units.find(u=>vehicle.usage_units.includes(u.id))?.id ?? "";
@@ -89,11 +97,11 @@ export function SupabaseVehicles({client,actorId,initialTime,initialEventId=null
         <option value="" disabled>Fahrzeug wählen</option>{snapshot.vehicles.map(v=><option key={v.id} value={v.id}>{v.name}{!v.active ? " · Inaktiv" : !v.reservable ? " · Nicht reservierbar" : ""}</option>)}
       </select></label>
       <label>Fahrzeugmonat<input type="month" min="2000-01" max="2199-12" value={date.slice(0,7)}
-        onChange={e=>{if(/^\d{4}-(0[1-9]|1[0-2])$/.test(e.target.value))setDate(`${e.target.value}-01`);}}/></label></div>
-      <div className="calendar-toolbar"><button className="icon-button" aria-label="Vorheriger Fahrzeugzeitraum" onClick={()=>setDate(moveCalendar(date,view,-1))}><ChevronLeft/></button>
+        onChange={e=>{const parsed=calendarDateSchema.safeParse(`${e.target.value}-01`);if(parsed.success)setDate(parsed.data);else setError("Gültigen Fahrzeugmonat wählen.");}}/></label></div>
+      <div className="calendar-toolbar"><button className="icon-button" aria-label="Vorheriger Fahrzeugzeitraum" onClick={()=>navigate(-1)}><ChevronLeft/></button>
         <div className="calendar-views" aria-label="Fahrzeugkalenderdarstellung">{(["month","week","list"] as const).map((v,i)=>
           <button className="button secondary" key={v} aria-pressed={v===view} onClick={()=>setView(v)}>{["Monat","Woche","Liste"][i]}</button>)}</div>
-        <button className="icon-button" aria-label="Nächster Fahrzeugzeitraum" onClick={()=>setDate(moveCalendar(date,view,1))}><ChevronRight/></button>
+        <button className="icon-button" aria-label="Nächster Fahrzeugzeitraum" onClick={()=>navigate(1)}><ChevronRight/></button>
         <button className="button secondary" onClick={()=>setDate(berlinParts(snapshot.server_now).date)}>Fahrzeugkalender heute</button></div>
       {!snapshot.vehicles.length && <p className="notice" role="status">Keine berechtigt sichtbaren Fahrzeuge eingerichtet. Globale Administration muss Fahrzeug-Stammdaten und Nutzungsfreigaben prüfen.</p>}
       {vehicle && <>

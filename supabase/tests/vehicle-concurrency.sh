@@ -7,11 +7,14 @@ do $$ begin if current_database()<>'ff_dev_ci' then raise exception 'Disposable 
 insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data) values
  ('96000000-0000-4000-8000-000000000001','synthetic.vehicle.concurrent.1@feuerwehr-odenthal.de',clock_timestamp(),'{"display_name":"Synthetic vehicle approver 1"}'),
  ('96000000-0000-4000-8000-000000000002','synthetic.vehicle.concurrent.2@feuerwehr-odenthal.de',clock_timestamp(),'{"display_name":"Synthetic vehicle approver 2"}');
-select ff_private.bootstrap_global_admin('96000000-0000-4000-8000-000000000001',(select id from public.units where code='scheuren'));
-select set_config('request.jwt.claim.sub','96000000-0000-4000-8000-000000000001',false);
+select set_config('request.jwt.claim.sub',(select user_id::text from public.role_assignments
+  where role='GLOBAL_ADMIN' and revoked_at is null and ff_private.is_approved_user(user_id) order by user_id limit 1),false);
 set role authenticated;
+select public.ff_approve_member('96000000-0000-4000-8000-000000000001',(select id from public.units where code='scheuren'));
 select public.ff_approve_member('96000000-0000-4000-8000-000000000002',(select id from public.units where code='scheuren'));
+select public.ff_set_role('96000000-0000-4000-8000-000000000001','GLOBAL_ADMIN',null,null,true);
 select public.ff_set_role('96000000-0000-4000-8000-000000000002','GLOBAL_ADMIN',null,null,true);
+select set_config('request.jwt.claim.sub','96000000-0000-4000-8000-000000000001',false);
 select public.ff_save_vehicle(jsonb_build_object('name','Synthetic concurrent vehicle','unit_id',(select id from public.units where code='scheuren'),
   'type_key','mtf','call_sign','','location','','description','Synthetic CI only','active',true,'reservable',true,
   'unit_admin_enabled',false,'manager_ids',jsonb_build_array(auth.uid()),'usage_units',jsonb_build_array((select id from public.units where code='scheuren'))));
