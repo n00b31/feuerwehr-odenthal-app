@@ -112,6 +112,9 @@ select pg_temp.s_deny(format('select public.ff_preview_event_plan(%L::jsonb)',cu
 select set_config('s.fresh',jsonb_build_object('operation','series_create','request_id',gen_random_uuid(),
   'data',pg_temp.s_data('Synthetic following series',current_setting('s.a')::uuid),'rule',pg_temp.s_rule('2029-03-01'))::text,true);
 select set_config('s.fresh_result',pg_temp.s_commit(current_setting('s.fresh')::jsonb)::text,true);
+select public.ff_set_primary_organizer((current_setting('s.fresh_result')::jsonb->'event_ids'->>0)::uuid,pg_temp.s_user(2),'Synthetic existing primary assignment');
+select pg_temp.s_ok(public.ff_series_workspace((current_setting('s.fresh_result')::jsonb->'event_ids'->>0)::uuid)->'anchor'->>'organizer_id'=pg_temp.s_user(2)::text,
+  'planner shows existing effective primary delegation rather than obsolete organizer column');
 select set_config('s.follow',jsonb_build_object('operation','series_update','request_id',gen_random_uuid(),
   'series_id',current_setting('s.fresh_result')::jsonb->>'series_id','anchor_id',current_setting('s.fresh_result')::jsonb->'event_ids'->>1,
   'selection','following','data',pg_temp.s_data('Synthetic following updated',current_setting('s.a')::uuid),'rule',pg_temp.s_rule('2029-04-01'))::text,true);
@@ -163,6 +166,15 @@ select pg_temp.s_commit(jsonb_build_object('operation','series_create','request_
     'scope_kind','function','unit_id',null,'function_id',current_setting('s.fn'),'organizer_id',pg_temp.s_user(4))));
 reset role;
 select pg_temp.s_ok((select count(*)=2 from public.events where title='Synthetic function series' and scope_kind='function'),'FUNCTION_ADMIN creates only authorized function series');
+select set_config('request.jwt.claim.sub',pg_temp.s_user(1)::text,true);
+set local role authenticated;
+select set_config('s.custom',pg_temp.s_commit(jsonb_build_object('operation','series_create','request_id',gen_random_uuid(),
+  'data',pg_temp.s_data('Synthetic custom organizer',current_setting('s.a')::uuid)||jsonb_build_object('organizer_id',pg_temp.s_user(2)),
+  'rule',pg_temp.s_rule('2029-10-01',2)))::text,true);
+reset role;
+select pg_temp.s_ok((select count(*)=2 from public.event_delegations where event_id in (
+  select value::text::uuid from jsonb_array_elements_text(current_setting('s.custom')::jsonb->'event_ids'))
+  and is_primary and revoked_at is null and user_id=pg_temp.s_user(2)),'each new instance has its own approved primary organizer delegation');
 select set_config('request.jwt.claim.sub',pg_temp.s_user(3)::text,true);
 set local role authenticated;
 select pg_temp.s_deny(format('select public.ff_preview_event_plan(%L::jsonb)',current_setting('s.csv')::jsonb||

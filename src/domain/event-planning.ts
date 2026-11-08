@@ -143,6 +143,10 @@ export function parseEventCsv(text:string,context:PlanningContext):CsvPreviewRow
       if(fn && !fn.manageable || unit && !unit.manageable || organization && !context.organization)throw new Error("Keine Verwaltung für diesen Bereich.");
       const matches=organizerName ? context.organizers.filter(p=>equal(p.name,organizerName)) : [];
       if(organizerName && matches.length!==1)throw new Error("Organisator nicht eindeutig erkannt; leer lassen oder exakten Namen wählen.");
+      const organizer=matches[0];
+      if(organizer && organizer.id!==context.actor_id && (!organizer.unit_ids.length ||
+        (fn ? !organizer.function_ids.includes(fn.id) : unit ? !organizer.unit_ids.includes(unit.id) : false)))
+        throw new Error("Organisator nicht für diesen Terminbereich berechtigt.");
       const type=Object.entries(EVENT_TYPES).find(([key,name])=>equal(key,eventType ?? "") || equal(name,eventType ?? ""))?.[0];
       event=plannedEventSchema.parse({
         title,description,location,event_type:type,scope_kind:fn ? "function" : organization ? "organization" : "unit",
@@ -150,6 +154,10 @@ export function parseEventCsv(text:string,context:PlanningContext):CsvPreviewRow
         ...localInterval(localDate(date ?? ""),start ?? "",end ?? ""),
       });
       if(Date.parse(event.starts_at)<=Date.parse(context.server_now))throw new Error("Nur zukünftige Termine importieren.");
+      const now=new Date(context.server_now),year=now.getUTCFullYear()+5,month=now.getUTCMonth();
+      const lastDay=new Date(Date.UTC(year,month+1,0)).getUTCDate();
+      const horizon=Date.UTC(year,month,Math.min(now.getUTCDate(),lastDay),now.getUTCHours(),now.getUTCMinutes(),now.getUTCSeconds(),now.getUTCMilliseconds());
+      if(Date.parse(event.starts_at)>horizon)throw new Error("Planungshorizont: höchstens fünf Jahre.");
       const key=eventKey(event);duplicate=keys.has(key);keys.add(key);
       if(duplicate)errors.push("Doppelte Zeile innerhalb dieser CSV.");
     }catch(error){

@@ -1,5 +1,8 @@
 -- The preceding 062 upgrade supplies real historical and registered synthetic data.
 do $$ begin if current_database()<>'ff_dev_ci' then raise exception 'Disposable CI required'; end if; end $$;
+set request.jwt.claim.sub='a0622000-0000-4000-8000-000000000001';
+set request.jwt.claim.role='authenticated';
+set request.jwt.claims='{"iss":"https://orxinqhhbtjpkzwlfaxq.supabase.co/auth/v1"}';
 insert into public.event_series(id,title,scope_kind,unit_id,frequency,occurrence_count,local_start,duration_minutes,created_by)
 values('c0632000-0000-4000-8000-000000000001','Synthetic legacy series','unit',
   (select id from public.units where code='scheuren'),'weekly',2,'2025-06-01 19:30',120,'a0622000-0000-4000-8000-000000000001');

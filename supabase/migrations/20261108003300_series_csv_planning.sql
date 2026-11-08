@@ -137,6 +137,12 @@ begin
       from public.profiles p where ff_private.is_approved_user(p.id) and ff_private.can_view_profile(p.id) and p.dev_seed_key is null));
 end;
 $$;
+create function ff_private.planning_organizer(target uuid) returns uuid
+language sql stable security definer set search_path='' as $$
+  select coalesce((select d.user_id from public.event_delegations d
+    where d.event_id=e.id and d.is_primary and d.revoked_at is null),e.organizer_id)
+  from public.events e where e.id=target;
+$$;
 create function public.ff_series_workspace(target_event uuid) returns jsonb
 language plpgsql security definer set search_path='' as $$
 declare item public.events;series public.event_series;
@@ -145,8 +151,8 @@ begin
   perform ff_private.require_rule(found and item.series_id is not null and ff_private.manages_scope(item.scope_kind,item.unit_id,item.function_id),
     'Keine Serienverwaltung für diesen Bereich.');
   select * into series from public.event_series where id=item.series_id;
-  return jsonb_build_object('series',to_jsonb(series),'anchor',to_jsonb(item),'instances',
-    (select jsonb_agg(to_jsonb(e)||jsonb_build_object('protected',e.starts_at<=clock_timestamp() or e.status<>'scheduled' or ff_private.roster_frozen(e.id),
+  return jsonb_build_object('series',to_jsonb(series),'anchor',to_jsonb(item)||jsonb_build_object('organizer_id',ff_private.planning_organizer(item.id)),'instances',
+    (select jsonb_agg(to_jsonb(e)||jsonb_build_object('organizer_id',ff_private.planning_organizer(e.id),'protected',e.starts_at<=clock_timestamp() or e.status<>'scheduled' or ff_private.roster_frozen(e.id),
       'exception',exists(select 1 from public.event_series_exceptions where event_id=e.id)) order by e.instance_number)
       from public.events e where e.series_id=item.series_id));
 end;
@@ -211,7 +217,8 @@ begin
           and (proposal->>'function_id')::uuid is not distinct from item.function_id,'Bestehender Teilnehmerbereich bleibt unverändert.');
         perform ff_private.require_rule(series.ended_on is null or ((proposal->>'starts_at')::timestamptz at time zone 'Europe/Berlin')::date<=series.ended_on,
           'Vorgeschlagener Termin liegt nach dem Ende dieser Serie.');
-        meaning_changed:=exists(select 1 from jsonb_each(proposal) p where p.value is distinct from row->p.key);
+        meaning_changed:=exists(select 1 from jsonb_each(proposal) p where p.value is distinct from
+          (row||jsonb_build_object('organizer_id',ff_private.planning_organizer(item.id)))->p.key);
       else proposal:=row;meaning_changed:=false; end if;
       rows:=rows||jsonb_build_array(proposal||jsonb_build_object('event_id',item.id,'old',row,'meaning_changed',meaning_changed,
         'responses',(select jsonb_agg(to_jsonb(p) order by p.user_id) from public.participation_responses p where p.event_id=item.id),
@@ -251,7 +258,7 @@ $$;
 create function public.ff_commit_event_plan(input jsonb,expected_token text,confirmed boolean) returns jsonb
 language plpgsql security definer set search_path='' as $$
 declare plan jsonb;row jsonb;previous jsonb;cached ff_private.event_plan_commits;request uuid;
-  series_id uuid;created_event uuid;ids uuid[]:='{}';index_value int:=0;result jsonb;input_hash text;
+  series_id uuid;created_event uuid;former_organizer uuid;ids uuid[]:='{}';index_value int:=0;result jsonb;input_hash text;
 begin
   perform ff_private.require_rule(confirmed is true and ff_private.is_active(),'Ausdrückliche Bestätigung und freigeschalteter Zugang erforderlich.');
   request:=(input->>'request_id')::uuid;
@@ -289,6 +296,7 @@ begin
   for row in select value from jsonb_array_elements(plan->'rows') loop
     index_value:=index_value+1;previous:=row->'old';created_event:=(row->>'event_id')::uuid;
     if created_event is null then
+      perform ff_private.require_rule((row->>'starts_at')::timestamptz>clock_timestamp(),'Vorgeschlagener Termin inzwischen begonnen. Erneut planen.');
       insert into public.events(series_id,instance_number,title,description,event_type,starts_at,ends_at,location,scope_kind,unit_id,function_id,organizer_id,response_deadline)
       values(series_id,case when series_id is not null then index_value end,row->>'title',row->>'description',(row->>'event_type')::public.ff_event_type,
         (row->>'starts_at')::timestamptz,(row->>'ends_at')::timestamptz,row->>'location',(row->>'scope_kind')::public.ff_scope,
@@ -297,10 +305,11 @@ begin
       if (row->>'organizer_id')::uuid<>auth.uid() then perform public.ff_set_primary_organizer(created_event,(row->>'organizer_id')::uuid,'Serien-/CSV-Planung'); end if;
     elsif input->>'operation'='series_update' then
       perform ff_private.require_rule((previous->>'starts_at')::timestamptz>clock_timestamp() and not ff_private.roster_frozen(created_event),'Termin inzwischen begonnen oder eingefroren.');
+      former_organizer:=ff_private.planning_organizer(created_event);
       update public.events set title=row->>'title',description=row->>'description',event_type=(row->>'event_type')::public.ff_event_type,
         starts_at=(row->>'starts_at')::timestamptz,ends_at=(row->>'ends_at')::timestamptz,location=row->>'location',
         response_deadline=(row->>'response_deadline')::timestamptz,organizer_id=(row->>'organizer_id')::uuid,revision=revision+1 where id=created_event;
-      if (row->>'organizer_id') is distinct from previous->>'organizer_id' then
+      if (row->>'organizer_id')::uuid is distinct from former_organizer then
         perform public.ff_set_primary_organizer(created_event,case when (row->>'organizer_id')::uuid=auth.uid() then null else (row->>'organizer_id')::uuid end,'Serienänderung');
       end if;
       if (row->>'meaning_changed')::boolean then
@@ -381,6 +390,7 @@ language sql stable security definer set search_path='' as $$
 $$;
 revoke all on function ff_private.plan_hash(jsonb),ff_private.berlin_instant(date,text),ff_private.plan_date(text),
   ff_private.series_dates(jsonb),ff_private.normalize_planned_event(jsonb),ff_private.planned_key(jsonb),ff_private.build_event_plan(jsonb),
+  ff_private.planning_organizer(uuid),
   ff_private.create_single_event_062(jsonb),ff_private.update_single_event_062(uuid,integer,jsonb),
   ff_private.event_summary_062(uuid),ff_private.event_summary(uuid),ff_private.calendar_summary_062(uuid),ff_private.calendar_summary(uuid)
   from public,anon,authenticated,service_role;

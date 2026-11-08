@@ -87,7 +87,7 @@ test("series require explicit preview and confirmation, remain at Berlin time an
   expect(state.commits).toHaveLength(0);
   await dialog.getByLabel(confirmation).check();
   await dialog.getByRole("button",{name:"Änderungen bestätigen"}).click();
-  await expect(dialog.getByRole("status")).toContainText("3 Termine gespeichert");
+  await expect(dialog.getByRole("status").filter({hasText:"3 Termine gespeichert"})).toBeVisible();
   expect(new Set(state.events.map(e=>e.id)).size).toBe(3);
   expect(state.events.map(e=>e.starts_at)).toEqual(["2027-03-23T18:30:00.000Z","2027-04-06T17:30:00.000Z","2027-04-20T17:30:00.000Z"]);
   await dialog.getByRole("button",{name:"Ergebnis schließen"}).click();
@@ -107,12 +107,12 @@ test("CSV upload never saves, reports errors and duplicates before explicit atom
   await dialog.getByRole("button",{name:"Vorschau prüfen"}).click();
   await dialog.getByLabel(confirmation).check();
   await dialog.getByRole("button",{name:"Import bestätigen"}).click();
-  await expect(dialog.getByRole("status")).toContainText("1 Termine gespeichert");
+  await expect(dialog.getByRole("status").filter({hasText:"1 Termine gespeichert"})).toBeVisible();
   await dialog.getByRole("button",{name:"Ergebnis schließen"}).click();
   await page.getByRole("button",{name:"Termine aus CSV importieren",exact:true}).click();
   await page.getByLabel("CSV-Datei (UTF-8, Semikolon)").setInputFiles({name:"repeat.csv",mimeType:"text/csv",buffer:Buffer.from(csv())});
   await page.getByRole("dialog").getByRole("button",{name:"Vorschau prüfen"}).click();
-  await expect(page.getByRole("alert")).toContainText("Duplikate erkannt");
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText("Duplikate erkannt");
   await expect(page.getByLabel(confirmation)).toBeDisabled();
   expect(state.events).toHaveLength(1);
 });
@@ -126,6 +126,12 @@ test("changed draft discards confirmation; stale or revoked permissions never sh
   await dialog.getByLabel(confirmation).check();state.stale=true;
   await dialog.getByRole("button",{name:"Änderungen bestätigen"}).click();
   await expect(dialog.getByRole("alert")).toContainText("Vorschau zwischenzeitlich geändert");
+  expect(state.commits).toHaveLength(0);
+  state.stale=false;state.deny=true;
+  await dialog.getByRole("button",{name:"Vorschau prüfen"}).click();
+  await dialog.getByLabel(confirmation).check();
+  await dialog.getByRole("button",{name:"Änderungen bestätigen"}).click();
+  await expect(dialog.getByRole("alert")).toContainText("Synthetic permission revoked");
   expect(state.commits).toHaveLength(0);
 });
 test("member has no planning controls and scoped administrator receives only eligible choices",async({page})=>{

@@ -1,3 +1,6 @@
+set request.jwt.claim.sub='a0622000-0000-4000-8000-000000000001';
+set request.jwt.claim.role='authenticated';
+set request.jwt.claims='{"iss":"https://orxinqhhbtjpkzwlfaxq.supabase.co/auth/v1"}';
 do $$ begin
   if current_database()<>'ff_dev_ci' then raise exception 'Disposable CI required'; end if;
   if upgrade_test.data_063() is distinct from (select value from upgrade_test.snapshot where key='063_data')

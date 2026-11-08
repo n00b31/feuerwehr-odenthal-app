@@ -75,6 +75,7 @@ for(const [label,row] of [
   ["foreign unit","2027-03-23;19:30;21:30;Synthetic service;;CI;Synthetic Beta;regular;;"],
   ["invalid clock","2027-03-23;25:30;21:30;Synthetic service;;CI;Synthetic Alpha;regular;;"],
   ["past date","2020-03-23;19:30;21:30;Synthetic service;;CI;Synthetic Alpha;regular;;"],
+  ["excessive horizon","2032-03-23;19:30;21:30;Synthetic service;;CI;Synthetic Alpha;regular;;"],
   ["invalid date","2027-02-31;19:30;21:30;Synthetic service;;CI;Synthetic Alpha;regular;;"],
   ["unknown type","2027-03-23;19:30;21:30;Synthetic service;;CI;Synthetic Alpha;unknown;;"],
   ["unknown organizer","2027-03-23;19:30;21:30;Synthetic service;;CI;Synthetic Alpha;regular;;Unknown"],
@@ -85,6 +86,12 @@ test("function scope, self organizer and ambiguous scopes",()=>{
   const valid=parseEventCsv(csv("2027-03-23;19:30;21:30;Synthetic function;;CI;;regular;Synthetic Function;"),context)[0];
   assert.equal(valid.event?.scope_kind,"function");assert.equal(valid.event?.organizer_id,person);
   assert.ok(parseEventCsv(csv("2027-03-23;19:30;21:30;Synthetic function;;CI;Synthetic Alpha;regular;Synthetic Function;"),context)[0].errors.length);
+});
+test("known organizers must have current eligible scope membership",()=>{
+  const ctx={...context,organizers:[...context.organizers,{id:"a0630000-0000-4000-8000-000000000002",
+    name:"Synthetic outsider",unit_ids:[other],function_ids:[]}]};
+  const row=parseEventCsv(csv("2027-03-23;19:30;21:30;Synthetic service;;CI;Synthetic Alpha;regular;;Synthetic outsider"),ctx)[0];
+  assert.equal(row.event,null);assert.match(row.errors.join(" "),/Terminbereich/);
 });
 test("duplicate CSV rows are marked without discarding original values",()=>{
   const line="2027-03-23;19:30;21:30;Synthetic service;;CI;Synthetic Alpha;regular;;";
