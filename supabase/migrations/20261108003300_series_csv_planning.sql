@@ -159,7 +159,14 @@ declare op text:=input->>'operation';rows jsonb:='[]';dates jsonb;row jsonb;prop
 begin
   perform ff_private.require_rule(ff_private.is_active() and jsonb_typeof(input)='object' and pg_column_size(input)<=524288
     and op in ('series_create','csv_import','series_update','series_cancel','series_end'),'Ungültiger oder zu großer Planungsvorgang.');
+  perform ff_private.require_rule(input-array['operation','request_id','series_id','anchor_id','selection','data','rule','rows','end_date','reason']::text[]='{}',
+    'Unbekannte Planungsfelder.');
+  if op in ('series_create','csv_import') then
+    perform ff_private.require_rule(input->'series_id' is null and input->'anchor_id' is null and input->'selection' is null,
+      'Neue Termine dürfen keiner bestehenden Serie untergeschoben werden.');
+  end if;
   if op='series_create' then
+    perform ff_private.require_rule(length(btrim(input->'data'->>'description')) between 1 and 2000,'Beschreibung für die Terminserie erforderlich.');
     dates:=ff_private.series_dates(input->'rule');
     for row in select value from jsonb_array_elements(dates) loop
       proposal:=ff_private.normalize_planned_event((input->'data')||row);
@@ -262,7 +269,7 @@ begin
   end if;
   if input->>'series_id' is not null then
     perform 1 from public.event_series where id=(input->>'series_id')::uuid for update;
-    perform 1 from public.events where series_id=(input->>'series_id')::uuid order by id for update;
+    perform 1 from public.events e where e.series_id=(input->>'series_id')::uuid order by e.id for update;
   end if;
   plan:=ff_private.build_event_plan(input);
   if expected_token is distinct from ff_private.plan_hash(jsonb_build_object('actor',auth.uid(),'input',input,'plan',plan)) then
@@ -319,6 +326,11 @@ begin
       title=case when input->>'operation'='series_update' and input->>'selection'<>'single' then input->'data'->>'title' else title end,
       frequency=case when input->>'operation'='series_update' and input->>'selection'<>'single' then input->'rule'->>'frequency' else frequency end,
       rule=case when input->>'operation'='series_update' and input->>'selection'<>'single' then input->'rule' else rule end,
+      local_start=case when input->>'operation'='series_update' and input->>'selection'<>'single'
+        then (plan->'rows'->0->>'starts_at')::timestamptz at time zone 'Europe/Berlin' else local_start end,
+      duration_minutes=case when input->>'operation'='series_update' and input->>'selection'<>'single'
+        then (extract(epoch from (((plan->'rows'->0->>'ends_at')::timestamptz at time zone 'Europe/Berlin')-
+          ((plan->'rows'->0->>'starts_at')::timestamptz at time zone 'Europe/Berlin')))/60)::int else duration_minutes end,
       ended_on=case when input->>'operation'='series_end' then ff_private.plan_date(input->>'end_date') else ended_on end where id=series_id;
   end if;
   result:=jsonb_build_object('event_ids',to_jsonb(ids),'series_id',series_id,'count',cardinality(ids),'replayed',false);
@@ -337,6 +349,7 @@ alter function ff_private.ff_update_single_event(uuid,integer,jsonb) rename to u
 create function public.ff_create_single_event(input jsonb) returns uuid
 language plpgsql security definer set search_path='' as $$
 begin
+  perform pg_advisory_xact_lock(hashtext('ff.membership_eligibility'));
   perform pg_advisory_xact_lock(hashtext('ff.event_planning'));
   return ff_private.create_single_event_062(input);
 end;
@@ -344,6 +357,7 @@ $$;
 create function public.ff_update_single_event(target_event uuid,expected_revision integer,input jsonb) returns void
 language plpgsql security definer set search_path='' as $$
 begin
+  perform pg_advisory_xact_lock(hashtext('ff.membership_eligibility'));
   perform pg_advisory_xact_lock(hashtext('ff.event_planning'));
   perform ff_private.update_single_event_062(target_event,expected_revision,input);
 end;

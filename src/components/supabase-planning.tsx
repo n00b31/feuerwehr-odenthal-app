@@ -94,7 +94,10 @@ export function SupabasePlanning({client,action,initialTime,preferredUnit,close,
       return {operation:"csv_import",request_id:requestId.current,rows:csv.flatMap(r=>r.event ? [r.event] : [])};
     }
     const parsedRule=seriesRuleSchema.parse(rule);
-    if(!editing){seriesDates(parsedRule);return {operation:"series_create",request_id:requestId.current,data,rule:parsedRule};}
+    if(!editing){
+      if(!data.description.trim())throw new Error("Beschreibung für die Terminserie erforderlich.");
+      seriesDates(parsedRule);return {operation:"series_create",request_id:requestId.current,data,rule:parsedRule};
+    }
     if(!series)throw new Error("Serie fehlt.");
     return {operation,request_id:requestId.current,series_id:series.series.id,anchor_id:series.anchor.id,
       selection,rule:parsedRule,data,end_date:endDate,reason};
@@ -130,6 +133,8 @@ export function SupabasePlanning({client,action,initialTime,preferredUnit,close,
     close={()=>{if(!busy)close();}}>
     {busy && <p role="status">Vorgang wird geprüft …</p>}
     {error && <p className="notice error" role="alert">{error}</p>}
+    {context && !context.organization && !context.units.some(u=>u.manageable) && !context.functions.some(f=>f.manageable) &&
+      <p className="notice error" role="alert">Keine berechtigten Terminbereiche verfügbar. Berechtigungen aktualisieren lassen.</p>}
     {result ? <><p className="notice success" role="status">{result.count} Termine {editing ? "verarbeitet" : "gespeichert"}.
       {result.replayed && " Bereits ausgeführte Bestätigung – keine zweite Anlage."}</p><button className="button" onClick={close}>Ergebnis schließen</button></> : context && <>
       <p className="muted text-sm">Europe/Berlin · maximal 52 Serieninstanzen / 200 CSV-Termine · keine automatische Speicherung.</p>
@@ -184,7 +189,8 @@ export function SupabasePlanning({client,action,initialTime,preferredUnit,close,
             <label>Serienende (inklusive, optional bei Anzahl)<input type="date" value={rule.end_date ?? ""} onChange={e=>changeRule("end_date",e.target.value || null)}/></label></>}
         </fieldset>}
       </>}
-      <button className="button secondary" disabled={busy || csvMode && (!csv.length || csv.some(r=>r.errors.length))} onClick={()=>void inspect()}>Vorschau prüfen</button>
+      <button className="button secondary" disabled={busy || !context.organization && !context.units.some(u=>u.manageable) && !context.functions.some(f=>f.manageable) ||
+        csvMode && (!csv.length || csv.some(r=>r.errors.length))} onClick={()=>void inspect()}>Vorschau prüfen</button>
       {preview && <>
         <p role="status">{preview.value.rows.length} Termine · {preview.value.protected_count} geschützt/übersprungen · {preview.value.duplicate_count} mögliche Duplikate.</p>
         {!!preview.value.response_count && <p className="notice" role="alert">{preview.value.response_count} vorhandene Rückmeldungen werden ungültig. Werte und Zeitpunkte bleiben erhalten; Mitglieder müssen erneut antworten.</p>}

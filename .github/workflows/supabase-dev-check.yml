@@ -40,9 +40,14 @@ jobs:
           done
           pg < supabase/tests/upgrade-062-before.sql
           for migration in supabase/migrations/*.sql; do
-            if [[ "$(basename "$migration")" > 20261108002599 ]]; then pg < "$migration"; fi
+            if [[ "$(basename "$migration")" > 20261108002599 && "$(basename "$migration")" < 20261108003300 ]]; then pg < "$migration"; fi
           done
           pg < supabase/tests/upgrade-062-after.sql
+          pg < supabase/tests/upgrade-063-before.sql
+          for migration in supabase/migrations/*.sql; do
+            if [[ "$(basename "$migration")" > 20261108003299 ]]; then pg < "$migration"; fi
+          done
+          pg < supabase/tests/upgrade-063-after.sql
   database:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -170,3 +175,8 @@ jobs:
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: bash supabase/tests/vehicle-concurrency.sh
+      - name: Verify actual overlapping CSV confirmations and stale duplicate rejection
+        if: ${{ !cancelled() && steps.attendance_concurrency.outcome == 'success' }}
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: bash supabase/tests/planning-concurrency.sh

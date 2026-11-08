@@ -91,6 +91,13 @@ select pg_temp.s_commit(jsonb_build_object('operation','series_end','request_id'
 reset role;
 select pg_temp.s_ok((select count(*)=2 from public.events where series_id=current_setting('s.series')::uuid and status='cancelled'),'series end cancels future instances including exceptions');
 select pg_temp.s_ok((select status='scheduled' from public.events where id=current_setting('s.first')::uuid),'final historic service not cancelled');
+set local role authenticated;
+select public.ff_set_unit_membership(pg_temp.s_user(7),current_setting('s.b')::uuid,true,'Synthetic transfer after final attendance');
+reset role;
+select pg_temp.s_ok(not exists(select 1 from ff_private.event_members(current_setting('s.second')::uuid) where user_id=pg_temp.s_user(7)),
+  'transfer removes future series eligibility');
+select pg_temp.s_ok(exists(select 1 from ff_private.event_members(current_setting('s.first')::uuid) where user_id=pg_temp.s_user(7)),
+  'transfer retains frozen historical series membership');
 select set_config('s.csv',jsonb_build_object('operation','csv_import','request_id',gen_random_uuid(),'rows',jsonb_build_array(
   pg_temp.s_data('Synthetic CSV',current_setting('s.a')::uuid)||jsonb_build_object('starts_at','2029-01-01T18:30:00Z','ends_at','2029-01-01T20:30:00Z')))::text,true);
 set local role authenticated;
@@ -99,6 +106,63 @@ select pg_temp.s_commit(current_setting('s.csv')::jsonb);
 select pg_temp.s_ok(not (public.ff_preview_event_plan(current_setting('s.csv')::jsonb||jsonb_build_object('request_id',gen_random_uuid()))->>'can_commit')::boolean,'reupload detects existing duplicate');
 reset role;
 select pg_temp.s_ok(exists(select 1 from public.audit_entries where action='event_plan_committed'),'batch audit recorded');
+set local role authenticated;
+select pg_temp.s_deny(format('select public.ff_preview_event_plan(%L::jsonb)',current_setting('s.csv')::jsonb||
+  jsonb_build_object('series_id',current_setting('s.series'))));
+select set_config('s.fresh',jsonb_build_object('operation','series_create','request_id',gen_random_uuid(),
+  'data',pg_temp.s_data('Synthetic following series',current_setting('s.a')::uuid),'rule',pg_temp.s_rule('2029-03-01'))::text,true);
+select set_config('s.fresh_result',pg_temp.s_commit(current_setting('s.fresh')::jsonb)::text,true);
+select set_config('s.follow',jsonb_build_object('operation','series_update','request_id',gen_random_uuid(),
+  'series_id',current_setting('s.fresh_result')::jsonb->>'series_id','anchor_id',current_setting('s.fresh_result')::jsonb->'event_ids'->>1,
+  'selection','following','data',pg_temp.s_data('Synthetic following updated',current_setting('s.a')::uuid),'rule',pg_temp.s_rule('2029-04-01'))::text,true);
+select pg_temp.s_ok(jsonb_array_length(public.ff_preview_event_plan(current_setting('s.follow')::jsonb)->'rows')=2,'following selection includes only anchor and later slots');
+select pg_temp.s_commit(current_setting('s.follow')::jsonb);
+reset role;
+select pg_temp.s_ok((select title='Synthetic following series' from public.events
+  where id=(current_setting('s.fresh_result')::jsonb->'event_ids'->>0)::uuid),'following edit preserves earlier future instance');
+set local role authenticated;
+select set_config('s.cancel',jsonb_build_object('operation','series_cancel','request_id',gen_random_uuid(),
+  'series_id',current_setting('s.fresh_result')::jsonb->>'series_id','anchor_id',current_setting('s.fresh_result')::jsonb->'event_ids'->>1,
+  'selection','single','reason','Synthetic single cancellation')::text,true);
+select pg_temp.s_commit(current_setting('s.cancel')::jsonb);
+reset role;
+select pg_temp.s_ok((select count(*)=1 from public.events where series_id=(current_setting('s.fresh_result')::jsonb->>'series_id')::uuid and status='cancelled'),
+  'single cancellation preserves other instances');
+set local role authenticated;
+select set_config('s.stale',(current_setting('s.follow')::jsonb||jsonb_build_object('request_id',gen_random_uuid(),'selection','all'))::text,true);
+select set_config('s.token',public.ff_preview_event_plan(current_setting('s.stale')::jsonb)->>'token',true);
+select set_config('request.jwt.claim.sub',pg_temp.s_user(2)::text,true);
+select public.ff_set_response((current_setting('s.fresh_result')::jsonb->'event_ids'->>0)::uuid,'maybe');
+select set_config('request.jwt.claim.sub',pg_temp.s_user(1)::text,true);
+select pg_temp.s_deny(format('select public.ff_commit_event_plan(%L::jsonb,%L,true)',current_setting('s.stale'),current_setting('s.token')));
+select pg_temp.s_deny(format('select public.ff_preview_event_plan(%L::jsonb)',current_setting('s.csv')::jsonb||
+  jsonb_build_object('rows',(current_setting('s.csv')::jsonb->'rows')||jsonb_build_array(
+    pg_temp.s_data('Synthetic mixed forbidden',current_setting('s.b')::uuid)||jsonb_build_object('title','x','starts_at','2029-06-01T18:30:00Z','ends_at','2029-06-01T20:30:00Z')))));
+reset role;
+create function pg_temp.reject_second_import() returns trigger language plpgsql as $$
+begin
+  if new.title='Synthetic rollback second' then raise exception 'Synthetic failure after first insert' using errcode='23514'; end if;
+  return new;
+end $$;
+create trigger synthetic_import_failure before insert on public.events for each row execute function pg_temp.reject_second_import();
+set local role authenticated;
+select set_config('s.rollback',jsonb_build_object('operation','csv_import','request_id',gen_random_uuid(),'rows',jsonb_build_array(
+  pg_temp.s_data('Synthetic rollback first',current_setting('s.a')::uuid)||jsonb_build_object('starts_at','2029-08-01T18:30:00Z','ends_at','2029-08-01T20:30:00Z'),
+  pg_temp.s_data('Synthetic rollback second',current_setting('s.a')::uuid)||jsonb_build_object('starts_at','2029-08-02T18:30:00Z','ends_at','2029-08-02T20:30:00Z')))::text,true);
+select pg_temp.s_deny(format('select public.ff_commit_event_plan(%L::jsonb,%L,true)',current_setting('s.rollback'),
+  public.ff_preview_event_plan(current_setting('s.rollback')::jsonb)->>'token'));
+reset role;
+drop trigger synthetic_import_failure on public.events;
+select pg_temp.s_ok(not exists(select 1 from public.events where title like 'Synthetic rollback %')
+  and not exists(select 1 from ff_private.event_plan_commits where request_id=(current_setting('s.rollback')::jsonb->>'request_id')::uuid)
+  and not exists(select 1 from public.audit_entries where after_data->>'title' like 'Synthetic rollback %'),'mid-import failure rolls back events, idempotence and audit');
+select set_config('request.jwt.claim.sub',pg_temp.s_user(4)::text,true);
+set local role authenticated;
+select pg_temp.s_commit(jsonb_build_object('operation','series_create','request_id',gen_random_uuid(),'rule',pg_temp.s_rule('2029-09-01',2),
+  'data',pg_temp.s_data('Synthetic function series',current_setting('s.a')::uuid)||jsonb_build_object(
+    'scope_kind','function','unit_id',null,'function_id',current_setting('s.fn'),'organizer_id',pg_temp.s_user(4))));
+reset role;
+select pg_temp.s_ok((select count(*)=2 from public.events where title='Synthetic function series' and scope_kind='function'),'FUNCTION_ADMIN creates only authorized function series');
 select set_config('request.jwt.claim.sub',pg_temp.s_user(3)::text,true);
 set local role authenticated;
 select pg_temp.s_deny(format('select public.ff_preview_event_plan(%L::jsonb)',current_setting('s.csv')::jsonb||
