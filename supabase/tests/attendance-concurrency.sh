@@ -14,6 +14,10 @@ select set_config('request.jwt.claim.sub','91000000-0000-4000-8000-000000000001'
 set role authenticated;
 select public.ff_approve_member('91000000-0000-4000-8000-000000000002',(select id from public.units where code='scheuren'));
 reset role;
+update public.profiles set approved_at=clock_timestamp()-interval '2 days'
+  where id in ('91000000-0000-4000-8000-000000000001','91000000-0000-4000-8000-000000000002');
+update public.unit_memberships set valid_from=clock_timestamp()-interval '2 days'
+  where user_id in ('91000000-0000-4000-8000-000000000001','91000000-0000-4000-8000-000000000002');
 insert into public.events(id,title,event_type,starts_at,ends_at,location,scope_kind,unit_id,organizer_id)
 values('92000000-0000-4000-8000-000000000001','Synthetic concurrent attendance','regular',clock_timestamp()-interval '1 hour',
  clock_timestamp()+interval '1 hour','Synthetic','unit',(select id from public.units where code='scheuren'),'91000000-0000-4000-8000-000000000001');

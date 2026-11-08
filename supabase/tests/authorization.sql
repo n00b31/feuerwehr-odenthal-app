@@ -122,6 +122,10 @@ insert into public.function_memberships(user_id, function_id) values
   ('10000000-0000-0000-0000-000000000004', current_setting('ff.test.function')::uuid),
   ('10000000-0000-0000-0000-000000000003', current_setting('ff.test.function')::uuid),
   ('10000000-0000-0000-0000-000000000003', (select id from public.special_functions where code = 'equipment'));
+-- Historical test services require genuinely historical approval and affiliations.
+update public.profiles set approved_at='2024-01-01 00:00Z' where status='approved';
+update public.unit_memberships set valid_from='2024-01-01 00:00Z';
+update public.function_memberships set valid_from='2024-01-01 00:00Z';
 insert into public.event_series(id, title, scope_kind, unit_id, frequency, occurrence_count, local_start, duration_minutes, created_by)
 values ('20000000-0000-0000-0000-000000000001', 'Synthetic CI series', 'unit', current_setting('ff.test.unit')::uuid,
   'weekly', 2, timestamp '2026-01-01 19:00', 120, '10000000-0000-0000-0000-000000000002');
@@ -188,20 +192,21 @@ set local role authenticated;
 select pg_temp.assert_true(ff_private.can_lead_event('30000000-0000-0000-0000-000000000002'), 'delegate may lead exactly assigned event');
 select pg_temp.assert_true(not ff_private.can_lead_event('30000000-0000-0000-0000-000000000003'), 'series sibling is not delegated');
 select pg_temp.expect_denied($q$select public.ff_prepare_attendance('30000000-0000-0000-0000-000000000003')$q$);
-select pg_temp.assert_true((select count(*) = 5 from public.event_roster where event_id = '30000000-0000-0000-0000-000000000002'), 'delegate sees full roster');
+select pg_temp.assert_true((select count(*) = 4 from public.event_roster where event_id = '30000000-0000-0000-0000-000000000002' and included), 'delegate sees all eligible frozen members, including dynamically added root');
+select pg_temp.assert_true((select count(*) = 2 from public.event_roster where event_id = '30000000-0000-0000-0000-000000000002' and not included), 'foreign stale FK rows remain stored but excluded');
 select public.ff_prepare_attendance('30000000-0000-0000-0000-000000000002');
 select public.ff_prepare_attendance('30000000-0000-0000-0000-000000000002');
 select pg_temp.assert_true((select count(*) = 1 from public.audit_entries where action = 'attendance_prepared'), 'prefill is idempotent and audited once');
 select pg_temp.assert_true((select status = 'present' and origin = 'prefill' from public.actual_attendance where event_id = '30000000-0000-0000-0000-000000000002' and user_id = auth.uid()), 'yes maps to provisional present');
 select pg_temp.assert_true((select status = 'absent' from public.actual_attendance where event_id = '30000000-0000-0000-0000-000000000002' and user_id = '10000000-0000-0000-0000-000000000009'), 'no maps to absent');
 select pg_temp.assert_true((select count(*) = 1 from public.actual_attendance where event_id = '30000000-0000-0000-0000-000000000002' and status = 'unknown'), 'manual unknown stays unknown');
-select pg_temp.assert_true((select count(*) = 3 from public.actual_attendance where event_id = '30000000-0000-0000-0000-000000000002' and status = 'absent'), 'no, maybe and unanswered are provisional absent');
+select pg_temp.assert_true((select count(*) = 2 from public.actual_attendance where event_id = '30000000-0000-0000-0000-000000000002' and status = 'absent'), 'eligible no and unanswered are provisional absent; foreign replies create no attendance');
 select pg_temp.assert_true((select origin = 'manual' from public.actual_attendance where event_id = '30000000-0000-0000-0000-000000000002' and user_id = '10000000-0000-0000-0000-000000000002'), 'manual value never overwritten');
 select pg_temp.assert_true((select count(*) = 0 from public.confirmed_attendance), 'provisional attendance is never final statistics');
 select pg_temp.expect_denied($q$select public.ff_confirm_attendance('30000000-0000-0000-0000-000000000002')$q$);
 select public.ff_record_attendance('30000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002','absent');
-select public.ff_record_attendance('30000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000004','absent');
-select public.ff_record_attendance('30000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000005','absent');
+select pg_temp.expect_denied($q$select public.ff_record_attendance('30000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000004','absent')$q$);
+select pg_temp.expect_denied($q$select public.ff_record_attendance('30000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000005','absent')$q$);
 select public.ff_confirm_attendance('30000000-0000-0000-0000-000000000002');
 select public.ff_confirm_attendance('30000000-0000-0000-0000-000000000002');
 select pg_temp.assert_true((select count(*) = 1 from public.audit_entries where action = 'attendance_confirmed'), 'confirmation is idempotent');
@@ -224,7 +229,7 @@ select public.ff_set_event_delegate('30000000-0000-0000-0000-000000000002', null
 select public.ff_record_attendance('30000000-0000-0000-0000-000000000008', '10000000-0000-0000-0000-000000000003', 'present');
 select pg_temp.expect_denied($q$select public.ff_confirm_attendance('30000000-0000-0000-0000-000000000008')$q$);
 select public.ff_record_attendance('30000000-0000-0000-0000-000000000008',user_id,'absent')
-from public.event_roster where event_id='30000000-0000-0000-0000-000000000008' and user_id<>'10000000-0000-0000-0000-000000000003';
+from public.event_roster where event_id='30000000-0000-0000-0000-000000000008' and included and user_id<>'10000000-0000-0000-0000-000000000003';
 select public.ff_confirm_attendance('30000000-0000-0000-0000-000000000008');
 select pg_temp.assert_true((select report_year = 2025 from public.confirmed_attendance where event_id = '30000000-0000-0000-0000-000000000008' and user_id = '10000000-0000-0000-0000-000000000003'), 'year follows Berlin, not UTC');
 reset role;

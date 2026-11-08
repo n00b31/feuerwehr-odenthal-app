@@ -82,6 +82,7 @@ select pg_temp.denied($q$select public.ff_update_single_event(current_setting('e
 reset role;
 
 -- Move only disposable test data across the exact server-time boundary.
+select pg_sleep(1.05);
 update public.events set starts_at=clock_timestamp()-interval '1 second',ends_at=clock_timestamp()+interval '2 hours'
 where id=current_setting('events.id')::uuid;
 select set_config('request.jwt.claim.sub','70000000-0000-4000-8000-000000000002',true);

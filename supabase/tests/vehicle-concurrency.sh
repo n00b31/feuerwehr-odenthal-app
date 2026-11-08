@@ -69,3 +69,55 @@ do $$ begin
   raise notice 'PASS: two actual PostgreSQL approvers overlapped; vehicle lock observed, one approval, second rejected with no partial write';
 end $$;
 SQL
+
+pg <<'SQL'
+set request.jwt.claim.sub='96000000-0000-4000-8000-000000000001';
+set role authenticated;
+select public.ff_request_vehicle(jsonb_build_object(
+  'vehicle_id',(select id from public.calendar_resources where name='Synthetic concurrent vehicle'),
+  'unit_id',(select id from public.units where code='scheuren'),'responsible_id',auth.uid(),'kind','reservation',
+  'purpose_key','course','title','Synthetic direct invariant '||i,'description','','destination','','notes','',
+  'starts_at',date_trunc('day',clock_timestamp())+interval '5 days 12 hours',
+  'ends_at',date_trunc('day',clock_timestamp())+interval '5 days 14 hours')) from generate_series(1,2) i;
+SQL
+docker exec -e PGAPPNAME=ff_vehicle_constraint_1 -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 >"$logs/first.log" 2>&1 <<'SQL' &
+begin;
+update public.vehicle_reservations set state='APPROVED' where event_id=
+  (select id from public.events where title='Synthetic direct invariant 1');
+select pg_sleep(4);
+commit;
+SQL
+first=$!
+ready=false
+for i in $(seq 1 40); do
+  if [[ "$(pg -Atc "select exists(select 1 from pg_stat_activity where application_name='ff_vehicle_constraint_1' and wait_event='PgSleep')")" == t ]]; then ready=true; break; fi
+  sleep .1
+done
+if [[ "$ready" != true ]]; then wait "$first" || true; cat "$logs/first.log"; echo "Direct constraint transaction did not acquire its row"; exit 1; fi
+docker exec -e PGAPPNAME=ff_vehicle_constraint_2 -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 -v VERBOSITY=verbose >"$logs/second.log" 2>&1 <<'SQL' &
+begin;
+update public.vehicle_reservations set state='APPROVED' where event_id=
+  (select id from public.events where title='Synthetic direct invariant 2');
+commit;
+SQL
+second=$!
+blocked=false
+for i in $(seq 1 40); do
+  if [[ "$(pg -Atc "select exists(select 1 from pg_stat_activity where application_name='ff_vehicle_constraint_2' and wait_event_type='Lock' and cardinality(pg_blocking_pids(pid))>0)")" == t ]]; then blocked=true; break; fi
+  sleep .1
+done
+wait "$first" || { cat "$logs/first.log"; exit 1; }
+if wait "$second"; then echo "FAIL: direct concurrent overlap succeeded"; exit 1; fi
+grep -q '23P01' "$logs/second.log" || { cat "$logs/second.log"; exit 1; }
+[[ "$blocked" == true ]] || { echo "FAIL: no observed direct exclusion-constraint wait"; exit 1; }
+pg <<'SQL'
+do $$ begin
+  if (select count(*) from public.vehicle_reservations q join public.events e on e.id=q.event_id
+    where e.title like 'Synthetic direct invariant %' and q.state='APPROVED')<>1
+    or (select count(*) from public.vehicle_reservations q join public.events e on e.id=q.event_id
+    where e.title like 'Synthetic direct invariant %' and q.state='REQUESTED')<>1 then
+    raise exception 'Direct concurrent constraint allowed duplicate binding rows or lost the pending request';
+  end if;
+  raise notice 'PASS: two trusted direct writes bypassed RPC locks; real exclusion wait observed, one commit, second rejected with 23P01';
+end $$;
+SQL

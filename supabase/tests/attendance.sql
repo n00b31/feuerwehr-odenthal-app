@@ -30,6 +30,10 @@ reset role;
 insert into public.function_memberships(user_id,function_id) values
   ('81000000-0000-4000-8000-000000000007',current_setting('a.function')::uuid),
   ('81000000-0000-4000-8000-000000000003',current_setting('a.function')::uuid);
+-- This cohort was already approved and assigned before the synthetic past services.
+update public.profiles set approved_at=clock_timestamp()-interval '2 days' where status='approved';
+update public.unit_memberships set valid_from=clock_timestamp()-interval '2 days';
+update public.function_memberships set valid_from=clock_timestamp()-interval '2 days';
 insert into public.events(id,title,event_type,starts_at,ends_at,location,scope_kind,unit_id,function_id,organizer_id)
 select ('82000000-0000-4000-8000-'||lpad(i::text,12,'0'))::uuid,'Synthetic Attendance Event '||i,'regular',
   clock_timestamp()+case when i=4 then interval '1 hour' else interval '-1 hour' end,

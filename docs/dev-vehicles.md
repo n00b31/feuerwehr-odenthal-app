@@ -1,5 +1,63 @@
 # DEV 0.6: Fahrzeuge und Reservierungen
 
+## DEV 0.6.2: verbindliche Reservierung und explizite Antragsteller
+
+**Entwicklungsstand, noch keine installierte oder manuell abgenommene Freigabe.**
+Die Migrationen 026–032 werden zuerst in isoliertem PostgreSQL geprüft.
+Der veröffentlichte DEV-0.6.1-Stand und die unabhängige Demo bleiben bis zur
+kontrollierten Installation beziehungsweise zum manuellen Merge unverändert.
+
+Die Bestandsprüfung im DEV zeigte keine verbindlichen Überschneidungen.
+Die bisherigen Genehmigungs-RPCs sperrten bereits die Fahrzeugzeile; es fehlte
+jedoch eine zusätzliche Tabelleninvariante. Migration 026 ergänzt eine
+GiST-Exclusion-Constraint für APPROVED und COMPLETED. REQUESTED bleibt
+unverbindlich, Sperrungen sind APPROVED. Identische, enthaltene und teilweise
+überlappende Intervalle desselben Fahrzeugs werden abgewiesen; benachbarte
+Intervalle und unterschiedliche Fahrzeuge bleiben zulässig.
+
+`events` bleibt die kanonische Zeitquelle. Die neuen Zeitspalten der
+Reservierung sind ausschließlich transaktional synchronisierte DB-Werte für
+die Constraint, kein unabhängig bearbeitbarer zweiter Termin. Trigger
+verhindern Identitätswechsel und die Entfernung der kanonischen Kalenderzeile.
+Eine kollidierende Terminzeitänderung wird einschließlich der synchronisierten
+Werte zurückgerollt. Vorhandene Konflikte oder beschädigte Verknüpfungen
+stoppen die Migration; es gibt keine automatische Datenreparatur.
+
+Migration 027 trennt `actor_id`, `requester_id` und verantwortliche Person.
+Der tatsächliche Akteur kommt aus Auth, nicht aus einer angezeigten Rolle.
+MEMBER und FUNCTION_ADMIN beantragen ausschließlich für sich selbst.
+UNIT_ADMIN darf für freigeschaltete Personen seiner administrierten
+Nutzungseinheit beantragen, auch bei abweichender eigener Mitgliedschaft.
+GLOBAL_ADMIN und FIRE_CHIEF dürfen berechtigt im Namen anderer beantragen.
+Die verantwortliche Person muss ebenfalls für die Nutzungseinheit berechtigt
+sein. Fahrzeug-Nutzungsfreigaben gelten zusätzlich.
+
+Antragstellung im fremden Namen vermittelt **keine** neuen Verwaltungs-,
+Genehmigungs- oder Stornierungsrechte. FIRE_CHIEF bekommt dadurch insbesondere
+keine technische Fahrzeugverwaltung. Der Ersteller behält Einsicht und
+Benachrichtigungen zu seinem Vorgang; Stornieren darf weiterhin der eigentliche
+Antragsteller oder die ausdrücklich berechtigte Fahrzeugverwaltung.
+Genehmigte Stornierungen benötigen eine Begründung und geben den Zeitraum frei.
+
+Dienstverwaltung, gemeinsamer Kalender und Fahrzeugkalender sind drei
+gleichwertige Ansichten unter Termine. `?bereich=dienste|kalender|fahrzeuge`
+ermöglicht direkte Aufrufe und Browser-Zurück/Vorwärts. Ein erneuter Klick
+auf denselben Kalendertermin öffnet wieder dessen kanonische Fahrzeugdetails.
+Die vorhandene Haupt- und Bottom-Navigation bleibt erhalten.
+
+### Zusätzliche manuelle DEV-0.6.2-Abnahme
+
+Mit ausdrücklich autorisierten Testkonten prüfen: Antragsteller-Vorauswahl,
+UNIT_ADMIN mit abweichender eigener Einheit, Antrag im fremden Namen,
+verantwortliche Person, fehlende Zusatz-Genehmigungsrechte, Stornierung mit
+Begründung sowie zwei echte parallele Genehmigungen. Direkte Ressourcen- und
+Terminlinks, wiederholtes Öffnen desselben Vorgangs und mobile Navigation
+ebenfalls prüfen. Native iPhone-/Android-PWA-Abnahme bleibt offen.
+
+SQL-/RLS-Tests verwenden ausschließlich die gesicherte Wegwerf-Datenbank
+`ff_dev_ci`; synthetische Browsertests ersetzen keine reale DEV-Abnahme.
+Es werden für diese Tests keine echten Konten, Passwörter oder E-Mails verändert.
+
 ## Implementierungsplan
 
 1. Abgenommene DEV 0.5.1 sichern: Tag `v0.5.1-calendar-dev` auf

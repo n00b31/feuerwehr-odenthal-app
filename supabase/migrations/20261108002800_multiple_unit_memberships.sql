@@ -141,6 +141,8 @@ begin
       ) m on true left join public.units u on u.id=m.unit_id
       where global_access or exists(select 1 from public.unit_memberships h where h.user_id=p.id
         and h.valid_from<=statement_timestamp() and ff_private.has_role('UNIT_ADMIN',h.unit_id,null)
+        and (h.valid_until is null or h.valid_until>statement_timestamp()
+          or ff_private.can_manage_unit_member(p.id,h.unit_id))
         and (m.unit_id=h.unit_id or m.unit_id is null))),'[]'));
 end;
 $$;
