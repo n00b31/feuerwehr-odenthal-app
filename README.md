@@ -1,6 +1,15 @@
 # Feuerwehr Odenthal · Supabase DEV und lokale Regression
 
-**DEV 0.5.1:** [Gemeinsamer Kalender, Gerätehaus-Stammdaten und berechtigte Belegung](docs/dev-calendar.md).
+**DEV 0.6 (Feature-Branch):** [Fahrzeuge, eigene Kalender, Reservierungsanfragen,
+Genehmigungen, Sperrungen und interne Benachrichtigungen](docs/dev-vehicles.md).
+Die geprüften Migrationen 021–024 und vier ausdrücklich synthetische Fahrzeuge
+mit fünf Beispielvorgängen sind im bestehenden DEV eingerichtet. Neue
+verbindliche Buchungen werden transaktional gegen Überschneidungen geschützt.
+Die Fahrzeug-UI wird erst nach dem manuellen PR-Merge veröffentlicht;
+die laufende DEV 0.5.1 bleibt durch getrennte, verhandelte Kalender-RPCs kompatibel.
+
+**Abgenommene DEV 0.5.1:** [Gemeinsamer Kalender, Gerätehaus-Stammdaten und berechtigte Belegung](docs/dev-calendar.md),
+gesichert mit `v0.5.1-calendar-dev`.
 Die manuell abgenommene [DEV 0.4.1](docs/dev-history-seed.md) bleibt mit `v0.4.1-seed-dev` gesichert.
 Die zusätzliche gehostete Profilmigration war zunächst durch eine automatisch
 abgebrochene Client-Bestätigung blockiert. Nach direkter

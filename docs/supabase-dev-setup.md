@@ -1,5 +1,15 @@
 # Supabase DEV – Verbindung, Authentifizierung und Freigabe
 
+**DEV 0.6:** Migrationen 021–024 sind am 08.11.2026 im bestehenden DEV
+installiert, Quellen/Funktionskörper und tatsächliche RLS-Rechte geprüft.
+Vier synthetische Fahrzeuge, fünf Beispielvorgänge und transaktionale
+Benachrichtigungen sind eingerichtet, ohne bestehende Mitgliedschaften,
+Termine oder Anwesenheiten zu verändern. Fahrzeug-UI erst nach Benutzermerge.
+Schema, Remote-Versionen/SHA256, operatorgeschützter wiederholbarer Seed,
+echte Auth-/RLS-Prüfungen und vorbereitete manuelle Abnahme:
+[Fahrzeug-DEV-Anleitung](dev-vehicles.md).
+Keine automatische Datenbankmigration oder Testdatenanlage beim Merge.
+
 **DEV 0.5.1:** Fünf aktive Gerätehäuser aus den bestehenden Einheiten
 Scheuren, Scherf, Blecher, Voiswinkel und Eikamp wurden idempotent ergänzt.
 Migration 020 ist als `20261108100532` / `ff_020_unit_firestations` im DEV

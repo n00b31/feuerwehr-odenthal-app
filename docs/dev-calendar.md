@@ -31,8 +31,9 @@ Stand verglichen: Versionsnachweis und 72 geprüfte Anwendungsdateien stimmen
 bytegenau überein.
 
 **Noch offen:** native installierte iPhone-/Android-PWA-Gerätetests. Dafür
-wurde keine erfolgreiche Abnahme behauptet. Diese Dokumentation wird vor
-der Fahrzeugentwicklung separat committed und anschließend im DEV-0.6-PR
+wurde keine erfolgreiche Abnahme behauptet. Diese Dokumentation wurde vor
+der Fahrzeugentwicklung separat mit
+`47356ca72a9c2d86d5d9bcf7b2bbd1c14fea2167` committed und wird im DEV-0.6-PR
 mitgesichert; ein zusätzlicher Dokumentations-PR ist nicht erforderlich.
 
 ## Plan und Architektur
