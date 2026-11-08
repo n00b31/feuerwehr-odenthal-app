@@ -166,6 +166,22 @@ reset role;
 select pg_temp.v_assert((select count(*)>=10 from public.audit_entries where action like 'vehicle_%'),'vehicle mutations audited');
 select set_config('request.jwt.claim.sub','a0600000-0000-4000-8000-000000000001',true);
 set local role authenticated;
+select public.ff_vehicle_option('type','dev060_ci','Synthetic classification');
+select public.ff_vehicle_option('type','dev060_ci','Renamed classification',false);
+select public.ff_vehicle_option('purpose','dev060_ci','Synthetic purpose');
+select public.ff_vehicle_option('purpose','dev060_ci','Renamed purpose',false);
+reset role;
+select pg_temp.v_assert((select count(*)=2 from public.audit_entries
+  where action='vehicle_option_saved' and before_data->>'key'='dev060_ci'
+    and before_data->>'active'='true' and after_data->>'active'='false'
+    and before_data->>'name' like 'Synthetic %' and after_data->>'name' like 'Renamed %'),
+  'classification and purpose updates audit exact previous/new values');
+select set_config('request.jwt.claim.sub','a0600000-0000-4000-8000-000000000002',true);
+set local role authenticated;
+select pg_temp.v_denied($q$select public.ff_vehicle_option('type','dev060_ci','Forged MEMBER configuration')$q$);
+reset role;
+select set_config('request.jwt.claim.sub','a0600000-0000-4000-8000-000000000001',true);
+set local role authenticated;
 select set_config('v.completed',(public.ff_request_vehicle(pg_temp.v_payload('Synthetic completed usage')
   ||jsonb_build_object('vehicle_id',current_setting('v.foreign')))->>'id'),true);
 select public.ff_decide_vehicle(current_setting('v.completed')::uuid,0,'APPROVED');

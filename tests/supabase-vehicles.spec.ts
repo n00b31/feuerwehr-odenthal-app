@@ -120,6 +120,11 @@ test("assigned manager approves, opens canonical shared-calendar detail and canc
   await page.getByRole("button",{name:/DEV synthetisch.*Synthetic approval task/}).click();
   await page.getByRole("button",{name:"Genehmigen",exact:true}).click();
   await expect(page.getByRole("dialog").getByText("✓ Genehmigt",{exact:true})).toBeVisible();
+  await page.getByRole("button",{name:"Dialog schließen"}).click();
+  await page.getByRole("button",{name:"Kalender aktualisieren",exact:true}).click();
+  await page.locator(".calendar > .calendar-month .calendar-chip").filter({hasText:"Synthetic approval task"}).click();
+  await page.getByRole("button",{name:"Reservierungsdetails öffnen",exact:true}).click();
+  await expect(page.getByRole("dialog").getByText("✓ Genehmigt",{exact:true})).toBeVisible();
   await page.getByRole("button",{name:"Stornieren",exact:true}).click();
   await expect(page.getByRole("dialog").getByRole("alert")).toContainText("mindestens fünf Zeichen");
   await page.getByLabel("Begründung",{exact:true}).fill("Synthetic change of plan");
@@ -134,6 +139,17 @@ test("conflicting approval surfaces server denial and leaves request intact",asy
   await page.getByRole("button",{name:"Genehmigen",exact:true}).click();
   await expect(page.getByRole("dialog").getByRole("alert")).toContainText("Zeitraum verbindlich belegt");
   expect(state.items[0].state).toBe("REQUESTED");
+});
+test("rejection requires a reason and persists the rejected status",async({page})=>{
+  const state=await connect(page,"manager",true);
+  await page.getByText("Genehmigungsaufgaben (1)").click();
+  await page.getByRole("button",{name:/DEV synthetisch.*Synthetic approval task/}).click();
+  await page.getByRole("button",{name:"Ablehnen",exact:true}).click();
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText("mindestens fünf Zeichen");
+  await page.getByLabel("Begründung",{exact:true}).fill("Synthetic missing qualification");
+  await page.getByRole("button",{name:"Ablehnen",exact:true}).click();
+  await expect(page.getByRole("dialog").getByText("✕ Abgelehnt",{exact:true})).toBeVisible();
+  expect(state.items[0].decision_reason).toBe("Synthetic missing qualification");
 });
 test("GLOBAL_ADMIN creates and independently edits vehicle configuration",async({page})=>{
   const state=await connect(page,"global");
