@@ -44,18 +44,35 @@ test("real SDK vehicle requests send only declared PostgREST parameters",async()
   const calls:{name:string;body:Record<string,unknown>}[]=[];
   const workspace={server_now:"2026-11-08T12:00:00Z",configure:false,vehicles:[],units:[],own_units:[],people:[],
     types:[],purposes:[],items:[],retained:null,tasks:[],tasks_total:0,notifications:[]};
+  const context={actor_name:"Synthetic actor",request_units:[],requesters:[]};
   const client=createClient("https://syntheticci.supabase.co","sb_publishable_SYNTHETIC_CI_ONLY",{
     auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},
     global:{fetch:async(input,init)=>{
       const name=String(input).split("/").at(-1)!;
       calls.push({name,body:JSON.parse(String(init?.body))});
-      return new Response(JSON.stringify(name==="ff_vehicle_workspace" ? workspace : {id,conflicts:[]}),{
+      return new Response(JSON.stringify(name==="ff_vehicle_workspace" ? workspace :
+        name==="ff_vehicle_requesters" ? context : {id,conflicts:[]}),{
         status:200,headers:{"content-type":"application/json"},
       });
     }},
   });
   await readVehicles(client,{lower_bound:"2026-11-01T00:00:00Z",upper_bound:"2026-11-08T00:00:00Z"},id,null);
   assert.deepEqual(Object.keys(calls[0].body).sort(),["lower_bound","upper_bound","target_vehicle","retained_event"].sort());
-  await requestVehicle(client,vehicleRequestPayload(draft));
-  assert.deepEqual(Object.keys(calls[1].body),["input"]);assert.equal(calls[1].name,"ff_request_vehicle");
+  assert.deepEqual(calls[1],{name:"ff_vehicle_requesters",body:{target_vehicle:id}});
+  await requestVehicle(client,vehicleRequestPayload({...draft,requester_id:id}));
+  assert.deepEqual(Object.keys(calls[2].body),["input"]);assert.equal(calls[2].name,"ff_request_vehicle");
+  assert.equal((calls[2].body.input as Record<string,unknown>).requester_id,id);
+});
+test("vehicle intervals cover containment, equal bounds and equivalent offset representations",()=>{
+  const a={starts_at:"2026-11-09T10:00:00Z",ends_at:"2026-11-09T12:00:00Z"};
+  for(const b of [
+    a,{starts_at:"2026-11-09T09:00:00Z",ends_at:"2026-11-09T13:00:00Z"},
+    {starts_at:"2026-11-09T11:00:00Z",ends_at:"2026-11-09T11:30:00Z"},
+    {starts_at:a.starts_at,ends_at:"2026-11-09T13:00:00Z"},
+    {starts_at:"2026-11-09T09:00:00Z",ends_at:a.ends_at},
+    {starts_at:"2026-11-09T11:00:00+01:00",ends_at:"2026-11-09T13:00:00+01:00"},
+  ])assert.equal(vehicleOverlap(a,b),true);
+  assert.equal(vehicleOverlap(a,{starts_at:"2026-11-09T09:00:00Z",ends_at:a.starts_at}),false);
+  const winter=vehicleRequestPayload({...draft,start:"2026-10-25T00:00",end:"2026-10-26T00:00"});
+  assert.equal(Date.parse(winter.ends_at)-Date.parse(winter.starts_at),25*3600000);
 });

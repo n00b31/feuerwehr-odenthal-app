@@ -3,6 +3,13 @@ import { fromBerlin } from "./time";
 
 export const devResponseSchema = z.enum(["yes", "no", "maybe"]);
 export type DevResponse = z.infer<typeof devResponseSchema>;
+const responseStyles={
+  yes:{className:"personal-response response-yes",label:"Zugesagt",symbol:"✓",tone:"success"},
+  no:{className:"personal-response response-no",label:"Abgesagt",symbol:"✕",tone:"danger"},
+  maybe:{className:"personal-response response-maybe",label:"Vielleicht",symbol:"?",tone:"warning"},
+  unanswered:{className:"personal-response response-unanswered",label:"Keine Rückmeldung",symbol:"−",tone:"neutral"},
+} as const;
+export function responsePresentation(response:DevResponse|null) {return responseStyles[response ?? "unanswered"];}
 export const devEventTypeSchema = z.enum(["regular", "special", "breathing", "training", "community", "other"]);
 export const devEventPayloadSchema = z.object({
   title: z.string().trim().min(3, "Titel: mindestens drei Zeichen.").max(120),
@@ -43,6 +50,7 @@ export function eventErrorMessage(error: unknown) {
   if (error instanceof Error && !("code" in error)) return error.message;
   const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
   const message = error && typeof error === "object" && "message" in error ? String(error.message) : "";
+  if (code === "23P01") return "Zeitraum verbindlich belegt. Keine überlappende Genehmigung oder Fahrzeug-Sperrung möglich. Anfrage bleibt unverbindlich.";
   if (code === "42501" || code === "40001") return message || "Keine Berechtigung oder zwischenzeitliche Änderung. Bitte aktualisieren.";
   if (code === "PGRST202" || code === "PGRST204") return "Terminverwaltung noch nicht verfügbar. Migration 006 bis 011 und Data-API-Schema prüfen.";
   if (code === "23514" || code === "22P02" || code === "22007" || code === "22008") return "Ungültige Terminangaben. Datum, Uhrzeit und Pflichtfelder prüfen.";

@@ -8,7 +8,7 @@ import {
   type DevEvent, type EventWorkspace,
 } from "@/data/supabase-repository";
 import {
-  eventPayload, eventErrorMessage, responseCounts, devEventTypeSchema,
+  eventPayload, eventErrorMessage, responseCounts, responsePresentation, devEventTypeSchema,
   type DevEventDraft, type DevResponse,
 } from "@/domain/dev-events";
 import { dateLabel, localInput, timeLabel } from "@/domain/time";
@@ -17,6 +17,7 @@ import { SupabaseAttendance } from "./supabase-attendance";
 import { attendanceLabels } from "@/domain/dev-attendance";
 import { defaultEventList, monthLabel, monthKeySchema, type EventListQuery } from "@/domain/dev-event-list";
 import { SupabaseCalendar } from "./supabase-calendar";
+import { SupabaseVehicles } from "./supabase-vehicles";
 
 export type EventEditorState = { id?: string; revision: number; draft: DevEventDraft };
 const responses: [DevResponse, string][] = [["yes", "Ich komme"], ["no", "Ich kann nicht"], ["maybe", "Vielleicht"]];
@@ -31,8 +32,31 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [calendarVisible,setCalendarVisible]=useState(false);
+  const [section,setSection]=useState<"dienste"|"kalender"|"fahrzeuge">("dienste");
   const [calendarActivated,setCalendarActivated]=useState(false);
+  const [vehiclesActivated,setVehiclesActivated]=useState(false);
+  const [vehicleEvent,setVehicleEvent]=useState<{id:string;sequence:number}|null>(null);
+  const activateSection=useCallback((value:"dienste"|"kalender"|"fahrzeuge")=>{
+    setSection(value);
+    if(value==="kalender")setCalendarActivated(true);
+    if(value==="fahrzeuge")setVehiclesActivated(true);
+  },[]);
+  useEffect(()=>{
+    const readSection=()=>{
+      const value=new URLSearchParams(window.location.search).get("bereich");
+      activateSection(value==="fahrzeuge" || value==="kalender" ? value : "dienste");
+    };
+    readSection();
+    window.addEventListener("popstate",readSection);
+    return()=>window.removeEventListener("popstate",readSection);
+  },[activateSection]);
+  function changeSection(value:"dienste"|"kalender"|"fahrzeuge"){
+    activateSection(value);
+    const url=new URL(window.location.href);
+    url.searchParams.set("bereich",value);
+    if(url.href!==window.location.href)window.history.pushState(null,"",url);
+  }
+  function openVehicle(id:string){setVehicleEvent(previous=>({id,sequence:(previous?.sequence ?? 0)+1}));changeSection("fahrzeuge");}
   const [elapsed, setElapsed] = useState(0);
   const [serverTime, setServerTime] = useState(() => Date.parse(initial.server_now));
   const [query, setQuery] = useState<EventListQuery>(defaultEventList);
@@ -154,17 +178,20 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
     retained.current=[...new Set([...retained.current,id])];
     accept({result,version:++epoch.current.value});
     if(editing) edit(item);
-    setCalendarVisible(false);
+    changeSection("dienste");
     requestAnimationFrame(()=>document.getElementById(`event-${id}`)?.scrollIntoView({block:"start"}));
   }
   return <>
     <div className="calendar-views dev-actions" aria-label="Terminbereich">
-      <button className="button secondary" aria-pressed={!calendarVisible} onClick={()=>setCalendarVisible(false)}>Dienstverwaltung</button>
-      <button className="button secondary" aria-pressed={calendarVisible} onClick={()=>{setCalendarActivated(true);setCalendarVisible(true);}}>Gemeinsamer Kalender</button>
+      <button className="button secondary" aria-pressed={section==="dienste"} onClick={()=>changeSection("dienste")}>Dienstverwaltung</button>
+      <button className="button secondary" aria-pressed={section==="kalender"} onClick={()=>changeSection("kalender")}>Gemeinsamer Kalender</button>
+      <button className="button secondary" aria-pressed={section==="fahrzeuge"} onClick={()=>changeSection("fahrzeuge")}>Fahrzeugkalender</button>
     </div>
-    {calendarActivated && <div hidden={!calendarVisible}>    <SupabaseCalendar key={actorId} client={client} actorId={actorId}
-      preferredUnit={preferredUnit} initialTime={initial.server_now} openService={openService}/></div>}
-    <section className="card section-card" hidden={calendarVisible}>
+    {calendarActivated && <div hidden={section!=="kalender"}><SupabaseCalendar key={actorId} client={client} actorId={actorId}
+      preferredUnit={preferredUnit} initialTime={initial.server_now} openService={openService} openVehicle={openVehicle}/></div>}
+    {vehiclesActivated && <div hidden={section!=="fahrzeuge"}><SupabaseVehicles key={actorId} client={client} actorId={actorId}
+      initialTime={initial.server_now} preferredUnit={preferredUnit} initialEventId={vehicleEvent?.id} initialEventSequence={vehicleEvent?.sequence}/></div>}
+    <section className="card section-card" hidden={section!=="dienste"}>
     <div className="event-card-top"><h2>Sichtbare DEV-Termine</h2><div className="dev-actions">
       <button className="button secondary" disabled={busy} onClick={() => void refresh()}><RefreshCw size={18} />Termine aktualisieren</button>
       {!!workspace?.manageable_units.length && !editor && <button className="button" disabled={busy} onClick={() => edit()}><CalendarPlus size={18} />Einzeltermin erstellen</button>}
@@ -263,19 +290,22 @@ function EventCard({ client, changed, item, serverNow, busy, edit, reply, cancel
   const planned = item.status === "scheduled";
   const unlocked = serverNow < Date.parse(item.starts_at) && (!item.response_deadline || serverNow < Date.parse(item.response_deadline));
   const counts = item.participants ? responseCounts(item.participants) : null;
-  return <article className="dev-event" aria-labelledby={`event-${item.id}`}>
+  const responseStyle=responsePresentation(item.own_response);
+  return <article className={`dev-event ${responseStyle.className}`} aria-labelledby={`event-${item.id}`}>
     {retained && <p className="notice">Geöffneter Termin außerhalb der aktuellen Ergebnisliste · Berechtigung weiterhin live geprüft</p>}
     <div className="event-card-top"><h3 id={`event-${item.id}`}>{item.title}</h3><span className={`badge ${planned ? "" : "muted"}`}>{planned ? "Geplant" : "Abgesagt"}</span></div>
     <p>{dateLabel(item.starts_at, { year: "numeric" })} · {timeLabel(item.starts_at)} – {dateLabel(item.ends_at)} {timeLabel(item.ends_at)} · {item.location}</p>
     <p className="muted text-sm">{item.scope_name} · {EVENT_TYPES[item.event_type]}{item.series_id && " · Serieninstanz (keine Serienbearbeitung)"}</p>
     <p className="description">{item.description}</p>
+    <p className={`personal-response-label ${responseStyle.className}`}><span className="response-symbol" aria-hidden="true">{responseStyle.symbol}</span> {responseStyle.label}</p>
     {item.response_deadline && <p className="muted text-sm">Anmeldeschluss: {dateLabel(item.response_deadline)} · {timeLabel(item.response_deadline)}</p>}
     {item.in_roster ? <div className="dev-response">
       <p><strong>Deine Rückmeldung: {item.own_response ? responseNames[item.own_response] : "Ohne Rückmeldung"}</strong> · Nur Planung</p>
-      <div className="dev-actions">{responses.map(([value, label]) => <button className="button secondary" key={value}
-        aria-pressed={item.own_response === value} disabled={busy || !planned || !unlocked} onClick={() => void reply(value)}>{label}</button>)}</div>
+      <div className="dev-actions">{responses.map(([value, label]) => <button className={`button secondary ${responsePresentation(value).className}`} key={value}
+        aria-pressed={item.own_response === value} disabled={busy || !planned || !unlocked} onClick={() => void reply(value)}>
+        <span className="response-symbol" aria-hidden="true">{responsePresentation(value).symbol}</span>{label}</button>)}</div>
       {planned && !unlocked && <p className="lock-note">Rückmeldung ab Beginn/Anmeldeschluss gesperrt. Maßgeblich ist die Supabase-Serverzeit.{item.can_lead && " Als zuständige Leitung kannst du eine begründete Korrektur erfassen."}</p>}
-    </div> : <p className="muted text-sm">Du gehörst nicht zum gespeicherten Teilnehmerkreis; keine eigene Rückmeldung möglich.</p>}
+    </div> : <p className="muted text-sm">Du gehörst nicht zum berechtigten Teilnehmerkreis; keine eigene Rückmeldung möglich.</p>}
     {item.own_attendance && <p className="notice"><strong>Deine bestätigte Anwesenheit: {attendanceLabels[item.own_attendance]}</strong> · Verbindlich abgeschlossene Liste</p>}
     {(item.can_read_attendance || item.can_delegate) && <>
       <div className="dev-actions">

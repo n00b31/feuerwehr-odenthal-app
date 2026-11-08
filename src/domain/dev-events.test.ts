@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { eventPayload, responseCounts, devEventPayloadSchema, eventErrorMessage, type DevEventDraft } from "./dev-events";
+import { eventPayload, responseCounts, responsePresentation, devEventPayloadSchema, eventErrorMessage, type DevEventDraft } from "./dev-events";
 
 const draft: DevEventDraft = {
   title: "  DEV Testdienst  ", description: "Nur Testdaten", location: "Testort", event_type: "regular",
@@ -35,4 +35,11 @@ test("event errors disclose failure and stale revisions instead of success", () 
   assert.match(eventErrorMessage({ code: "40001", message: "Termin wurde geändert." }), /geändert/);
   assert.match(eventErrorMessage({ code: "PGRST202" }), /Migration 006/);
   assert.match(eventErrorMessage({ code: "503" }), /kein erfolgreicher Abschluss/);
+});
+test("personal response presentation has distinct semantic tones, text and symbols without mutating data",()=>{
+  assert.deepEqual(responsePresentation("yes"),{className:"personal-response response-yes",label:"Zugesagt",symbol:"✓",tone:"success"});
+  assert.deepEqual(responsePresentation("no"),{className:"personal-response response-no",label:"Abgesagt",symbol:"✕",tone:"danger"});
+  assert.deepEqual(responsePresentation("maybe"),{className:"personal-response response-maybe",label:"Vielleicht",symbol:"?",tone:"warning"});
+  assert.deepEqual(responsePresentation(null),{className:"personal-response response-unanswered",label:"Keine Rückmeldung",symbol:"−",tone:"neutral"});
+  assert.notEqual(responsePresentation("yes").className,responsePresentation("no").className);
 });

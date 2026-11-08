@@ -94,6 +94,10 @@ jobs:
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/password-recovery.sql
+      - name: Verify dynamic memberships, fixed invitations and immutable attendance snapshots
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/dynamic-memberships.sql
       - name: Verify real parallel recovery limits and one-time PKCE claims
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}

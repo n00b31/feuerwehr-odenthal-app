@@ -116,7 +116,19 @@
 .dev-shell .topbar-actions { flex-wrap: wrap; }
 .dev-event-editor, .dev-participants, .dev-cancel { margin-block: var(--cp-space-4); }
 .dev-event-filter { max-width: 360px; }
-.dev-response .button[aria-pressed="true"] { color: var(--cp-text); background: var(--cp-accent-soft); border-color: var(--cp-accent); }
+.personal-response { --cp-response-tone: var(--cp-border-strong); }
+.personal-response.response-yes { --cp-response-tone: var(--cp-success); }
+.personal-response.response-no { --cp-response-tone: var(--cp-danger); }
+.personal-response.response-maybe { --cp-response-tone: var(--cp-warning); }
+.dev-event.personal-response, .calendar-chip.personal-response {
+  background: color-mix(in srgb, var(--cp-response-tone) 12%, var(--cp-surface));
+  border-inline-start: 3px solid var(--cp-response-tone);
+}
+.dev-event.personal-response { padding-inline: var(--cp-space-3); margin-block: var(--cp-space-3); border-radius: var(--cp-radius); }
+.personal-response-label { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid var(--cp-response-tone); border-radius: var(--cp-radius); color: var(--cp-text); }
+.personal-response .response-symbol { color: var(--cp-response-tone); font-weight: 700; }
+.personal-response .muted, .personal-response .lock-note, .calendar-chip.personal-response > span { color: var(--cp-text); }
+.dev-response .button.personal-response[aria-pressed="true"] { color: var(--cp-text); background: color-mix(in srgb, var(--cp-response-tone) 18%, var(--cp-surface)); border-color: var(--cp-response-tone); }
 .dev-participants summary { cursor: pointer; min-height: 44px; padding-block: var(--cp-space-3); overflow-wrap: anywhere; }
 .dev-participants ul { list-style: none; padding: 0; }
 .dev-participants li { display: flex; justify-content: space-between; gap: var(--cp-space-3); padding-block: var(--cp-space-3); border-bottom: 1px solid var(--cp-border); overflow-wrap: anywhere; }

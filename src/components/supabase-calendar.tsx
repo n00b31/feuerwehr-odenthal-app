@@ -8,9 +8,8 @@ import { calendarDateSchema,calendarDraft,calendarInterval,calendarKindSchema,ca
   moveCalendar,weekColumns,emptyCalendarFilters,calendarBookingResources,preferredCalendarResource,type CalendarView,type CalendarDraft,type CalendarEvent,
   type CalendarContext,type CalendarFilters,type CalendarConflict } from "@/domain/calendar";
 import { berlinParts,dateLabel } from "@/domain/time";
-import { eventErrorMessage } from "@/domain/dev-events";
+import { eventErrorMessage,responsePresentation } from "@/domain/dev-events";
 import { AppDialog } from "./app-dialog";
-import { SupabaseVehicles } from "./supabase-vehicles";
 
 type Snapshot=Awaited<ReturnType<typeof readCalendar>>;
 type Editor={event?:CalendarEvent; draft:CalendarDraft};
@@ -21,8 +20,9 @@ function errorMessage(error:unknown) {
 }
 const dayName=(day:string) => dateLabel(`${day}T12:00:00Z`,{ year:"numeric" });
 
-export function SupabaseCalendar({client,actorId,preferredUnit,initialTime,openService}:{
+export function SupabaseCalendar({client,actorId,preferredUnit,initialTime,openService,openVehicle}:{
   client:SupabaseClient; actorId:string; preferredUnit:string|null; initialTime:string; openService:(id:string,edit:boolean)=>Promise<void>;
+  openVehicle:(id:string)=>void;
 }) {
   const [date,setDate]=useState(()=>berlinParts(initialTime).date);
   const [view,setView]=useState<CalendarView>("month");
@@ -36,7 +36,6 @@ export function SupabaseCalendar({client,actorId,preferredUnit,initialTime,openS
   const [busy,setBusy]=useState(false);
   const [conflicts,setConflicts]=useState<CalendarConflict[]>([]);
   const [reason,setReason]=useState("");
-  const [vehiclesOpen,setVehiclesOpen]=useState(false),[vehicleEvent,setVehicleEvent]=useState<string|null>(null);
   const epoch=useRef({value:0}),working=useRef(false),retained=useRef<string[]>([]);
   const range=calendarRange(date,view);
   const reload=useCallback(async()=>{
@@ -108,9 +107,6 @@ export function SupabaseCalendar({client,actorId,preferredUnit,initialTime,openS
       </div>
     </div>
     <p className="muted text-sm">Eine gemeinsame Terminquelle · Europe/Berlin · Dienste behalten ihre Teilnahme- und Anwesenheitsverwaltung. Belegungen warnen vor Konflikten, erteilen aber keine Genehmigung.</p>
-    <button className="button secondary" aria-expanded={vehiclesOpen} onClick={()=>setVehiclesOpen(!vehiclesOpen)}>
-      {vehiclesOpen ? "Fahrzeugbereich schließen" : "Fahrzeuge und Reservierungen öffnen"}</button>
-    {vehiclesOpen && <SupabaseVehicles client={client} actorId={actorId} initialTime={initialTime} initialEventId={vehicleEvent}/>}
     {error && <p className="notice error" role="alert">{error}</p>}
     {message && <p className="notice" role="status">{message}</p>}
     <div className="calendar-toolbar">
@@ -167,11 +163,14 @@ export function SupabaseCalendar({client,actorId,preferredUnit,initialTime,openS
       <p>{calendarInterval(selectedEvent)}</p>
       <p>{selectedEvent.location} · {selectedEvent.scope_name} · {selectedEvent.status==="cancelled" ? "Abgesagt" : "Geplant"}</p>
       <p className="description">{selectedEvent.description}</p><p>Verantwortlich: {selectedEvent.organizer_name}</p>
+      {selectedEvent.entry_kind==="participation" && <p className={`personal-response-label ${responsePresentation(selectedEvent.own_response ?? null).className}`}>
+        <span className="response-symbol" aria-hidden="true">{responsePresentation(selectedEvent.own_response ?? null).symbol}</span>
+        {responsePresentation(selectedEvent.own_response ?? null).label}</p>}
       {selectedEvent.resource_name && <p>{selectedEvent.entry_kind==="vehicle" ? "Fahrzeug" : "Gerätehaus"}: {selectedEvent.resource_name}</p>}
       {selectedEvent.entry_kind==="vehicle" ? <>
         <p className={`badge ${selectedEvent.vehicle_kind==="block" ? "danger" : "success"}`}>{selectedEvent.vehicle_kind==="block" ? "⊘ Gesperrt / nicht verfügbar" :
           selectedEvent.vehicle_state==="COMPLETED" ? "✓ Nutzung abgeschlossen" : "✓ Genehmigt · verbindlich reserviert"}</p>
-        <button className="button" onClick={()=>{setVehicleEvent(selectedEvent.id);setVehiclesOpen(true);closeSelected();}}>Reservierungsdetails öffnen</button>
+        <button className="button" onClick={()=>{openVehicle(selectedEvent.id);closeSelected();}}>Reservierungsdetails öffnen</button>
       </> : selectedEvent.entry_kind==="participation" ? <div className="dev-actions">
         <button className="button" onClick={()=>void run(async()=>{await openService(selectedEvent.id,false);closeSelected();},"Bestehende Dienstverwaltung geöffnet.")}>Dienst und Teilnahme öffnen</button>
         {selectedEvent.can_manage && <button className="button secondary" disabled={Date.parse(selectedEvent.starts_at)<=Date.parse(snapshot?.server_now ?? initialTime)}
@@ -189,8 +188,10 @@ export function SupabaseCalendar({client,actorId,preferredUnit,initialTime,openS
   </section>;
 }
 function CalendarChip({event,choose}:{event:CalendarEvent;choose:(event:CalendarEvent)=>void}) {
-  return <button className={`calendar-chip ${event.status==="cancelled" ? "cancelled" : ""}`} onClick={()=>choose(event)}>
+  const response=event.entry_kind==="participation" ? responsePresentation(event.own_response ?? null) : null;
+  return <button className={`calendar-chip ${event.status==="cancelled" ? "cancelled" : ""} ${response?.className ?? ""}`} onClick={()=>choose(event)}>
     <span>{event.all_day ? "Ganztägig" : calendarTime(event.starts_at)}</span><strong>{event.title}</strong>
+    {response && <span className={`personal-response-label ${response.className}`}><span className="response-symbol" aria-hidden="true">{response.symbol}</span>{response.label}</span>}
     {event.status==="cancelled" && <span>✕ Abgesagt</span>}
   </button>;
 }

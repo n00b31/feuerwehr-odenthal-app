@@ -16,16 +16,17 @@ export function VehicleBadge({item}:{item:Pick<VehicleReservation,"kind"|"state"
   return <span className={`badge ${item.kind==="block" && item.state==="APPROVED" ? "danger" : status.tone}`}>
     {item.kind==="block" && item.state==="APPROVED" ? "⊘ Gesperrt / nicht verfügbar" : `${status.symbol} ${status.label}`}</span>;
 }
-export function SupabaseVehicles({client,actorId,initialTime,initialEventId=null}:{client:SupabaseClient;actorId:string;initialTime:string;initialEventId?:string|null}){
+export function SupabaseVehicles({client,actorId,initialTime,preferredUnit=null,initialEventId=null,initialEventSequence=0}:{client:SupabaseClient;actorId:string;initialTime:string;preferredUnit?:string|null;initialEventId?:string|null;initialEventSequence?:number}){
   const [snapshot,setSnapshot]=useState<VehicleWorkspace|null>(null),[date,setDate]=useState(()=>berlinParts(initialTime).date);
   const [view,setView]=useState<CalendarView>("month"),[vehicleId,setVehicleId]=useState<string|null>(null);
   const [selected,setSelected]=useState<string|null>(initialEventId),[draft,setDraft]=useState<VehicleRequestDraft|null>(null);
   const [editing,setEditing]=useState<{vehicle?:Vehicle;input:VehicleInput}|null>(null),[reason,setReason]=useState("");
   const [error,setError]=useState(""),[message,setMessage]=useState(""),[busy,setBusy]=useState(false);
   const epoch=useRef({value:0}),working=useRef(false);
-  const [observedEvent,setObservedEvent]=useState(initialEventId);
-  if(initialEventId!==observedEvent){
-    setObservedEvent(initialEventId);
+  const eventKey=`${initialEventSequence}:${initialEventId ?? ""}`;
+  const [observedEvent,setObservedEvent]=useState(eventKey);
+  if(eventKey!==observedEvent){
+    setObservedEvent(eventKey);
     if(initialEventId){setSelected(initialEventId);setReason("");}
   }
   const reload=useCallback(()=>{
@@ -33,12 +34,14 @@ export function SupabaseVehicles({client,actorId,initialTime,initialEventId=null
     return readVehicles(client,calendarRange(date,view),vehicleId,selected).then(data=>{
       if(version!==epoch.current.value)return;
       setSnapshot(data);setError("");
-      if(!vehicleId && data.vehicles.length) setVehicleId(data.vehicles[0].id);
+      if(selected && data.retained && data.vehicles.some(v=>v.id===data.retained?.vehicle_id))
+        setVehicleId(data.retained.vehicle_id);
+      else if(!vehicleId && data.vehicles.length) setVehicleId(data.vehicles[0].id);
       if(selected && !data.retained){setSelected(null);setMessage("Vorgang nicht mehr berechtigt verfügbar.");}
     }).catch(cause=>{
       if(version!==epoch.current.value)return;
       setSnapshot(null);setError(cause && typeof cause==="object" && "code" in cause && cause.code==="PGRST202"
-        ? "Fahrzeugverwaltung noch nicht verfügbar. DEV-Migrationen 021 bis 023 müssen installiert sein." : eventErrorMessage(cause));
+        ? "Fahrzeugverwaltung noch nicht verfügbar. Geprüfte DEV-Fahrzeugmigrationen einschließlich 026 und 027 müssen installiert sein." : eventErrorMessage(cause));
     });
   },[client,date,view,vehicleId,selected]);
   useEffect(()=>{
@@ -54,7 +57,7 @@ export function SupabaseVehicles({client,actorId,initialTime,initialEventId=null
     finally{working.current=false;setBusy(false);}
   }
   const vehicle=snapshot?.vehicles.find(v=>v.id===vehicleId);
-  const item=snapshot?.retained ?? snapshot?.items.find(i=>i.id===selected);
+  const item=snapshot?.retained?.id===selected ? snapshot.retained : snapshot?.items.find(i=>i.id===selected);
   const range=calendarRange(date,view),items=snapshot?.items.filter(i=>i.vehicle_id===vehicleId) ?? [];
   function navigate(direction:number){
     try{setDate(moveCalendar(date,view,direction));}
@@ -62,9 +65,12 @@ export function SupabaseVehicles({client,actorId,initialTime,initialEventId=null
   }
   function createRequest(block=false){
     if(!snapshot || !vehicle)return;
-    const unit=block ? vehicle.unit_id : snapshot.own_units.find(u=>vehicle.usage_units.includes(u.id))?.id ?? "";
+    const ownUnit=snapshot.own_units.find(u=>u.id===preferredUnit && vehicle.usage_units.includes(u.id))
+      ?? snapshot.own_units.find(u=>vehicle.usage_units.includes(u.id));
+    const unit=block ? vehicle.unit_id : ownUnit?.id ?? "";
+    const requester=actorId;
     const day=addLocalDays(berlinParts(snapshot.server_now).date,1);
-    setDraft({vehicle_id:vehicle.id,unit_id:unit,responsible_id:actorId,kind:block ? "block" : "reservation",
+    setDraft({vehicle_id:vehicle.id,unit_id:unit,requester_id:block ? actorId : requester,responsible_id:requester,kind:block ? "block" : "reservation",
       title:"",description:"",destination:"",notes:"",purpose_key:block ? null : snapshot.purposes.find(p=>p.active)?.key ?? "",
       start:`${day}T09:00`,end:`${day}T10:00`});
   }
@@ -79,7 +85,8 @@ export function SupabaseVehicles({client,actorId,initialTime,initialEventId=null
   function open(i:VehicleReservation){setSelected(i.id);setVehicleId(i.vehicle_id);setReason("");}
   const draftVehicle=snapshot?.vehicles.find(v=>v.id===draft?.vehicle_id);
   const draftValid=!!draftVehicle?.active && draftVehicle.current_access && (draft?.kind==="block" ? draftVehicle.can_manage :
-    draftVehicle.reservable && !!snapshot?.own_units.some(u=>u.id===draft?.unit_id && draftVehicle.usage_units.includes(u.id)));
+    draftVehicle.reservable && !!snapshot?.request_units.some(u=>u.id===draft?.unit_id && draftVehicle.usage_units.includes(u.id))
+      && !!snapshot?.requesters.some(p=>p.id===draft?.requester_id && p.units.includes(draft.unit_id)));
   let conflicts:VehicleReservation[]=[];
   let draftError="";
   if(draft){
@@ -110,7 +117,7 @@ export function SupabaseVehicles({client,actorId,initialTime,initialEventId=null
         <p><span className={`badge ${vehicle.active && vehicle.reservable ? "success" : "danger"}`}>
           {vehicle.active && vehicle.reservable ? "✓ Anfragen möglich" : "⊘ Nicht verfügbar für neue Anfragen"}</span></p>
         <div className="dev-actions">
-          {vehicle.current_access && vehicle.active && vehicle.reservable && snapshot.own_units.some(u=>vehicle.usage_units.includes(u.id)) &&
+          {vehicle.current_access && vehicle.active && vehicle.reservable && snapshot.request_units.some(u=>vehicle.usage_units.includes(u.id)) &&
             <button className="button" disabled={busy} onClick={()=>createRequest()}>Reservierung beantragen</button>}
           {vehicle.can_manage && <><button className="button secondary" disabled={busy || !vehicle.active} onClick={()=>createRequest(true)}>Fahrzeug sperren</button>
             <button className="button secondary" disabled={busy} onClick={()=>editVehicle(vehicle)}>Fahrzeug bearbeiten</button></>}
@@ -129,9 +136,9 @@ export function SupabaseVehicles({client,actorId,initialTime,initialEventId=null
             </section>;
           })}
         </div>
-        <details><summary>Eigene Anfragen · ausgewähltes Fahrzeug und Zeitraum</summary>{items.filter(i=>i.own).map(i=>
+        <details><summary>Eigene und beauftragte Anfragen · ausgewähltes Fahrzeug und Zeitraum</summary>{items.filter(i=>i.own || i.actor_id===actorId).map(i=>
           <button className="notice-row" key={i.id} onClick={()=>open(i)}><span><strong>{i.title}</strong><VehicleBadge item={i}/></span></button>)}
-          {!items.some(i=>i.own) && <p>Keine eigenen Anfragen in diesem Zeitraum.</p>}</details>
+          {!items.some(i=>i.own || i.actor_id===actorId) && <p>Keine eigenen oder beauftragten Anfragen in diesem Zeitraum.</p>}</details>
       </>}
       {!vehicle && snapshot.configure && <button className="button" onClick={()=>editVehicle()}>Fahrzeug anlegen</button>}
       <details><summary>Genehmigungsaufgaben ({snapshot.tasks_total})</summary>
@@ -155,8 +162,18 @@ export function SupabaseVehicles({client,actorId,initialTime,initialEventId=null
         if(result.conflicts.length)return "Anfrage gespeichert. Weitere unverbindliche Anfragen überschneiden sich; nur eine Genehmigung für den Zeitraum ist möglich.";
       },"Vorgang gespeichert. Status und Konflikte im Detail prüfen.");}}>
         <p className="span-2">{draftVehicle?.name ?? "Fahrzeug nicht mehr berechtigt verfügbar"}</p>
-        <label>Nutzungseinheit<select value={draft.unit_id} disabled={draft.kind==="block"} required onChange={e=>setDraft({...draft,unit_id:e.target.value})}>
-          <option value="">Einheit wählen</option>{(draft.kind==="block" ? snapshot?.units : snapshot?.own_units.filter(u=>draftVehicle?.usage_units.includes(u.id)))?.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}</select></label>
+        <p className="span-2">Handelnder Benutzer: {snapshot?.actor_name}</p>
+        <label>Nutzungseinheit<select value={draft.unit_id} disabled={draft.kind==="block"} required onChange={e=>{
+          const unit=e.target.value;
+          const requester=snapshot?.requesters.find(p=>p.id===actorId && p.units.includes(unit))?.id ?? "";
+          setDraft({...draft,unit_id:unit,requester_id:requester,responsible_id:requester});
+        }}>
+          <option value="">Einheit wählen</option>{(draft.kind==="block" ? snapshot?.units : snapshot?.request_units.filter(u=>draftVehicle?.usage_units.includes(u.id)))?.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}</select></label>
+        {draft.kind==="block" || !snapshot?.requesters.some(p=>p.id!==actorId && p.units.includes(draft.unit_id))
+          ? <label>Antragsteller<input readOnly value={snapshot?.actor_name ?? ""}/></label>
+          : <label>Antragsteller<select required value={draft.requester_id ?? ""} onChange={e=>setDraft({...draft,requester_id:e.target.value})}>
+            <option value="">Berechtigtes Mitglied wählen</option>{snapshot.requesters.filter(p=>p.units.includes(draft.unit_id)).map(p=>
+              <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>}
         <label>Verantwortliche Person<select value={draft.responsible_id} required onChange={e=>setDraft({...draft,responsible_id:e.target.value})}>
           <option value="">Person wählen</option>{snapshot?.people.filter(p=>draft.kind==="block" || p.units.includes(draft.unit_id)).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
         <label>Beginn (Europe/Berlin)<input type="datetime-local" value={draft.start} required onChange={e=>setDraft({...draft,start:e.target.value})}/></label>
@@ -178,6 +195,7 @@ export function SupabaseVehicles({client,actorId,initialTime,initialEventId=null
     {selected && item && <AppDialog title={item.title} close={()=>setSelected(null)}>
       <VehicleBadge item={item}/><p>{item.vehicle_name} · {calendarInterval({...item,all_day:false})}</p>
       <p>Antragsteller: {item.requester_name} · Verantwortlich: {item.responsible_name} · {item.unit_name}</p>
+      <p>Ursprünglich beantragt durch: {item.actor_name ?? "Im Altbestand nicht gesondert ausgewiesen"} · {dateLabel(item.requested_at,{year:"numeric"})}</p>
       <p>{item.description}</p><p>{item.destination}</p><p>{item.notes}</p>
       {item.decision_reason && <p>Entscheidung: {item.decision_reason}</p>}{item.cancellation_reason && <p>Stornierung: {item.cancellation_reason}</p>}
       {["REQUESTED","APPROVED"].includes(item.state) && (item.can_manage || item.own && item.kind==="reservation") && <>

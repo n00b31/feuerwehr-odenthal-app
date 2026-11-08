@@ -6,7 +6,7 @@ import {vehicleRequestSchema,vehicleInputSchema,vehicleWorkspaceSchema,type Vehi
 const api="https://syntheticci.supabase.co",actor="a0600000-0000-4000-8000-000000000001";
 const unit="b0600000-0000-4000-8000-000000000001",vehicleId="c0600000-0000-4000-8000-000000000001";
 const now="2026-11-08T12:00:00Z";
-async function connect(page:Page,role:"global"|"member"|"manager"|"chief"="member",preload=false){
+async function connect(page:Page,role:"global"|"member"|"manager"|"chief"|"unit"|"function"="member",preload=false){
   const manage=role==="global" || role==="manager",global=role==="global";
   const vehicles:Vehicle[]=[{id:vehicleId,name:"DEV synthetisch - MTF Scheuren",resource_type:"vehicle",unit_id:unit,
     active:true,revision:0,type_key:"mtf",call_sign:"",location:"Synthetic DEV",description:"Synthetic, not a real vehicle",
@@ -16,6 +16,7 @@ async function connect(page:Page,role:"global"|"member"|"manager"|"chief"="membe
   }[],next:1,fail:false,conflict:false};
   function row(id:string,title:string):VehicleReservation{
     return {id,event_id:id,vehicle_id:vehicleId,vehicle_name:vehicles[0].name,
+      actor_id:actor,actor_name:"Synthetic Vehicles",
       requester_id:role==="member" ? actor : "a0600000-0000-4000-8000-000000000002",requester_name:"Synthetic applicant",
       responsible_id:actor,responsible_name:"Synthetic Vehicles",unit_id:unit,unit_name:"Scheuren",kind:"reservation",
       state:"REQUESTED",title,description:"Synthetic request",starts_at:"2026-11-09T08:00:00Z",ends_at:"2026-11-09T09:00:00Z",
@@ -38,7 +39,8 @@ async function connect(page:Page,role:"global"|"member"|"manager"|"chief"="membe
     }
     if(path==="/auth/v1/user")return respond(user);
     if(path.endsWith("/ff_my_access"))return respond({user_id:actor,display_name:"Synthetic Vehicles",account_status:"approved",
-      access_granted:true,unit_id:unit,unit_name:"Scheuren",roles:global ? ["MEMBER","GLOBAL_ADMIN"] : role==="chief" ? ["MEMBER","FIRE_CHIEF"] : ["MEMBER"]});
+      access_granted:true,unit_id:unit,unit_name:"Scheuren",roles:global ? ["MEMBER","GLOBAL_ADMIN"] : role==="chief" ? ["MEMBER","FIRE_CHIEF"] :
+        role==="unit" ? ["MEMBER","UNIT_ADMIN"] : role==="function" ? ["MEMBER","FUNCTION_ADMIN"] : ["MEMBER"]});
     if(path.endsWith("/units"))return respond(context.units);
     if(path.endsWith("/document_areas") || path.endsWith("/ff_pending_registrations"))return respond([]);
     if(path.endsWith("/ff_events_page"))return respond({server_now:now,manageable_units:context.manageable_units,events:[],retained_events:[],has_more:false,next_cursor:null});
@@ -52,12 +54,18 @@ async function connect(page:Page,role:"global"|"member"|"manager"|"chief"="membe
         category_name:"Fahrzeugreservierung",resource_id:vehicleId,resource_name:vehicles[0].name,can_manage:false,unit_ids:[]}));
       return respond({server_now:now,next_cursor:null,events,retained_events:events.filter(i=>q.retained_ids.includes(i.id))});
     }
+    if(path.endsWith("/ff_vehicle_requesters"))return respond({
+      actor_name:"Synthetic Vehicles",request_units:context.units,
+      requesters:[{id:actor,name:"Synthetic Vehicles",units:[unit]},
+        ...(["global","chief","unit"].includes(role) ? [{id:"a0600000-0000-4000-8000-000000000002",name:"Synthetic applicant",units:[unit]}] : [])],
+    });
     if(path.endsWith("/ff_vehicle_workspace")){
       if(state.fail)return respond({code:"503",message:"Synthetic outage"},503);
       const q=request.postDataJSON();
       expect(Object.keys(q).sort()).toEqual(["lower_bound","upper_bound","target_vehicle","retained_event"].sort());
       const data={server_now:now,configure:global,vehicles:state.vehicles,units:context.units,own_units:context.units,
-        people:[{id:actor,name:"Synthetic Vehicles",units:[unit]}],types:[{key:"mtf",name:"MTF",active:true}],
+        people:[{id:actor,name:"Synthetic Vehicles",units:[unit]},
+          {id:"a0600000-0000-4000-8000-000000000002",name:"Synthetic applicant",units:[unit]}],types:[{key:"mtf",name:"MTF",active:true}],
         purposes:[{key:"course",name:"Lehrgang",active:true}],items:state.items,
         retained:state.items.find(i=>i.id===q.retained_event) ?? null,
         tasks:manage ? state.items.filter(i=>i.state==="REQUESTED") : [],tasks_total:manage ? state.items.filter(i=>i.state==="REQUESTED").length : 0,
@@ -67,7 +75,8 @@ async function connect(page:Page,role:"global"|"member"|"manager"|"chief"="membe
     if(path.endsWith("/ff_request_vehicle")){
       const p=vehicleRequestSchema.parse(request.postDataJSON().input);
       const id=`d0600000-0000-4000-8000-${String(++state.next).padStart(12,"0")}`;
-      const item={...row(id,p.title),...p,own:true,state:p.kind==="block" ? "APPROVED" as const : "REQUESTED" as const};
+      const item={...row(id,p.title),...p,requester_name:p.requester_id===actor ? "Synthetic Vehicles" : "Synthetic applicant",
+        own:p.requester_id===actor,state:p.kind==="block" ? "APPROVED" as const : "REQUESTED" as const};
       state.items.push(item);
       state.notifications.push({id:id.replace("d060","f060"),event_id:id,recipient_id:actor,message:"Neue Reservierungsanfrage",created_at:now,read_at:null});
       return respond({id,conflicts:state.conflict ? [{id:null,title:"Verbindlich belegt",binding:true,starts_at:p.starts_at,ends_at:p.ends_at}] : []});
@@ -96,8 +105,7 @@ async function connect(page:Page,role:"global"|"member"|"manager"|"chief"="membe
   await page.getByLabel("Feuerwehr-E-Mail").fill(user.email);
   await page.getByLabel("Passwort",{exact:true}).fill("synthetic-not-a-real-password");
   await page.getByRole("button",{name:"Anmelden",exact:true}).click();
-  await page.getByRole("button",{name:"Gemeinsamer Kalender",exact:true}).click();
-  await page.getByRole("button",{name:"Fahrzeuge und Reservierungen öffnen"}).click();
+  await page.getByRole("button",{name:"Fahrzeugkalender",exact:true}).click();
   await expect(page.getByLabel("Fahrzeug auswählen")).toBeVisible();
   return state;
 }
@@ -121,6 +129,7 @@ test("assigned manager approves, opens canonical shared-calendar detail and canc
   await page.getByRole("button",{name:"Genehmigen",exact:true}).click();
   await expect(page.getByRole("dialog").getByText("✓ Genehmigt",{exact:true})).toBeVisible();
   await page.getByRole("button",{name:"Dialog schließen"}).click();
+  await page.getByRole("button",{name:"Gemeinsamer Kalender",exact:true}).click();
   await page.getByRole("button",{name:"Kalender aktualisieren",exact:true}).click();
   await page.locator(".calendar > .calendar-month .calendar-chip").filter({hasText:"Synthetic approval task"}).click();
   await page.getByRole("button",{name:"Reservierungsdetails öffnen",exact:true}).click();
@@ -195,4 +204,41 @@ test("FIRE_CHIEF sees vehicle availability without management controls",async({p
   await expect(page.getByRole("button",{name:"Fahrzeug bearbeiten",exact:true})).toHaveCount(0);
   await expect(page.getByRole("button",{name:"Fahrzeug sperren",exact:true})).toHaveCount(0);
   await expect(page.getByRole("button",{name:"Fahrzeug anlegen",exact:true})).toHaveCount(0);
+});
+for(const role of ["member","function"] as const)test(`${role} has a fixed own requester independent of responsibility`,async({page})=>{
+  const state=await connect(page,role);
+  await page.getByRole("button",{name:"Reservierung beantragen",exact:true}).click();
+  await expect(page.getByLabel("Antragsteller",{exact:true})).toHaveValue("Synthetic Vehicles");
+  await expect(page.getByLabel("Antragsteller",{exact:true})).toHaveAttribute("readonly","");
+  await page.getByRole("combobox",{name:"Verantwortliche Person",exact:true}).selectOption("a0600000-0000-4000-8000-000000000002");
+  await page.getByLabel("Zweck / Titel").fill("Distinct responsibility");
+  await page.getByRole("button",{name:"Anfrage absenden"}).click();
+  await expect(page.getByRole("dialog").getByText("◷ Angefragt",{exact:true})).toBeVisible();
+  expect(state.items[0].requester_id).toBe(actor);
+  expect(state.items[0].responsible_id).not.toBe(actor);
+});
+for(const role of ["global","chief","unit"] as const)test(`${role} selects an eligible requester without receiving new vehicle-manager rights`,async({page})=>{
+  const state=await connect(page,role);
+  await page.getByRole("button",{name:"Reservierung beantragen",exact:true}).click();
+  await expect(page.getByRole("combobox",{name:"Antragsteller",exact:true})).toHaveValue(actor);
+  await page.getByRole("combobox",{name:"Antragsteller",exact:true}).selectOption("a0600000-0000-4000-8000-000000000002");
+  await page.getByLabel("Zweck / Titel").fill("On behalf synthetic request");
+  await page.getByRole("button",{name:"Anfrage absenden"}).click();
+  await expect(page.getByRole("dialog").getByText("◷ Angefragt",{exact:true})).toBeVisible();
+  expect(state.items[0].actor_id).toBe(actor);
+  expect(state.items[0].requester_id).not.toBe(actor);
+  if(role!=="global")await expect(page.getByRole("button",{name:"Genehmigen",exact:true})).toHaveCount(0);
+});
+test("three equal sections preserve vehicle controls, URL deep link and browser back navigation",async({page})=>{
+  await connect(page);
+  const month=page.getByLabel("Fahrzeugmonat");
+  await month.fill("2027-02");
+  await page.getByRole("button",{name:"Dienstverwaltung",exact:true}).click();
+  await expect(month).toBeHidden();
+  await page.goBack();
+  await expect(month).toBeVisible();
+  await expect(month).toHaveValue("2027-02");
+  await expect(page).toHaveURL(/bereich=fahrzeuge/);
+  await page.reload();
+  await expect(page.getByLabel("Fahrzeug auswählen")).toBeVisible();
 });
