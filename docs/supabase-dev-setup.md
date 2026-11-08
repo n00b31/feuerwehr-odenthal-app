@@ -1,5 +1,39 @@
 # Supabase DEV – Verbindung, Authentifizierung und Freigabe
 
+## DEV 0.6.3 – Kontrollierte Installation von Migration 033
+
+Am 08.11.2026 über das reguläre `apply_migration` im verbundenen, vorher
+verifizierten DEV `orxinqhhbtjpkzwlfaxq` installiert:
+`ff_033_series_csv_planning`, registrierte Version `20261108220732`.
+Quelle: `20261108003300_series_csv_planning.sql`, geprüfter Commit
+`295dc23` und erfolgreicher PostgreSQL-/Upgrade-Lauf
+[42527496921](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42527496921).
+Quell-SHA256:
+`6dce4ce0f81b431df5cf410a4aaf5b26a02b609d6efa1f0b97567ef8d2fc519d`.
+
+Die Transaktion enthielt Vorher-/Nachher-Hashes aller bisherigen öffentlichen
+Tabellen, Auth-Konten und registrierten Fixtures; Abweichung hätte alles
+zurückgerollt. Neue Serienmetadaten wurden beim Altvergleich gezielt
+ausgenommen, nicht bestehende Werte. Unabhängige anschließende Read-only-Prüfung
+bestätigt die registrierte Migration; normalisierter Installations-SHA256
+`f23a6a6746ade070d02d461c96e8e93c9f5102dd9662a752bd0793a2d33672b8`
+stimmt mit dem tatsächlich ausgeführten, lokal vorbereiteten Paket überein.
+
+Unverändert: **9 Auth-Konten, 59 Profile, 67 Mitgliedschaftsintervalle,
+281 Termine, 2661 Rückmeldungen, 2685 Anwesenheitszeilen und 262
+Bestätigungen**. Beide historischen Fingerprints:
+`6fd6737be8dab684db406d63507b7989`. Weiterhin keine Serien, Ausnahmen oder
+Import-Bestätigungen im echten DEV: keine Testimporte/Konten/Mails erzeugt.
+Bestehende Rollen, Belegungen und Audit-Werte blieben durch die Hashprüfung
+erhalten. Keine Änderung der unabhängigen Demo.
+
+Neue öffentliche RPCs sind Security Definer mit leerem `search_path`,
+nur `authenticated`, nicht `anon`, ausführbar. Ausnahmetabelle hat RLS;
+direkte Client-Schreibrechte, Zugriff auf private Bestätigungen und Aufruf
+der privaten Planungsengine sind gesperrt. Bestehende Kalender-/Einzeltermin-
+APIs bleiben kompatibel; der Client wird erst nach manuellem PR-Merge
+veröffentlicht. [Format, Bedienung, Grenzen und offene reale Abnahme](dev-calendar.md#dev-063--serien-und-csv-verwalten).
+
 ## DEV 0.6.2 – Erfolgreiche manuelle Abnahme
 
 Am 08.11.2026 vom Projektverantwortlichen manuell bestätigt:

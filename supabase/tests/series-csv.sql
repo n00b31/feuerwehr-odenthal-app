@@ -177,6 +177,8 @@ select pg_temp.s_ok((select count(*)=2 from public.event_delegations where event
   and is_primary and revoked_at is null and user_id=pg_temp.s_user(2)),'each new instance has its own approved primary organizer delegation');
 select set_config('request.jwt.claim.sub',pg_temp.s_user(3)::text,true);
 set local role authenticated;
+select pg_temp.s_commit(jsonb_build_object('operation','series_create','request_id',gen_random_uuid(),
+  'data',pg_temp.s_data('Synthetic authorized unit admin',current_setting('s.a')::uuid),'rule',pg_temp.s_rule('2029-11-01',2)));
 select pg_temp.s_deny(format('select public.ff_preview_event_plan(%L::jsonb)',current_setting('s.csv')::jsonb||
   jsonb_build_object('rows',jsonb_build_array(pg_temp.s_data('Synthetic foreign',current_setting('s.b')::uuid)||
     jsonb_build_object('starts_at','2029-02-01T18:30:00Z','ends_at','2029-02-01T20:30:00Z')))));

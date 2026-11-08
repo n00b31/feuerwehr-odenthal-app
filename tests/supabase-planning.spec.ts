@@ -12,6 +12,16 @@ async function connect(page:Page,role:"global"|"unit"|"member"="global"){
     previews:[] as PlanRequest[],commits:[] as PlanRequest[],deny:false,stale:false};
   const global=role==="global",admin=role!=="member";
   const units=[{id:unit,name:"Scheuren",manageable:admin},{id:foreign,name:"Blecher",manageable:global}];
+  const selected=(input:PlanRequest)=>state.events.filter(e=>e.series_id===input.series_id && (
+    input.selection==="all" || input.selection==="single" && e.id===input.anchor_id ||
+    input.selection==="following" && e.instance_number>=(state.events.find(a=>a.id===input.anchor_id)?.instance_number ?? 100)));
+  const proposed=(input:PlanRequest)=>{
+    if(input.rows)return input.rows;
+    const entries=input.operation==="series_update" ? selected(input) : null;
+    const dates=seriesDates({...input.rule!,...(entries ? {count:entries.length,end_date:null,
+      ...(input.selection==="single" ? {frequency:"daily" as const} : {})} : {})});
+    return dates.map(date=>({...input.data!,...date,response_deadline:null}));
+  };
   const user={id:actor,aud:"authenticated",role:"authenticated",email:"synthetic.planning@feuerwehr-odenthal.de",
     email_confirmed_at:now,created_at:now,app_metadata:{provider:"email",providers:["email"]},
     user_metadata:{display_name:"Synthetic Planning"}};
@@ -34,12 +44,18 @@ async function connect(page:Page,role:"global"|"unit"|"member"="global"){
         attendance_state:"NOT_STARTED",own_attendance:null,in_roster:true,own_response:null,participants:admin ? [] : null}))});
     if(pathname.endsWith("/ff_event_planning_context"))return respond({actor_id:actor,actor_name:"Synthetic Planning",server_now:now,
       units,functions:[],organization:global,organizers:[{id:actor,name:"Synthetic Planning",unit_ids:[unit],function_ids:[]}]});
+    if(pathname.endsWith("/ff_series_workspace")){
+      const anchor=state.events.find(e=>e.id===request.postDataJSON().target_event)!;
+      return respond({series:{id:seriesId,title:"Synthetic fortnightly",frequency:"biweekly",occurrence_count:3,
+        rule:state.previews.find(p=>p.operation==="series_create")!.rule,revision:0,ended_on:null},anchor,
+        instances:state.events.map(e=>({...e,status:"scheduled",protected:false,exception:false}))});
+    }
     if(pathname.endsWith("/ff_preview_event_plan")){
       const input:PlanRequest=request.postDataJSON().input;state.previews.push(input);
-      const rows=input.rows ?? seriesDates(input.rule!).map(date=>({...input.data!,...date,response_deadline:null}));
-      const duplicates=rows.map(e=>state.events.some(x=>x.title===e.title && x.starts_at===e.starts_at));
+      const rows=proposed(input),entries=input.operation==="series_update" ? selected(input) : [];
+      const duplicates=rows.map(e=>state.events.some(x=>!entries.some(a=>a.id===x.id) && x.title===e.title && x.starts_at===e.starts_at));
       return respond({token:"a".repeat(64),can_commit:!duplicates.some(Boolean),protected_count:0,response_count:0,
-        duplicate_count:duplicates.filter(Boolean).length,rows:rows.map((e,i)=>({...e,event_id:null,scope_name:"Scheuren",duplicate:duplicates[i]}))});
+        duplicate_count:duplicates.filter(Boolean).length,rows:rows.map((e,i)=>({...e,event_id:entries[i]?.id ?? null,scope_name:"Scheuren",duplicate:duplicates[i]}))});
     }
     if(pathname.endsWith("/ff_commit_event_plan")){
       const {input,expected_token,confirmed}=request.postDataJSON();
@@ -47,7 +63,11 @@ async function connect(page:Page,role:"global"|"unit"|"member"="global"){
       if(state.deny || !admin)return respond({code:"42501",message:"Synthetic permission revoked"},403);
       if(state.stale)return respond({code:"40001",message:"Vorschau zwischenzeitlich geändert. Erneut prüfen und bestätigen."},409);
       state.commits.push(input);
-      const rows:PlannedEvent[]=input.rows ?? seriesDates(input.rule).map(date=>({...input.data,...date,response_deadline:null}));
+      const rows:PlannedEvent[]=proposed(input);
+      if(input.operation==="series_update"){
+        const entries=selected(input);entries.forEach((e,i)=>Object.assign(e,rows[i]));
+        return respond({event_ids:entries.map(e=>e.id),series_id:seriesId,count:entries.length,replayed:false});
+      }
       const events=rows.map((e,i)=>({...e,id:`e0631000-0000-4000-8000-${String(state.events.length+i+1).padStart(12,"0")}`,
         series_id:input.operation==="series_create" ? seriesId : null,instance_number:i+1}));
       state.events.push(...events);
@@ -133,6 +153,32 @@ test("changed draft discards confirmation; stale or revoked permissions never sh
   await dialog.getByRole("button",{name:"Änderungen bestätigen"}).click();
   await expect(dialog.getByRole("alert")).toContainText("Synthetic permission revoked");
   expect(state.commits).toHaveLength(0);
+});
+test("series management previews single, following and all selections and edits the original ID",async({page})=>{
+  const state=await connect(page),create=await fillSeries(page);
+  await create.getByRole("button",{name:"Vorschau prüfen"}).click();
+  await create.getByLabel(confirmation).check();
+  await create.getByRole("button",{name:"Änderungen bestätigen"}).click();
+  await expect(create.getByRole("status").filter({hasText:"3 Termine gespeichert"})).toBeVisible();
+  await create.getByRole("button",{name:"Ergebnis schließen"}).click();
+  const ids=state.events.map(e=>e.id);
+  await page.getByRole("button",{name:"Serie verwalten",exact:true}).nth(1).click();
+  const dialog=page.getByRole("dialog",{name:"Terminserie verwalten"});
+  for(const [selection,count] of [["single",1],["following",2],["all",3]] as const){
+    await dialog.getByLabel("Änderungsbereich").selectOption(selection);
+    await dialog.getByRole("button",{name:"Vorschau prüfen"}).click();
+    await expect(dialog.getByRole("region",{name:"Servervorschau"}).locator("tbody tr")).toHaveCount(count);
+    expect(state.previews.at(-1)?.selection).toBe(selection);
+  }
+  await dialog.getByLabel("Änderungsbereich").selectOption("single");
+  await dialog.getByLabel("Titel",{exact:true}).fill("Synthetic moved instance");
+  await dialog.getByLabel("Startdatum",{exact:true}).fill("2027-05-01");
+  await dialog.getByRole("button",{name:"Vorschau prüfen"}).click();
+  await dialog.getByLabel(confirmation).check();
+  await dialog.getByRole("button",{name:"Änderungen bestätigen"}).click();
+  await expect(dialog.getByRole("status").filter({hasText:"1 Termine verarbeitet"})).toBeVisible();
+  expect(state.events.map(e=>e.id)).toEqual(ids);
+  expect(state.events.map(e=>e.title)).toEqual(["Synthetic fortnightly","Synthetic moved instance","Synthetic fortnightly"]);
 });
 test("member has no planning controls and scoped administrator receives only eligible choices",async({page})=>{
   await connect(page,"member");
