@@ -69,14 +69,20 @@ async function main() {
     const calendar = await readCalendar(client, range, emptyCalendarFilters);
     assert(!calendar.context.organization && !calendar.context.configure, "Member/unit calendar gained technical or organization privileges.");
     assert.deepEqual(calendar.context.manageable_units.map((u)=>u.id).sort(), context.units.map((u)=>u.id).sort());
-    stage = "actual own fire-station context and resource SELECT/RLS";
-    assert.equal(calendar.context.resources.length,1,"Existing member/unit account must see its own fire station.");
-    assert(calendar.context.resources.every(r=>r.resource_type==="building" && r.active && r.unit_id===access.unit_id));
+    stage = "actual authorized fire-station context and resource SELECT/RLS";
+    const memberships=await client.from("unit_memberships").select("unit_id,valid_from,valid_until").eq("user_id",access.user_id);
+    assert(!memberships.error,"Live own membership query failed.");
+    const current=z.array(z.object({unit_id:z.uuid(),valid_from:z.string(),valid_until:z.string().nullable()})).parse(memberships.data)
+      .filter(m=>Date.parse(m.valid_from)<=Date.parse(calendar.server_now)
+        && (m.valid_until===null || Date.parse(m.valid_until)>Date.parse(calendar.server_now)));
+    const permittedUnits=new Set([...current.map(m=>m.unit_id),...calendar.context.manageable_units.map(u=>u.id)]);
+    assert.equal(calendar.context.resources.length,permittedUnits.size,"Resource scope must match current memberships and scoped unit roles.");
+    assert(calendar.context.resources.every(r=>r.resource_type==="building" && r.active && r.unit_id!==null && permittedUnits.has(r.unit_id)));
     const resources=await client.from("calendar_resources").select("id,unit_id,resource_type,active");
     assert(!resources.error,"Live resource RLS query failed.");
     const houses=z.array(z.object({id:z.uuid(),unit_id:z.uuid(),resource_type:z.literal("building"),active:z.literal(true)})).parse(resources.data);
     assert.deepEqual(houses.map(r=>r.id).sort(),calendar.context.resources.map(r=>r.id).sort(),"Direct resource RLS differs from calendar context.");
-    assert(houses.every(r=>r.unit_id===access.unit_id),"Foreign fire station leaked through resource RLS.");
+    assert(houses.every(r=>permittedUnits.has(r.unit_id)),"Unauthorized fire station leaked through resource RLS.");
     assert(new Set(calendar.events.map((e)=>e.id)).size===calendar.events.length, "Calendar returned duplicate identities.");
     const legacy = z.array(z.object({ id:z.uuid(), starts_at:z.string(), ends_at:z.string() })).parse(events.data.events);
     for (const event of legacy.filter((e)=>Date.parse(e.starts_at)<Date.parse(range.upper_bound)
