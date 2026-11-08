@@ -1,5 +1,12 @@
 # Supabase DEV – Verbindung, Authentifizierung und Freigabe
 
+**DEV 0.5:** Additive Kalender-Migrationen 018/019 sind am 08.11.2026
+kontrolliert im bestehenden DEV angewendet. Gemeinsame Terminquelle,
+Informations-/Gerätehauseinträge, Bereichs-RLS, Quellenprüfsummen,
+Bestandserhaltung, tatsächliche Tests und offene manuelle Abnahme:
+[DEV-Kalender](dev-calendar.md). Ein Feature-PR veröffentlicht noch keine neue
+Pages-Version; die Kalenderabnahme nach Benutzermerge bleibt separat erforderlich.
+
 **DEV 0.4.1:** Die aktuelle Einheit heißt **Scherf**, nicht Odenthal. Ihre
 Identität und die Konten von Peter/Sarah bleiben unverändert. Migration 014
 korrigiert die Stammdaten; historische Nachweise unten bleiben nachvollziehbar.
