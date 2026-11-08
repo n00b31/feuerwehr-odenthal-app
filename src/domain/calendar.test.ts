@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createClient } from "@supabase/supabase-js";
 import { readCalendar } from "../data/supabase-calendar";
-import { calendarRange,moveCalendar,calendarPayload,calendarInterval,eventsOnDay,weekPlacement,weekColumns,emptyCalendarFilters,type CalendarDraft,type CalendarEvent } from "./calendar";
+import { calendarRange,moveCalendar,calendarPayload,calendarInterval,eventsOnDay,weekPlacement,weekColumns,emptyCalendarFilters,
+  calendarBookingResources,preferredCalendarResource,type CalendarContext,type CalendarDraft,type CalendarEvent } from "./calendar";
 
 test("month grids are 42 Monday-based days including adjacent month events",() => {
   const range=calendarRange("2026-11-07","month");
@@ -83,4 +84,24 @@ test("calendar SDK requests contain only RPC parameters, not view metadata, on e
   assert.equal(requests[0].after_id,null);
   assert.equal(requests[1].after_id,fixture.id);
   assert.equal(requests[1].after_start,fixture.starts_at);
+});
+test("building choices respect the selected unit and exclude inactive resources and other types",()=>{
+  const own="11000000-0000-4000-8000-000000000001",foreign="11000000-0000-4000-8000-000000000002";
+  const building={id:"21000000-0000-4000-8000-000000000001",name:"Gerätehaus Scheuren",
+    resource_type:"building" as const,unit_id:own,active:true,revision:0};
+  const context:CalendarContext={organization:false,configure:false,units:[],manageable_units:[],functions:[],
+    categories:[],organizers:[],resources:[building,{...building,id:foreign,unit_id:foreign},
+      {...building,id:"21000000-0000-4000-8000-000000000003",unit_id:null},
+      {...building,id:"21000000-0000-4000-8000-000000000004",active:false},
+      {...building,id:"21000000-0000-4000-8000-000000000005",resource_type:"room"}]};
+  const scope={scope_kind:"unit" as const,unit_id:own};
+  assert.deepEqual(calendarBookingResources(context,scope).map(r=>r.id),[building.id,"21000000-0000-4000-8000-000000000003"]);
+  assert.equal(calendarBookingResources({...context,configure:true},scope).length,3);
+  assert.equal(calendarBookingResources({...context,organization:true},{scope_kind:"organization",unit_id:""}).length,3);
+});
+test("own building is preferred over list order; empty authorized choices do not invent a resource",()=>{
+  const resources=[1,2,3].map(i=>({id:`21000000-0000-4000-8000-00000000000${i}`,name:`Gerätehaus ${i}`,
+    resource_type:"building" as const,unit_id:`11000000-0000-4000-8000-00000000000${i}`,active:true,revision:0}));
+  assert.equal(preferredCalendarResource(resources,resources[2].unit_id)?.id,resources[2].id);
+  assert.equal(preferredCalendarResource([],resources[2].unit_id),undefined);
 });
