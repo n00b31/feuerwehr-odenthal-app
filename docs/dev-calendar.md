@@ -137,6 +137,13 @@ und Berichte. Typprüfung, Lint und statischer DEV-Build bestanden.
 Zusätzlich alle 19 lokalen Demo-Regressionsfälle und der gesperrte
 DEV-Konfigurationsfall erfolgreich; die unabhängige Demo wurde nicht
 verändert oder neu veröffentlicht.
+Echter DEV-Export mit ausschließlich den öffentlichen Repository-Variablen
+bestand am 08.11.2026 für Commit
+`654a4e66d4461fac5e6810b7e4d63018bbea9c0b`: DEV 0.6.3,
+`sourceDirty: false`, korrekter BasePath, keine geheimen Schlüsselwerte oder
+synthetischen CI-Konfigurationen im Ausgabeordner. Die finale PR-CI prüft
+die vollständigen 70 verschiedenen DEV-Browserfälle und den ergänzten
+positiven UNIT_ADMIN-SQL-Fall erneut.
 
 Migration 033 wurde danach regulär und mit transaktionalen Altdaten-Guards
 im echten DEV installiert. Keine realen Testimporte, Konten oder Mails;
