@@ -24,6 +24,7 @@ export const devEventSchema = z.object({
   starts_at: z.iso.datetime({ offset: true }), ends_at: z.iso.datetime({ offset: true }), location: z.string(),
   status: z.enum(["scheduled", "cancelled"]),
   unit_id: z.uuid().nullable(), series_id: z.uuid().nullable(),
+  series_exception: z.boolean().default(false),
   response_deadline: z.iso.datetime({ offset: true }).nullable(),
   revision: z.number().int().nonnegative(), scope_name: z.string(),
   can_manage: z.boolean(), can_lead: z.boolean(), in_roster: z.boolean(),

@@ -1,12 +1,12 @@
 # Feuerwehr Odenthal · Supabase DEV und lokale Regression
 
-**DEV 0.6 (Feature-Branch):** [Fahrzeuge, eigene Kalender, Reservierungsanfragen,
-Genehmigungen, Sperrungen und interne Benachrichtigungen](docs/dev-vehicles.md).
-Die geprüften Migrationen 021–024 und vier ausdrücklich synthetische Fahrzeuge
-mit fünf Beispielvorgängen sind im bestehenden DEV eingerichtet. Neue
-verbindliche Buchungen werden transaktional gegen Überschneidungen geschützt.
-Die Fahrzeug-UI wird erst nach dem manuellen PR-Merge veröffentlicht;
-die laufende DEV 0.5.1 bleibt durch getrennte, verhandelte Kalender-RPCs kompatibel.
+**DEV 0.6.3 (Feature-Branch):** [Terminserien und bestätigter CSV-Import](docs/dev-calendar.md#dev-063--serien-und-csv-verwalten)
+ergänzen die bestehende zentrale Dienstverwaltung. Berlin-Wiederholungen,
+Einzel-/Folge-/Gesamtänderungen, geschützte historische Instanzen und
+Excel-kompatible Vorlage; keine Speicherung bei Upload oder Vorschau.
+Grenzen: 52 Serieninstanzen, 200 CSV-Zeilen/512 KiB und fünf Jahre.
+Der öffentliche Client bleibt bis zum manuellen Merge bei der abgenommenen
+DEV 0.6.2. Keine Veröffentlichung des Feature-Branches oder Änderung der Demo.
 
 **Abgenommene DEV 0.5.1:** [Gemeinsamer Kalender, Gerätehaus-Stammdaten und berechtigte Belegung](docs/dev-calendar.md),
 gesichert mit `v0.5.1-calendar-dev`.
@@ -30,7 +30,7 @@ Mobile-first Mitgliederportal mit **Next.js App Router, React, TypeScript und Ta
 
 GitHub Pages stellt weiterhin ausschließlich statisches HTML/JavaScript bereit. DEV spricht Supabase Auth/Data API direkt an; RLS und RPCs schützen die Daten im Backend. Standardmodus `supabase-dev`: bei fehlenden Variablen gesperrter Einrichtungshinweis, niemals Rückfall auf Demo-Personen. Die öffentliche DEV-Seite ändert sich durch einen PR nicht. Das separate Demo-Repository bleibt ohne Supabase/Anmeldung lauffähig und wird hier weder gebaut noch verändert.
 
-**DEV 0.6.2 – Hotfix-Branch:** Zusätzlicher transaktionaler Fahrzeug-Doppelbuchungsschutz, explizite und berechtigungsgeprüfte Antragsteller, direkte Fahrzeugnavigation, dynamische zukünftige Teilnehmerkreise und eingefrorene Anwesenheitshistorie. Mitgliederfilter/-sortierung und einheitliche persönliche Rückmeldungsfarben sind integriert. Migrationen 026–032 wurden nach erfolgreicher PostgreSQL-/Upgrade-Prüfung atomar im DEV installiert; ursprüngliche Daten und historische Berichte sind unverändert. Der öffentliche Client bleibt bis zum manuellen Merge DEV 0.6.1; reale Abnahme noch offen. [Fahrzeuge, Reservierung und Installationsnachweis](docs/dev-vehicles.md), [Mitgliedschaften und Kalender](docs/dev-calendar.md).
+**DEV 0.6.2 – manuell abgenommen und veröffentlicht:** Fahrzeug-Doppelbuchungsschutz, Antragstellerrechte, Navigation, dynamische Mitgliedschaften, Mitgliederfilter/-sortierung, Rückmeldungsfarben und Stornierung wurden vom Projektverantwortlichen bestätigt. Migrationen 026–032 sind im DEV installiert. Gesicherter annotierter Tag `v0.6.2-vehicles-memberships-dev` auf `84037cf3fc5d2281d2493ccf9b3b7571cef9c3c7`; Bestätigung am 08.11.2026, native PWA-Gerätetests weiterhin offen. [Abnahme und Installationsnachweis](docs/dev-vehicles.md#dev-062--erfolgreiche-manuelle-abnahme), [Mitgliedschaften und Kalender](docs/dev-calendar.md).
 
 **DEV 0.6.1 – Auth-Hotfix:** Registrierung mit exakter Passwortbestätigung und sichere eigene Wiederherstellung; GLOBAL_ADMIN kann einen Link an die schon verifizierte Adresse eines bestehenden Kontos anfordern. Gemeinsamer serverseitiger Versandpfad mit atomaren konservativen Reservierungen und Audit, serververwaltetes PKCE auch für einen anderen Empfängerbrowser. Der integrierte DEV-Versand bleibt eingeschränkt; direkte Auth-API-Aufrufe umgehen die zusätzlichen App-Grenzen. Keine temporären Passwörter, keine Freigabe-/Rollenänderung und keine Geheimnisse im Pages-Build. [Sicherheitsplan, Grenzen und Abnahme](docs/auth-password-recovery.md).
 

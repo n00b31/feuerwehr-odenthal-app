@@ -1,9 +1,179 @@
-# DEV 0.5: gemeinsamer Feuerwehrkalender
+# DEV: Feuerwehrkalender, Terminserien und CSV-Import
+
+## DEV 0.6.3 – Implementierungsplan
+
+1. Bestehende `events`/`event_series`, dynamische Mitgliedschaften und
+   Teilnahme-/Anwesenheits-RPCs weiterverwenden. Serieninstanzen behalten eigene
+   IDs. Neue Verwaltung ergänzt Vorschau/Bestätigung, keine zweite Terminquelle.
+2. Vorhandene Grenze von 52 Serieninstanzen pro Vorgang beibehalten;
+   maximal fünf Jahre Planungshorizont, CSV maximal 200 Termine/512 KiB.
+   Berlin-Ortszeiten explizit prüfen, nicht existierende Zeiten ablehnen,
+   doppelte Herbststunden wie bisher auf die frühere Ausprägung abbilden.
+3. Einheit/Funktion/Organisation bleiben exklusive bestehende Bereiche.
+   Keine Rechte für MEMBER oder bloße FIRE_CHIEF-Rolle erweitern.
+   Alle Vorschläge serverseitig erneut prüfen; atomare, wiederholbare
+   Bestätigung mit Duplikat-/Stale-Prüfung und Audit.
+4. Einzel-/Folge-/Gesamtserienänderungen erhalten IDs und rohe Antworten.
+   Begonnene oder eingefrorene Instanzen bleiben unverändert.
+   Bedeutungsänderungen zeigen Antwortinvalidierung vor Bestätigung an;
+   individuelle Ausnahmen bleiben bei gewöhnlicher Serienänderung geschützt.
+5. UTF-8-Semikolon-CSV mit deutschen/ISO-Daten, quotierten Feldern,
+   kommentierter Excel-Vorlage und zeilenbezogener Fehleranzeige.
+   Kein Schreiben bei Dateiauswahl oder Vorschau; keine stillen Teilimporte.
+6. Bestehende und neue Fach-/Browser-/SQL-/Konkurrenz-/Upgradeprüfungen
+   vor kontrollierter DEV-Migration und PR ohne automatischen Merge ausführen.
+
+## DEV 0.6.3 – Serien und CSV verwalten
+
+`events` bleibt die einzige Terminquelle; jede Instanz hat eigene ID,
+Serien-ID/Instanznummer, Antworten, Anwesenheitszustand und Dienstleitung.
+Der gemeinsame Kalender liest dieselben IDs. Migration
+`20261108003300_series_csv_planning.sql` ergänzt Regeln/Revision/Enddatum an
+`event_series`, eine RLS-geschützte Ausnahmetabelle und private
+Bestätigungsidentitäten; keine historischen Termine werden ersetzt.
+
+Täglich, wöchentlich, zwei-/dreiwöchentlich, benutzerdefinierter Wochenabstand
+und monatlich mit Monatstag oder erstem bis fünftem Wochentag sind möglich.
+Monatsende wird am ursprünglichen Anker begrenzt; fehlende fünfte Wochentage
+werden übersprungen. Berlin-Ortszeiten bleiben über Sommer-/Winterzeit
+gleich; nicht existierende Uhrzeiten werden abgewiesen und die wiederholte
+Herbststunde verwendet die frühere Ausprägung. Anzahl und/oder inklusives
+Enddatum begrenzen die Serie; maximal 52 Instanzen innerhalb von fünf Jahren.
+
+„Serie verwalten“ erlaubt einzelne, folgende oder alle zulässigen Instanzen.
+„Folgende“ verwendet die ursprüngliche Instanznummer, auch nach einer
+Einzelverschiebung. Begonnene, abgesagte oder eingefrorene Termine sowie
+Kalender-/Reservierungsergänzungen werden nicht automatisch bearbeitet.
+Individuelle Ausnahmen bleiben bei gewöhnlichen Sammeländerungen geschützt.
+Absagen/Beenden berücksichtigen dagegen noch zulässige zukünftige Ausnahmen;
+ein Absagegrund ist Pflicht. Beenden sagt Termine **nach** dem gewählten
+inklusiven Datum ab. Nichts wird gelöscht.
+
+Vor Bestätigung wird die Zahl zu invalidierender Rückmeldungen angezeigt.
+Ursprüngliche Antwort und Zeitpunkt bleiben erhalten; danach ist eine neue
+Antwort erforderlich. Die bestehenden dynamischen Mitgliedschaften,
+Mehrfachmitgliedschaften, Beginns-/Fristsperren und eingefrorenen
+Anwesenheitslisten bleiben maßgeblich. Bestehende aktuelle primäre Delegation
+wird in der Planung als wirksamer Organisator berücksichtigt.
+
+### Format und Ablauf des CSV-Imports
+
+UTF-8 mit optionalem BOM, Semikolon, genau diese zehn Spalten:
+
+```text
+Datum;Beginn;Ende;Titel;Beschreibung;Ort;Einheit;Terminart;Sonderfunktion;Organisator
+```
+
+Datum `TT.MM.JJJJ` oder `JJJJ-MM-TT`, Zeit `HH:mm`; ein früheres Ende bedeutet
+Folgetag, gleiche Uhrzeiten sind ungültig. Pflicht: Datum, Beginn, Ende,
+Titel, Ort, Terminart und genau Einheit **oder** Sonderfunktion.
+Beschreibung und Organisator sind beim CSV optional. Organisator leer:
+angemeldeter Benutzer; ansonsten eindeutiger, aktuell berechtigter Name.
+Einheits-/Funktionsnamen kommen aus dem Backend, keine festen IDs.
+Funktionsdienste gelten funktionsweit; `Alle Einheiten` bezeichnet einen
+organisationsweiten Dienst und erfordert globale Verwaltung.
+
+Terminarten: `regular`, `special`, `breathing`, `training`, `community`, `other`
+oder die in der Vorlage aufgeführten deutschen Bezeichnungen.
+Quotierte Semikolons, Zeilenumbrüche, doppelte Anführungszeichen und
+Kommentarzeilen mit `#` werden unterstützt. Vorlage: BOM, CRLF, Semikolon,
+gekennzeichnete fiktive Beispielzeile und Hinweise zu zulässigen Bereichen.
+In Excel ausdrücklich als UTF-8-Semikolon-CSV speichern.
+
+Dateiauswahl zeigt erkannte/gültige/fehlerhafte Zeilen, unbekannte Bereiche,
+Pflichtfeld-/Zeitfehler und dateiinterne Duplikate. **Upload und Vorschau
+schreiben keine Termine.** Danach prüft die Servervorschau Rechte und bereits
+vorhandene Termine. Erst Kontrollkästchen und Bestätigung legen alles atomar
+an; kein Teilimport. Entwurfänderung verwirft Vorschau und Bestätigung.
+Veraltete Vorschau oder entzogene Rechte zeigen einen Fehler, keinen Erfolg.
+
+### Serverprüfung und Grenzen
+
+`ff_event_planning_context`, `ff_series_workspace`, `ff_preview_event_plan`
+und `ff_commit_event_plan` prüfen tatsächliche Auth-/Bereichsrechte.
+UNIT_ADMIN: eigene berechtigte Einheiten; FUNCTION_ADMIN: zugewiesene
+Funktionen; GLOBAL_ADMIN: alle Bereiche. MEMBER und bloße FIRE_CHIEF-Rolle
+dürfen weder importieren noch Serien administrieren.
+Direkte Schreibrechte werden nicht erweitert; private Engine/Bestätigungen
+sind nicht als Client-API zugänglich.
+
+Duplikatschlüssel: Bereich/Einheits-/Funktions-ID, Beginn, Ende und
+normalisierter Titel. Auch wiederholte Dateien und abgesagte normale
+Dienste werden erkannt; nicht stillschweigend erneut angelegt.
+Mitgliedschafts-/Planungsmutex, Serien-/Zeilensperren, erneute Validierung
+und actor-/zustandsgebundener Vorschauhash schützen Bestätigung.
+Identische Vorgangs-ID ist wiederholbar ohne zweite Anlage; abweichende
+Anfrage unter gleicher ID wird abgewiesen. Pro Instanz und Batch entsteht
+Audit, ohne Passwörter, Reset-Token oder privilegierte Browser-Schlüssel.
+
+Maximal 200 Zeilen/512 KiB Datei; auch der strukturierte Servervorgang ist
+auf 512 KiB begrenzt. Kalender/Dienstlisten bleiben paginiert.
+Änderungen planen vorhandene zulässige Slots neu: keine automatische
+Verlängerung durch neue Instanzen und keine Wiederbelebung abgesagter Termine.
+Neue weitere Pläne sind separate, erneut begrenzte Vorgänge.
+Excel, reale autorisierte DEV-Konten und native installierte PWAs benötigen
+weiterhin ausdrückliche manuelle Abnahme; synthetische Tests ersetzen sie nicht.
+
+### Automatisierter Nachweis und Installation
+
+151 Fach-/Auth-/Konfigurationstests und 17 Script-/Release-/Worker-Tests
+erfolgreich, darunter 28 neue Serien-/CSV-Fachtests. Alle bisherigen 64
+DEV-Browserregressionen und fünf erste Planungsszenarien bestanden gemeinsam
+(69/69); der zusätzliche Einzel-/Folge-/Gesamtverwaltungsfall bestand im
+abschließenden Planungslauf mit allen sechs Szenarien (6/6).
+Browserdaten/Auth-Endpunkte sind ausdrücklich synthetisch abgefangen:
+keine echte Anmeldung, Mail oder RLS-Abnahme behauptet.
+
+Echtes PostgreSQL 17:
+[42527496921](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42527496921)
+besteht alle vorhandenen SQL-/RLS-/Fachtests, neue Serien-/CSV-Prüfungen,
+vorherigen Fahrzeug-/Anwesenheits-/Recovery-Konkurrenzschutz und tatsächliche
+überlappende CSV-Bestätigungen. Zweite Verbindung wartet; nur eine Anlage,
+zweite veraltete Vorschau abgewiesen, identische Wiederholung ohne Duplikat.
+Erzwungener Fehler nach erster Importzeile rollt Termine, Audit und
+Bestätigungsidentität zurück. Beide Upgrade-Pfade 0.6.1→0.6.2 und
+0.6.2→0.6.3 erhalten vollständige Altwerte, Serien, historische Fingerprints
+und Berichte. Typprüfung, Lint und statischer DEV-Build bestanden.
+Zusätzlich alle 19 lokalen Demo-Regressionsfälle und der gesperrte
+DEV-Konfigurationsfall erfolgreich; die unabhängige Demo wurde nicht
+verändert oder neu veröffentlicht.
+Echter DEV-Export mit ausschließlich den öffentlichen Repository-Variablen
+bestand am 08.11.2026 für Commit
+`654a4e66d4461fac5e6810b7e4d63018bbea9c0b`: DEV 0.6.3,
+`sourceDirty: false`, korrekter BasePath, keine geheimen Schlüsselwerte oder
+synthetischen CI-Konfigurationen im Ausgabeordner. Die finale PR-CI prüft
+die vollständigen 70 verschiedenen DEV-Browserfälle und den ergänzten
+positiven UNIT_ADMIN-SQL-Fall erneut.
+
+Migration 033 wurde danach regulär und mit transaktionalen Altdaten-Guards
+im echten DEV installiert. Keine realen Testimporte, Konten oder Mails;
+alle ursprünglichen Zeilenzahlen/Fingerprints unverändert.
+Der [Installationsnachweis](supabase-dev-setup.md#dev-063--kontrollierte-installation-von-migration-033)
+enthält registrierte Version, Quell-/Installations-Hashes und Rechteprüfung.
+
+### Vorbereitung der realen DEV-0.6.3-Abnahme
+
+Nach manuellem PR-Merge und erfolgreichem Main-Deployment:
+
+1. GLOBAL_ADMIN: zweiwöchentliches Jahr planen, Berlin-Vorschau prüfen und
+   bestätigen; mehrere unabhängige IDs/Teilnahmeantworten im Kalender prüfen.
+2. Einzeltermin verschieben, folgende Termine ändern, abgeschlossenen
+   Dienst/Snapshot/Jahresbericht unverändert prüfen; Einzeltermin absagen.
+3. Vorlage in Excel bearbeiten, ungültige Zeile und korrigierte CSV prüfen.
+   Vor Bestätigung dürfen keine Termine entstehen; nach Import genau einmal.
+   Wiederholter Upload muss Duplikate anzeigen.
+4. MEMBER ohne Planungsaktionen; UNIT_ADMIN nur eigener Bereich,
+   FUNCTION_ADMIN eigene Funktion; GLOBAL_ADMIN alle Bereiche.
+5. Einzeltermin, Rückmeldung, Anwesenheitsabschluss, Dienstbuch,
+   Fahrzeugreservierung und Gerätehausbelegung unverändert bedienen.
+6. Native iPhone-/Android-PWA und bewusst bestätigtes Versionsupdate testen.
+
+Ergebnisse sind noch nicht als reale DEV-0.6.3-Abnahme bestätigt.
 
 ## DEV 0.6.2: dynamische Zuordnung und persönliche Rückmeldungen
 
-**Backend nach erfolgreicher PostgreSQL-/Upgrade-Prüfung kontrolliert im DEV
-installiert; Frontend-Veröffentlichung und reale Abnahme stehen aus.**
+**DEV 0.6.2 veröffentlicht; die unten aufgeführten Browserergebnisse sind
+vom Projektverantwortlichen manuell bestätigt.**
 Der [Installations- und Prüfnachweis](dev-vehicles.md#kontrollierte-installation-und-prüfnachweis-am-08112026)
 dokumentiert unveränderte Altdaten und historische Berichte.
 Migrationen 028–032 ergänzen Mehrfachmitgliedschaften und die neue
@@ -43,11 +213,26 @@ Dashboard, Dienstübersicht, Details und Teilnahmeeinträge im gemeinsamen
 Kalender verwenden dieselbe Darstellung in Light und Dark Mode.
 Terminabsage und tatsächliche Anwesenheit bleiben davon getrennte Zustände.
 
-Manuell noch abzunehmen: Aufnahme nach Terminerstellung, Einheitswechsel,
-Mehrfachmitgliedschaft, Funktionswechsel, unabhängige Serieninstanzen,
-feste Einladungen, ungültige alte Rückmeldungen sowie unveränderte
-abgeschlossene Listen und Jahresberichte nach einem späteren Wechsel.
-Die bisherige manuelle DEV-0.5.1-Abnahme unten ist davon unabhängig.
+### DEV 0.6.2 – Erfolgreiche manuelle Abnahme
+
+Mit dem Auftrag vom 08.11.2026 manuell bestätigt: Navigation aller drei
+Terminbereiche; relevante zukünftige Termine für neue Mitglieder und nach
+Einheitswechsel bei erhaltener Anwesenheitshistorie; Einheitsfilter,
+alphabetische Sortierung und deduplizierte Mehrfachmitgliedschaften;
+grüne/rote/gelbe/neutrale Rückmeldungsfarben. Fahrzeugreservierungen,
+Antragstellerrechte, Doppelbuchungsschutz und begründete Stornierung mit
+Freigabe des Zeitraums wurden ebenfalls bestätigt.
+
+Abgenommener Commit: `84037cf3fc5d2281d2493ccf9b3b7571cef9c3c7`.
+Tag: `v0.6.2-vehicles-memberships-dev`. Veröffentlicht: DEV 0.6.2,
+Pages-Lauf `42515134524`, Deployment `7640714241`.
+Der [vollständige manuelle Nachweis](dev-vehicles.md#dev-062--erfolgreiche-manuelle-abnahme)
+enthält die sechs Testergebnisse, Bestätigungsdatum, PWA-Build-ID und offene
+native iPhone-/Android-PWA-Gerätetests.
+
+Nicht zusätzlich behauptet: gesonderte reale Tests für Funktionswechsel,
+feste Einladungen, ungültige alte Antworten und alle speziellen
+Jahresberichts-/Serienfälle. Die DEV-0.5.1-Abnahme unten bleibt unabhängig.
 
 ## DEV 0.5.1 – Erfolgreiche manuelle Abnahme
 

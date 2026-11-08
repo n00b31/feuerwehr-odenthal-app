@@ -19,15 +19,17 @@ import { defaultEventList, monthLabel, monthKeySchema, type EventListQuery } fro
 import { SupabaseCalendar } from "./supabase-calendar";
 import { SupabaseVehicles } from "./supabase-vehicles";
 import { AppDialogVisibility } from "./app-dialog";
+import {SupabasePlanning,type PlanningAction} from "./supabase-planning";
 
 export type EventEditorState = { id?: string; revision: number; draft: DevEventDraft };
 const responses: [DevResponse, string][] = [["yes", "Ich komme"], ["no", "Ich kann nicht"], ["maybe", "Vielleicht"]];
 const responseNames = { yes: "Zusage", no: "Absage", maybe: "Vielleicht" };
 
-export function SupabaseEvents({ client, initial, preferredUnit, editor, setEditor, actorId }: {
+export function SupabaseEvents({ client, initial, preferredUnit, editor, setEditor, actorId, canPlan=false }: {
   client: SupabaseClient; initial: EventWorkspace; editor: EventEditorState | null;
   preferredUnit: string | null; actorId: string;
   setEditor: (value: EventEditorState | null) => void;
+  canPlan?:boolean;
 }) {
   const [workspace, setWorkspace] = useState<EventWorkspace | null>(initial);
   const [error, setError] = useState("");
@@ -36,6 +38,7 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
   const [section,setSection]=useState<"dienste"|"kalender"|"fahrzeuge">("dienste");
   const [calendarActivated,setCalendarActivated]=useState(false);
   const [vehiclesActivated,setVehiclesActivated]=useState(false);
+  const [planning,setPlanning]=useState<PlanningAction|null>(null),[calendarRevision,setCalendarRevision]=useState(0);
   const [vehicleEvent,setVehicleEvent]=useState<{id:string;sequence:number}|null>(null);
   const activateSection=useCallback((value:"dienste"|"kalender"|"fahrzeuge")=>{
     setSection(value);
@@ -139,6 +142,7 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
     try {
       await operation();
       committed = true;
+      setCalendarRevision(value=>value+1);
       setMessage(success);
       accept(await reload());
     } catch (cause) {
@@ -160,6 +164,7 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
   const listed = workspace ? [...workspace.events, ...workspace.retained_events.filter((item) => !workspace.events.some((row) => row.id === item.id))] : [];
   function edit(item?: DevEvent) {
     setMessage(""); setError("");
+    if(item?.series_id){setPlanning({eventId:item.id});return;}
     setEditor(item ? {
       id: item.id, revision: item.revision,
       draft: { title: item.title, description: item.description, event_type: item.event_type, location: item.location,
@@ -189,7 +194,7 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
       <button className="button secondary" aria-pressed={section==="fahrzeuge"} onClick={()=>changeSection("fahrzeuge")}>Fahrzeugkalender</button>
     </div>
     {calendarActivated && <AppDialogVisibility.Provider value={section==="kalender"}><div hidden={section!=="kalender"}><SupabaseCalendar key={actorId} client={client} actorId={actorId}
-      preferredUnit={preferredUnit} initialTime={initial.server_now} openService={openService} openVehicle={openVehicle}/></div></AppDialogVisibility.Provider>}
+      preferredUnit={preferredUnit} initialTime={initial.server_now} refreshSignal={calendarRevision} openService={openService} openVehicle={openVehicle}/></div></AppDialogVisibility.Provider>}
     {vehiclesActivated && <AppDialogVisibility.Provider value={section==="fahrzeuge"}><div hidden={section!=="fahrzeuge"}><SupabaseVehicles key={actorId} client={client} actorId={actorId}
       initialTime={initial.server_now} preferredUnit={preferredUnit} initialEventId={vehicleEvent?.id} initialEventSequence={vehicleEvent?.sequence}/></div></AppDialogVisibility.Provider>}
     <AppDialogVisibility.Provider value={section==="dienste"}>
@@ -198,6 +203,15 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
       <button className="button secondary" disabled={busy} onClick={() => void refresh()}><RefreshCw size={18} />Termine aktualisieren</button>
       {!!workspace?.manageable_units.length && !editor && <button className="button" disabled={busy} onClick={() => edit()}><CalendarPlus size={18} />Einzeltermin erstellen</button>}
     </div></div>
+    {canPlan && <div className="dev-actions">
+      <button className="button secondary" disabled={busy} onClick={()=>setPlanning("series")}>Terminserie erstellen</button>
+      <button className="button secondary" disabled={busy} onClick={()=>setPlanning("csv")}>Termine aus CSV importieren</button>
+      <button className="button secondary" disabled={busy} onClick={()=>setPlanning("template")}>CSV-Vorlage herunterladen</button>
+    </div>}
+    {canPlan && planning && <SupabasePlanning client={client} action={planning} initialTime={initial.server_now}
+      preferredUnit={preferredUnit} close={()=>setPlanning(null)} changed={async()=>{
+        accept(await reload());setCalendarRevision(value=>value+1);
+      }}/>}
     <p className="muted text-sm">Zentrale Supabase-Daten · Hintergrundaktualisierung ohne Ansichtswechsel. Rückmeldungen sind Planung, keine tatsächliche Anwesenheit.</p>
     {message && <p className="notice" role="status">{message}</p>}
     {error && <p className="notice error" role="alert">{error}</p>}
@@ -297,7 +311,7 @@ function EventCard({ client, changed, item, serverNow, busy, edit, reply, cancel
     {retained && <p className="notice">Geöffneter Termin außerhalb der aktuellen Ergebnisliste · Berechtigung weiterhin live geprüft</p>}
     <div className="event-card-top"><h3 id={`event-${item.id}`}>{item.title}</h3><span className={`badge ${planned ? "" : "muted"}`}>{planned ? "Geplant" : "Abgesagt"}</span></div>
     <p>{dateLabel(item.starts_at, { year: "numeric" })} · {timeLabel(item.starts_at)} – {dateLabel(item.ends_at)} {timeLabel(item.ends_at)} · {item.location}</p>
-    <p className="muted text-sm">{item.scope_name} · {EVENT_TYPES[item.event_type]}{item.series_id && " · Serieninstanz (keine Serienbearbeitung)"}</p>
+    <p className="muted text-sm">{item.scope_name} · {EVENT_TYPES[item.event_type]}{item.series_id && " · Serieninstanz"}{item.series_exception && " · Individuelle Ausnahme"}</p>
     <p className="description">{item.description}</p>
     <p className={`personal-response-label ${responseStyle.className}`}><span className="response-symbol" aria-hidden="true">{responseStyle.symbol}</span> {responseStyle.label}</p>
     {item.response_deadline && <p className="muted text-sm">Anmeldeschluss: {dateLabel(item.response_deadline)} · {timeLabel(item.response_deadline)}</p>}
@@ -337,7 +351,8 @@ function EventCard({ client, changed, item, serverNow, busy, edit, reply, cancel
         <button className="button span-2" disabled={busy || !target}>Korrektur speichern</button>
       </form>}
     </details>}
-    {item.can_manage && planned && <div className="dev-actions">
+    {item.series_id && item.can_manage && <button className="button secondary" disabled={busy} onClick={edit}>Serie verwalten</button>}
+    {!item.series_id && item.can_manage && planned && <div className="dev-actions">
       <button className="button secondary" disabled={busy || serverNow >= Date.parse(item.starts_at)} onClick={edit}>Termin bearbeiten</button>
       <button className="button secondary danger-button" disabled={busy} onClick={() => setCancelling(!cancelling)}>Termin absagen</button>
     </div>}
