@@ -55,7 +55,7 @@ jobs:
             *) echo "Invalid seed mode"; exit 1 ;;
           esac
   history:
-    if: github.repository == 'n00b31/feuerwehr-odenthal-app' && inputs.mode == 'history-check' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/dev-041-seed-data' || github.ref == 'refs/heads/feature/dev-050-calendar' || github.ref == 'refs/heads/fix/dev-051-firestations')
+    if: github.repository == 'n00b31/feuerwehr-odenthal-app' && inputs.mode == 'history-check' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/dev-041-seed-data' || github.ref == 'refs/heads/feature/dev-050-calendar' || github.ref == 'refs/heads/fix/dev-051-firestations' || github.ref == 'refs/heads/feature/dev-060-vehicles')
     environment: supabase-dev-seed
     runs-on: ubuntu-latest
     timeout-minutes: 10

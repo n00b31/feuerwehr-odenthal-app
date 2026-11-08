@@ -186,7 +186,9 @@ function DevWorkspace({ client, access, data, pathname, refresh, eventEditor, se
     <p className="notice">{currentRelease?.version ?? "DEV"}: Termine, Teilnahme, Anwesenheit und Mitgliederverwaltung liegen zentral in Supabase. Hintergrundprüfungen erhalten die Arbeitsansicht. Keine Übernahme lokaler Demo-Daten.</p>
     {pathname === "/administration" ? managesMembers
       ? <>{globalAdmin && <section className="card section-card"><h2>Wartende Testregistrierungen</h2>{data.registrations.length === 0 && <p>Keine wartenden Registrierungen.</p>}{data.registrations.map((person) => <ApprovalRow key={person.user_id} client={client} person={person} units={data.units} refresh={refresh} />)}</section>}
-        <SupabaseMembers client={client} actorId={access.user_id} refreshAccess={refresh} /></>
+        <SupabaseMembers client={client} actorId={access.user_id} refreshAccess={refresh} />
+        <section className="card section-card"><h2>Fahrzeugverwaltung</h2><p>Fahrzeuge, zugewiesene Verwalter und Reservierungsaufgaben liegen im Kalenderbereich. Einheitsführung erhält nur ausdrücklich konfigurierte fahrzeugbezogene Rechte.</p>
+          <Link className="button secondary" href="/termine/">Fahrzeugverwaltung im Kalender öffnen</Link></section></>
       : <p className="notice error" role="alert">Keine Berechtigung zur Mitgliederverwaltung. Direkte API-Aufrufe werden ebenfalls serverseitig geprüft.</p>
     : pathname === "/dokumente" ? <section className="card section-card"><h2>Dokumentenbereiche</h2><p>App-Sichtbarkeit ersetzt keine SharePoint-Berechtigung.</p>{data.documents.length === 0 && <p>Noch keine sichtbaren DEV-Dokumentenbereiche.</p>}{data.documents.map((item) => <article key={item.id}><h3>{item.name}</h3><p>{item.description}</p><a href={item.sharepoint_url} target="_blank" rel="noopener noreferrer">SharePoint öffnen</a></article>)}</section>
     : pathname === "/statistik" ? <SupabaseReports client={client} access={access} />

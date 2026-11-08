@@ -1,5 +1,41 @@
 # DEV 0.5: gemeinsamer Feuerwehrkalender
 
+## DEV 0.5.1 – Erfolgreiche manuelle Abnahme
+
+Der Projektverantwortliche hat am **08.11.2026** die reale Abnahme von
+**DEV 0.5.1** ausdrücklich manuell bestätigt, nicht aus automatisierten
+Testergebnissen abgeleitet:
+
+- Kalenderansichten und Filter erfolgreich getestet.
+- Organisatorische Termine erstellt, angezeigt, bearbeitet und abgesagt.
+- Gerätehausbelegung erfolgreich getestet: alle fünf Gerätehäuser Scheuren,
+  Scherf, Blecher, Voiswinkel und Eikamp auswählbar; Belegungen erstellt, im
+  Kalender angezeigt, bearbeitet und abgesagt; Konfliktwarnung funktioniert.
+- Bestehende Übungsdienste, Teilnahme, Anwesenheit, Dienstbuch und
+  Jahresstatistiken weiterhin erfolgreich getestet.
+
+Gesicherter, tatsächlich veröffentlichter main-/Merge-Commit von
+[PR #17](https://github.com/n00b31/feuerwehr-odenthal-app/pull/17):
+`f33383decad824dccabf135a00768fd1172ee137`.
+Annotierter, unverändert zu GitHub gepushter Tag: **`v0.5.1-calendar-dev`**.
+Beschreibung: "Feuerwehr Odenthal DEV 0.5.1 – Shared calendar, organizational
+events and fire station resources validated."
+
+[Pages-Lauf 42480259516](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42480259516)
+baute denselben Commit aus main; Build, Auth, DEV-Export und Deployment waren
+erfolgreich. Das öffentliche `release.json` nennt DEV 0.5.1, diesen vollständigen
+Commit, `sourceDirty=false` und Build-ID
+`f33383decad8-3febe324-d87b-4634-a915-af49014bb27f`.
+Das heruntergeladene DEV-Artefakt wurde am 08.11.2026 mit dem öffentlichen
+Stand verglichen: Versionsnachweis und 72 geprüfte Anwendungsdateien stimmen
+bytegenau überein.
+
+**Noch offen:** native installierte iPhone-/Android-PWA-Gerätetests. Dafür
+wurde keine erfolgreiche Abnahme behauptet. Diese Dokumentation wurde vor
+der Fahrzeugentwicklung separat mit
+`47356ca72a9c2d86d5d9bcf7b2bbd1c14fea2167` committed und wird im DEV-0.6-PR
+mitgesichert; ein zusätzlicher Dokumentations-PR ist nicht erforderlich.
+
 ## Plan und Architektur
 
 1. DEV 0.4.1 anhand main, Release-Artefakt und Pages nachweisen, annotiert taggen

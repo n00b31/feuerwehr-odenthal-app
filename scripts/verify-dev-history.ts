@@ -5,6 +5,7 @@ import { readAccess, type Access } from "../src/data/supabase-repository";
 import { readReportsContext, readYearReport } from "../src/data/supabase-reports";
 import { readCalendar } from "../src/data/supabase-calendar";
 import { calendarRange, emptyCalendarFilters } from "../src/domain/calendar";
+import { readVehicles } from "../src/data/supabase-vehicles";
 
 let stage = "configuration";
 async function main() {
@@ -76,12 +77,13 @@ async function main() {
       .filter(m=>Date.parse(m.valid_from)<=Date.parse(calendar.server_now)
         && (m.valid_until===null || Date.parse(m.valid_until)>Date.parse(calendar.server_now)));
     const permittedUnits=new Set([...current.map(m=>m.unit_id),...calendar.context.manageable_units.map(u=>u.id)]);
-    assert.equal(calendar.context.resources.length,permittedUnits.size,"Resource scope must match current memberships and scoped unit roles.");
-    assert(calendar.context.resources.every(r=>r.resource_type==="building" && r.active && r.unit_id!==null && permittedUnits.has(r.unit_id)));
-    const resources=await client.from("calendar_resources").select("id,unit_id,resource_type,active");
+    const buildings=calendar.context.resources.filter(r=>r.resource_type==="building");
+    assert.equal(buildings.length,permittedUnits.size,"Building scope must match current memberships and scoped unit roles.");
+    assert(buildings.every(r=>r.active && r.unit_id!==null && permittedUnits.has(r.unit_id)));
+    const resources=await client.from("calendar_resources").select("id,unit_id,resource_type,active").eq("resource_type","building");
     assert(!resources.error,"Live resource RLS query failed.");
     const houses=z.array(z.object({id:z.uuid(),unit_id:z.uuid(),resource_type:z.literal("building"),active:z.literal(true)})).parse(resources.data);
-    assert.deepEqual(houses.map(r=>r.id).sort(),calendar.context.resources.map(r=>r.id).sort(),"Direct resource RLS differs from calendar context.");
+    assert.deepEqual(houses.map(r=>r.id).sort(),buildings.map(r=>r.id).sort(),"Direct building RLS differs from calendar context.");
     assert(houses.every(r=>permittedUnits.has(r.unit_id)),"Unauthorized fire station leaked through resource RLS.");
     assert(new Set(calendar.events.map((e)=>e.id)).size===calendar.events.length, "Calendar returned duplicate identities.");
     const legacy = z.array(z.object({ id:z.uuid(), starts_at:z.string(), ends_at:z.string() })).parse(events.data.events);
@@ -89,6 +91,25 @@ async function main() {
       && Date.parse(e.ends_at)>Date.parse(range.lower_bound))) {
       assert(calendar.events.some((e)=>e.id===event.id && e.entry_kind==="participation"), "Visible legacy service lost its canonical calendar identity.");
     }
+    stage="actual vehicle workspace, direct resource and private-request RLS";
+    const fleet=await readVehicles(client,range,null,null);
+    assert(!fleet.configure,"Vehicle module granted technical configuration.");
+    assert.equal(fleet.vehicles.filter(v=>v.current_access && v.description.includes("Fiktives DEV-Testfahrzeug")).length,4,"Four authorized synthetic DEV vehicles expected.");
+    for(const vehicle of fleet.vehicles){
+      assert.equal(vehicle.can_manage,vehicle.unit_admin_enabled && context.units.some(u=>u.id===vehicle.unit_id),
+        "Test account gained nonassigned vehicle approval rights.");
+    }
+    const visibleVehicles=await client.from("vehicles").select("resource_id");
+    assert(!visibleVehicles.error,"Direct vehicle SELECT/RLS failed.");
+    assert.deepEqual(z.array(z.object({resource_id:z.uuid()})).parse(visibleVehicles.data).map(v=>v.resource_id).sort(),
+      fleet.vehicles.filter(v=>v.current_access).map(v=>v.id).sort(),"Vehicle RLS differs from current authorized context.");
+    const requests=await client.from("vehicle_reservations").select("event_id,vehicle_id,requester_id,state");
+    assert(!requests.error,"Direct reservation SELECT/RLS failed.");
+    const rows=z.array(z.object({event_id:z.uuid(),vehicle_id:z.uuid(),requester_id:z.uuid(),state:z.string()})).parse(requests.data);
+    assert(rows.every(q=>q.requester_id===access.user_id || ["APPROVED","COMPLETED"].includes(q.state)
+      || fleet.vehicles.some(v=>v.id===q.vehicle_id && v.can_manage)),"Private request exposed without ownership or vehicle administration.");
+    assert(calendar.events.filter(e=>e.entry_kind==="vehicle").every(e=>["APPROVED","COMPLETED"].includes(e.vehicle_state ?? "")),
+      "Unapproved vehicle request exposed as binding shared-calendar entry.");
   }
   assert(syntheticId, "No authorized synthetic report identity discovered.");
   for (const { client } of records) {
@@ -99,7 +120,7 @@ async function main() {
     const logout = await client.auth.signOut({ scope: "local" });
     assert(!logout.error, "Discarding the temporary local test session failed.");
   }
-  console.log("PASS: six existing Auth logins; actual profile and own fire-station resource RLS, annual report RPCs, scoped denials, shared calendar and canonical event compatibility. No new Auth users or business-data writes.");
+  console.log("PASS: six existing Auth logins; actual profile, building, vehicle and private-request RLS; scoped approval capabilities, annual reports, shared calendar and canonical identities. No new Auth users or business-data writes.");
 }
 main().catch((error: unknown) => {
   const code = typeof error==="object" && error!==null && "code" in error

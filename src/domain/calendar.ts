@@ -13,22 +13,27 @@ export const calendarContextSchema = z.object({
   organization: z.boolean(), configure: z.boolean(), units: z.array(option), manageable_units: z.array(option),
   functions: z.array(option.extend({ manage: z.boolean() })), resources: z.array(resourceSchema),
   categories: z.array(option.extend({ active: z.boolean() })), organizers: z.array(option),
+  vehicle_calendar:z.boolean().optional(),
 });
 export type CalendarContext = z.infer<typeof calendarContextSchema>;
+export const vehicleStateSchema = z.enum(["REQUESTED","APPROVED","REJECTED","CANCELLED","COMPLETED"]);
 export const calendarEventSchema = z.object({
   id: z.uuid(), title: z.string(), description: z.string(), starts_at: instant, ends_at: instant, location: z.string(),
   event_type: devEventTypeSchema, status: z.enum(["scheduled","cancelled"]), revision: z.number().int().nonnegative(),
   scope_kind: z.enum(["organization","unit","function"]), unit_id: z.uuid().nullable(), function_id: z.uuid().nullable(),
   organizer_id: z.uuid(), organizer_name: z.string(), scope_name: z.string(),
-  entry_kind: z.enum(["participation","information","booking"]), all_day: z.boolean(),
+  entry_kind: z.enum(["participation","information","booking","vehicle"]), all_day: z.boolean(),
+  vehicle_state: vehicleStateSchema.nullable().optional(), vehicle_kind: z.enum(["reservation","block"]).nullable().optional(),
   audience: z.enum(["scope","units","leadership"]), category_id: z.uuid().nullable(), category_name: z.string().nullable(),
   resource_id: z.uuid().nullable(), resource_name: z.string().nullable(), can_manage: z.boolean(), unit_ids: z.array(z.uuid()),
-}).refine((value) => Date.parse(value.ends_at)>Date.parse(value.starts_at),"Ungültiger Kalenderzeitraum.");
+}).refine((value) => Date.parse(value.ends_at)>Date.parse(value.starts_at),"Ungültiger Kalenderzeitraum.")
+  .refine(value=>value.entry_kind!=="vehicle" || value.vehicle_state==="APPROVED" || value.vehicle_state==="COMPLETED",
+    "Gemeinsamer Kalender darf nur verbindliche Fahrzeugvorgänge enthalten.");
 export type CalendarEvent = z.infer<typeof calendarEventSchema>;
 export const calendarCursorSchema = z.object({ id: z.uuid(), starts_at: instant });
 export const calendarPageSchema = z.object({ server_now: instant, events: z.array(calendarEventSchema),
   retained_events: z.array(calendarEventSchema), next_cursor: calendarCursorSchema.nullable() });
-export const conflictSchema = z.object({ id: z.uuid().nullable(), title: z.string(), starts_at: instant, ends_at: instant });
+export const conflictSchema = z.object({ id: z.uuid().nullable(), title: z.string(), starts_at: instant, ends_at: instant, binding:z.boolean().optional() });
 export const calendarSaveSchema = z.object({ id: z.uuid(), conflicts: z.array(conflictSchema) });
 export type CalendarConflict = z.infer<typeof conflictSchema>;
 export type CalendarFilters = { scopes: string[]; units: string[]; types: string[]; kinds: string[]; categories: string[]; resources: string[]; cancelled: boolean };
