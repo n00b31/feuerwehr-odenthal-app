@@ -384,7 +384,14 @@ alter policy scoped_roster on public.event_roster using (
 create or replace function public.ff_events_workspace()
 returns jsonb language plpgsql security definer set search_path='' as $$
 begin
-  return public.ff_events_page();
+  perform ff_private.require_rule(ff_private.is_active(),'Freigabe erforderlich.');
+  return jsonb_build_object(
+    'server_now',clock_timestamp(),
+    'manageable_units',coalesce((select jsonb_agg(jsonb_build_object('id',u.id,'name',u.name) order by u.name)
+      from public.units u where ff_private.manages_scope('unit',u.id,null)),'[]'::jsonb),
+    'events',coalesce((select jsonb_agg(ff_private.event_summary(e.id) order by e.starts_at,e.id)
+      from public.events e where ff_private.can_view_event(e.id)
+        and not exists(select 1 from public.event_calendar where event_id=e.id)),'[]'::jsonb));
 end;
 $$;
 alter policy scoped_responses on public.participation_responses using (
