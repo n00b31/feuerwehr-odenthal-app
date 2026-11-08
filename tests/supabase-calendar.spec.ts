@@ -64,6 +64,10 @@ async function connect(page:Page,admin=true) {
     if(pathname.endsWith("/ff_calendar_page")) {
       if(state.fail) return respond({code:"503",message:"Synthetic calendar outage"},503);
       const q:Record<string,unknown>=request.postDataJSON();state.queries.push(q);
+      expect(Object.keys(q).sort()).toEqual([
+        "lower_bound","upper_bound","scopes","wanted_units","wanted_types","wanted_kinds",
+        "wanted_categories","wanted_resources","show_cancelled","after_start","after_id","retained_ids",
+      ].sort());
       const values=(key:string):string[]=>Array.isArray(q[key]) ? q[key].filter((v:unknown)=>typeof v==="string") : [];
       const types=values("wanted_types"),kinds=values("wanted_kinds"),scopes=values("scopes");
       const visible=state.events.filter(e=>!state.archived.has(e.id));

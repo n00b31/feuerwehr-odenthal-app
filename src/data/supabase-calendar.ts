@@ -12,7 +12,8 @@ export async function readCalendar(client: SupabaseClient, range: { lower_bound:
   let result: z.infer<typeof calendarPageSchema>;
   for (let page=0; ; page++) {
     if (page>=10) throw new Error("Kalenderbereich überschreitet 4.000 Termine. Filter bitte eingrenzen.");
-    result = calendarPageSchema.parse(checked(await client.rpc("ff_calendar_page", { ...range,
+    result = calendarPageSchema.parse(checked(await client.rpc("ff_calendar_page", {
+      lower_bound: range.lower_bound, upper_bound: range.upper_bound,
       scopes: filters.scopes, wanted_units: filters.units, wanted_types: filters.types, wanted_kinds: filters.kinds,
       wanted_categories: filters.categories, wanted_resources: filters.resources, show_cancelled: filters.cancelled,
       after_start: cursor?.starts_at ?? null, after_id: cursor?.id ?? null, retained_ids: retained })));

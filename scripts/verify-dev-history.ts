@@ -88,6 +88,8 @@ async function main() {
   console.log("PASS: six existing Auth logins; actual profile RLS, annual report RPCs, scoped denials, shared calendar and canonical event compatibility. No new Auth users or business-data writes.");
 }
 main().catch((error: unknown) => {
-  console.error(`Live DEV history verification failed at ${stage} (${error instanceof Error ? error.name : "unknown error"}). Credentials and server payloads are omitted.`);
+  const code = typeof error==="object" && error!==null && "code" in error
+    && typeof error.code==="string" && /^[A-Z0-9]{5,12}$/.test(error.code) ? error.code : "unavailable";
+  console.error(`Live DEV history verification failed at ${stage} (${error instanceof Error ? error.name : "unknown error"}; code ${code}). Credentials and server payloads are omitted.`);
   process.exitCode = 1;
 });

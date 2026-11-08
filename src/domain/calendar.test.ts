@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calendarRange,moveCalendar,calendarPayload,calendarInterval,eventsOnDay,weekPlacement,weekColumns,type CalendarDraft,type CalendarEvent } from "./calendar";
+import { createClient } from "@supabase/supabase-js";
+import { readCalendar } from "../data/supabase-calendar";
+import { calendarRange,moveCalendar,calendarPayload,calendarInterval,eventsOnDay,weekPlacement,weekColumns,emptyCalendarFilters,type CalendarDraft,type CalendarEvent } from "./calendar";
 
 test("month grids are 42 Monday-based days including adjacent month events",() => {
   const range=calendarRange("2026-11-07","month");
@@ -49,4 +51,36 @@ test("multi-day details include the inclusive last day and repeated-hour offsets
   assert.match(calendarInterval({...fixture,ends_at:"2026-03-31T22:00:00Z"}),/31\./);
   const interval=calendarInterval({...fixture,all_day:false,starts_at:"2026-10-25T00:30:00Z",ends_at:"2026-10-25T01:30:00Z"});
   assert.match(interval,/MESZ/);assert.match(interval,/MEZ/);
+});
+test("calendar SDK requests contain only RPC parameters, not view metadata, on every cursor page",async()=>{
+  const requests: Record<string,unknown>[]=[];
+  const range=calendarRange("2026-11-07","month");
+  const client=createClient("https://syntheticci.supabase.co","synthetic-public-key",{
+    auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},
+    global:{fetch:async(input,init)=>{
+      const url=new URL(typeof input==="string" || input instanceof URL ? input : input.url);
+      if(url.pathname.endsWith("/ff_calendar_context")) return Response.json({
+        organization:false,configure:false,units:[],manageable_units:[],functions:[],
+        resources:[],categories:[],organizers:[],
+      });
+      assert.equal(url.pathname,"/rest/v1/rpc/ff_calendar_page");
+      const body:Record<string,unknown>=JSON.parse(String(init?.body));
+      assert.deepEqual(Object.keys(body).sort(),[
+        "lower_bound","upper_bound","scopes","wanted_units","wanted_types","wanted_kinds",
+        "wanted_categories","wanted_resources","show_cancelled","after_start","after_id","retained_ids",
+      ].sort());
+      assert.equal(body.lower_bound,range.lower_bound);
+      assert.equal(body.upper_bound,range.upper_bound);
+      assert.deepEqual(body.retained_ids,[fixture.id]);
+      requests.push(body);
+      return Response.json({server_now:"2026-11-07T10:00:00Z",events:[],retained_events:[],
+        next_cursor:requests.length===1 ? {id:fixture.id,starts_at:fixture.starts_at} : null});
+    }},
+  });
+  const result=await readCalendar(client,range,emptyCalendarFilters,[fixture.id]);
+  assert.equal(result.events.length,0);
+  assert.equal(requests.length,2);
+  assert.equal(requests[0].after_id,null);
+  assert.equal(requests[1].after_id,fixture.id);
+  assert.equal(requests[1].after_start,fixture.starts_at);
 });
