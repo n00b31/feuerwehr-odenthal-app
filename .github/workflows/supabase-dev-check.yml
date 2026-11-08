@@ -85,3 +85,11 @@ jobs:
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: bash supabase/tests/attendance-concurrency.sh
+      - name: Verify scoped vehicle workflows, notifications, audit and idempotent DEV fixtures
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/vehicles.sql
+      - name: Verify two simultaneous vehicle approvers cannot double-book
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: bash supabase/tests/vehicle-concurrency.sh

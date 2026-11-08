@@ -1,6 +1,13 @@
 @import "tailwindcss";
 
 .calendar { min-width: 0; }
+.vehicles { min-width: 0; margin-block: 16px; }
+.vehicles .calendar-month { grid-template-columns: repeat(7,minmax(140px,1fr)); overflow-x: auto; max-width: 100%; }
+.vehicles .calendar-cell { padding: 8px; overflow-wrap: anywhere; }
+.vehicles .calendar-chip .badge { color: var(--cp-text); display: inline-flex; }
+.vehicles details { margin-block: 16px; }
+.vehicles summary { cursor: pointer; min-height: 48px; padding: 12px; }
+.vehicles .notice-row { overflow-wrap: anywhere; }
 .calendar h2, .calendar-toolbar, .calendar-views { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .calendar-toolbar { margin-block: 16px; }
 .calendar-toolbar label { max-width: 220px; }

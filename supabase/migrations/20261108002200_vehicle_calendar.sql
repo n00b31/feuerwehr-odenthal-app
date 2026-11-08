@@ -14,6 +14,18 @@ $$;
 revoke all on function public.ff_save_calendar_resource(jsonb,uuid,int) from public,anon,authenticated;
 grant execute on function public.ff_save_calendar_resource(jsonb,uuid,int) to authenticated;
 
+create or replace function ff_private.calendar_conflicts(target_resource uuid,lower_bound timestamptz,upper_bound timestamptz,excluded_event uuid)
+returns jsonb language sql stable security definer set search_path='' as $$
+  select coalesce(jsonb_agg(jsonb_build_object('id',case when ff_private.can_view_event(e.id) then e.id else null end,
+    'title',case when ff_private.can_view_event(e.id) then e.title else 'Bereits belegt (Details geschützt)' end,
+    'starts_at',e.starts_at,'ends_at',e.ends_at) order by e.starts_at,e.id),'[]')
+  from public.events e join public.event_calendar c on c.event_id=e.id
+    left join public.vehicle_reservations q on q.event_id=e.id
+  where c.resource_id=target_resource and c.archived_at is null and e.status='scheduled'
+    and (q.event_id is null or q.state in ('APPROVED','COMPLETED'))
+    and e.id is distinct from excluded_event and e.starts_at<upper_bound and e.ends_at>lower_bound;
+$$;
+
 create or replace function ff_private.calendar_summary(target uuid)
 returns jsonb language sql stable security definer set search_path='' as $$
   select jsonb_build_object('id',e.id,'title',e.title,'description',e.description,'starts_at',e.starts_at,'ends_at',e.ends_at,

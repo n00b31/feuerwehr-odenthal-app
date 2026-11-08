@@ -10,6 +10,7 @@ import { calendarDateSchema,calendarDraft,calendarInterval,calendarKindSchema,ca
 import { berlinParts,dateLabel } from "@/domain/time";
 import { eventErrorMessage } from "@/domain/dev-events";
 import { AppDialog } from "./app-dialog";
+import { SupabaseVehicles } from "./supabase-vehicles";
 
 type Snapshot=Awaited<ReturnType<typeof readCalendar>>;
 type Editor={event?:CalendarEvent; draft:CalendarDraft};
@@ -35,6 +36,7 @@ export function SupabaseCalendar({client,actorId,preferredUnit,initialTime,openS
   const [busy,setBusy]=useState(false);
   const [conflicts,setConflicts]=useState<CalendarConflict[]>([]);
   const [reason,setReason]=useState("");
+  const [vehiclesOpen,setVehiclesOpen]=useState(false),[vehicleEvent,setVehicleEvent]=useState<string|null>(null);
   const epoch=useRef({value:0}),working=useRef(false),retained=useRef<string[]>([]);
   const range=calendarRange(date,view);
   const reload=useCallback(async()=>{
@@ -106,6 +108,9 @@ export function SupabaseCalendar({client,actorId,preferredUnit,initialTime,openS
       </div>
     </div>
     <p className="muted text-sm">Eine gemeinsame Terminquelle · Europe/Berlin · Dienste behalten ihre Teilnahme- und Anwesenheitsverwaltung. Belegungen warnen vor Konflikten, erteilen aber keine Genehmigung.</p>
+    <button className="button secondary" aria-expanded={vehiclesOpen} onClick={()=>setVehiclesOpen(!vehiclesOpen)}>
+      {vehiclesOpen ? "Fahrzeugbereich schließen" : "Fahrzeuge und Reservierungen öffnen"}</button>
+    {vehiclesOpen && <SupabaseVehicles client={client} actorId={actorId} initialTime={initialTime} initialEventId={vehicleEvent}/>}
     {error && <p className="notice error" role="alert">{error}</p>}
     {message && <p className="notice" role="status">{message}</p>}
     <div className="calendar-toolbar">
@@ -162,8 +167,12 @@ export function SupabaseCalendar({client,actorId,preferredUnit,initialTime,openS
       <p>{calendarInterval(selectedEvent)}</p>
       <p>{selectedEvent.location} · {selectedEvent.scope_name} · {selectedEvent.status==="cancelled" ? "Abgesagt" : "Geplant"}</p>
       <p className="description">{selectedEvent.description}</p><p>Verantwortlich: {selectedEvent.organizer_name}</p>
-      {selectedEvent.resource_name && <p>Gerätehaus: {selectedEvent.resource_name}</p>}
-      {selectedEvent.entry_kind==="participation" ? <div className="dev-actions">
+      {selectedEvent.resource_name && <p>{selectedEvent.entry_kind==="vehicle" ? "Fahrzeug" : "Gerätehaus"}: {selectedEvent.resource_name}</p>}
+      {selectedEvent.entry_kind==="vehicle" ? <>
+        <p className={`badge ${selectedEvent.vehicle_kind==="block" ? "danger" : "success"}`}>{selectedEvent.vehicle_kind==="block" ? "⊘ Gesperrt / nicht verfügbar" :
+          selectedEvent.vehicle_state==="COMPLETED" ? "✓ Nutzung abgeschlossen" : "✓ Genehmigt · verbindlich reserviert"}</p>
+        <button className="button" onClick={()=>{setVehicleEvent(selectedEvent.id);setVehiclesOpen(true);closeSelected();}}>Reservierungsdetails öffnen</button>
+      </> : selectedEvent.entry_kind==="participation" ? <div className="dev-actions">
         <button className="button" onClick={()=>void run(async()=>{await openService(selectedEvent.id,false);closeSelected();},"Bestehende Dienstverwaltung geöffnet.")}>Dienst und Teilnahme öffnen</button>
         {selectedEvent.can_manage && <button className="button secondary" disabled={Date.parse(selectedEvent.starts_at)<=Date.parse(snapshot?.server_now ?? initialTime)}
           onClick={()=>void run(async()=>{await openService(selectedEvent.id,true);closeSelected();},"Bestehende Terminbearbeitung geöffnet.")}>Bestehende Bearbeitung öffnen</button>}
@@ -202,13 +211,15 @@ function CalendarFilterControls({context,filters,change}:{context:CalendarContex
       {label:"Übungsdienste / Ausbildung",field:"types" as const,values:["regular","special","breathing","training"]},
       {label:"Veranstaltungen",field:"types" as const,values:["community"]},
       {label:"Gerätehausbelegung",field:"kinds" as const,values:["booking"]},
+      {label:"Fahrzeugbelegung",field:"kinds" as const,values:["vehicle"]},
       {label:"Organisatorische Information",field:"kinds" as const,values:["information"]},
     ].map(({label,field,values})=><label className="calendar-check" key={label}><input type="checkbox" checked={values.every(v=>filters[field].includes(v))}
       onChange={()=>toggle(field,values)}/>{label}</label>)}</fieldset>
     <div className="form-grid">{([{field:"units",label:"Einheitsfilter",options:context.units},
       {field:"categories",label:"Kalenderkategorie",options:context.categories},
-      {field:"resources",label:"Gerätehausfilter",options:context.resources}] as const).map(({field,label,options})=>
-      <label key={field}>{label}<select value={filters[field][0] ?? ""} onChange={e=>change({...filters,[field]:e.target.value ? [e.target.value] : []})}>
+      {field:"resources",label:"Gerätehausfilter",options:context.resources.filter(r=>r.resource_type==="building")},
+      {field:"resources",label:"Fahrzeugfilter",options:context.resources.filter(r=>r.resource_type==="vehicle")}] as const).map(({field,label,options})=>
+      <label key={label}>{label}<select value={options.some(o=>o.id===filters[field][0]) ? filters[field][0] : ""} onChange={e=>change({...filters,[field]:e.target.value ? [e.target.value] : []})}>
         <option value="">Alle berechtigt sichtbaren</option>{options.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select></label>)}</div>
     <label className="calendar-check"><input type="checkbox" checked={filters.cancelled} onChange={e=>change({...filters,cancelled:e.target.checked})}/>Abgesagte Termine anzeigen</label>
     <button className="button secondary" onClick={()=>change(emptyCalendarFilters)}>Kalenderfilter zurücksetzen</button>
@@ -291,14 +302,14 @@ function CalendarSettings({client,context,busy,run}:{client:SupabaseClient;conte
       <label>Ressource bearbeiten<select value={resource?.id ?? ""} onChange={e=>{
         const r=context.resources.find(r=>r.id===e.target.value);setResource(r ? {id:r.id,revision:r.revision} : undefined);
         setName(r?.name ?? "");setUnit(r?.unit_id ?? "");setActive(r?.active ?? true);
-      }}><option value="">Neues Gerätehaus</option>{context.resources.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}</select></label>
+      }}><option value="">Neues Gerätehaus</option>{context.resources.filter(r=>r.resource_type==="building").map(r=><option key={r.id} value={r.id}>{r.name}</option>)}</select></label>
       <label>Gerätehausname<input value={name} minLength={2} maxLength={120} required onChange={e=>setName(e.target.value)}/></label>
       <label>Ressourceneinheit<select value={unit} onChange={e=>setUnit(e.target.value)}><option value="">Gemeinsam</option>
         {context.units.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}</select></label>
       <label className="calendar-check"><input type="checkbox" checked={active} onChange={e=>setActive(e.target.checked)}/>Ressource aktiv</label>
       <button className="button" disabled={busy}>Gerätehaus speichern</button>
     </form>
-    <p className="muted text-sm">Ressourcentypen Raum, Fahrzeug und Material sind strukturell vorbereitet, keine Fahrzeugreservierung oder Genehmigung.</p>
+    <p className="muted text-sm">Fahrzeuge werden separat unter „Fahrzeuge und Reservierungen“ verwaltet. Gerätehausbelegungen bleiben bei der bisherigen Konfliktwarnung.</p>
     <form className="form-grid" onSubmit={e=>{e.preventDefault();void run(async()=>{
       setCategoryId(await saveCalendarCategory(client,category,categoryId,categoryActive));
     },"Kategorie gespeichert.");}}>

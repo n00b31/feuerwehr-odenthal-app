@@ -80,8 +80,7 @@ returns boolean language sql stable security definer set search_path='' as $$
   select ff_private.is_active() and exists(select 1 from public.vehicles v where v.resource_id=target
     and (ff_private.is_overseer() or ff_private.vehicle_manager(target)
       or exists(select 1 from public.vehicle_usage_units u where u.vehicle_id=target
-        and ff_private.belongs_to_scope('unit',u.unit_id,null))
-      or exists(select 1 from public.vehicle_reservations q where q.vehicle_id=target and q.requester_id=auth.uid())));
+        and ff_private.belongs_to_scope('unit',u.unit_id,null))));
 $$;
 create function ff_private.vehicle_request_visible(target uuid)
 returns boolean language sql stable security definer set search_path='' as $$
@@ -142,13 +141,15 @@ create policy vehicle_requests_read on public.vehicle_reservations for select to
 create policy vehicle_notifications_read on public.vehicle_notifications for select to authenticated
   using(recipient_id=auth.uid() and ff_private.vehicle_request_visible(event_id));
 
-create function ff_private.vehicle_conflicts(target uuid,lower_bound timestamptz,upper_bound timestamptz,excluded uuid default null)
+create function ff_private.vehicle_conflicts(target uuid,lower_bound timestamptz,upper_bound timestamptz,excluded uuid default null,include_requests boolean default false)
 returns jsonb language sql stable security definer set search_path='' as $$
   select coalesce(jsonb_agg(jsonb_build_object('id',case when ff_private.vehicle_request_visible(e.id) then e.id else null end,
-    'title',case when ff_private.vehicle_request_visible(e.id) then e.title else 'Verbindlich belegt (Details geschützt)' end,
+    'title',case when ff_private.vehicle_request_visible(e.id) then e.title
+      when q.state='REQUESTED' then 'Weitere unverbindliche Anfrage (Details geschützt)' else 'Verbindlich belegt (Details geschützt)' end,
+    'binding',q.state<>'REQUESTED',
     'starts_at',e.starts_at,'ends_at',e.ends_at) order by e.starts_at,e.id),'[]')
     from public.vehicle_reservations q join public.events e on e.id=q.event_id
-    where q.vehicle_id=target and q.state in ('APPROVED','COMPLETED') and q.event_id is distinct from excluded
+    where q.vehicle_id=target and (q.state in ('APPROVED','COMPLETED') or include_requests and q.state='REQUESTED') and q.event_id is distinct from excluded
       and e.starts_at<upper_bound and e.ends_at>lower_bound;
 $$;
 create function ff_private.vehicle_notify(target uuid,notice text)
@@ -184,17 +185,21 @@ begin
   perform ff_private.require_rule(ff_private.is_active(),'Freigabe erforderlich.');
   perform ff_private.require_rule(isfinite(lower_bound) and isfinite(upper_bound) and upper_bound>lower_bound
     and upper_bound<=lower_bound+interval '43 days','Fahrzeugkalender: gültiger Zeitraum bis 43 Tage.');
-  perform ff_private.require_rule(target_vehicle is null or ff_private.vehicle_visible(target_vehicle),'Kein Zugriff auf Fahrzeug.');
+  perform ff_private.require_rule(target_vehicle is null or ff_private.vehicle_visible(target_vehicle)
+    or exists(select 1 from public.vehicle_reservations q where q.vehicle_id=target_vehicle and q.requester_id=auth.uid()),
+    'Kein Zugriff auf Fahrzeug.');
   select count(*) into count_items from public.vehicle_reservations q join public.events e on e.id=q.event_id
     where (target_vehicle is null or q.vehicle_id=target_vehicle) and e.starts_at<upper_bound and e.ends_at>lower_bound
       and ff_private.vehicle_request_visible(q.event_id);
   perform ff_private.require_rule(count_items<=2000,'Mehr als 2.000 Fahrzeugvorgänge: Zeitraum eingrenzen.');
   return jsonb_build_object('server_now',statement_timestamp(),'configure',ff_private.has_role('GLOBAL_ADMIN'),
     'vehicles',coalesce((select jsonb_agg(to_jsonb(r)||to_jsonb(v)||jsonb_build_object('id',r.id,
-      'can_manage',ff_private.vehicle_manager(r.id),'usage_units',coalesce((select jsonb_agg(unit_id order by unit_id)
+      'can_manage',ff_private.vehicle_manager(r.id),'current_access',ff_private.vehicle_visible(r.id),
+      'usage_units',coalesce((select jsonb_agg(unit_id order by unit_id)
         from public.vehicle_usage_units where vehicle_id=r.id),'[]'),
       'manager_ids',coalesce((select jsonb_agg(user_id order by user_id) from public.vehicle_managers where vehicle_id=r.id),'[]')) order by r.name)
-      from public.vehicles v join public.calendar_resources r on r.id=v.resource_id where ff_private.vehicle_visible(r.id)),'[]'),
+      from public.vehicles v join public.calendar_resources r on r.id=v.resource_id where ff_private.vehicle_visible(r.id)
+        or exists(select 1 from public.vehicle_reservations q where q.vehicle_id=r.id and q.requester_id=auth.uid())),'[]'),
     'units',coalesce((select jsonb_agg(to_jsonb(u) order by u.name) from public.units u),'[]'),
     'own_units',coalesce((select jsonb_agg(to_jsonb(u) order by u.name) from public.units u
       where ff_private.belongs_to_scope('unit',u.id,null)),'[]'),
@@ -238,7 +243,10 @@ begin
     perform ff_private.require_rule(found and exists(select 1 from public.vehicles where resource_id=r.id),'Fahrzeug nicht gefunden.');
     perform ff_private.require_rule(ff_private.vehicle_manager(target_vehicle),'Fahrzeugverwaltung wurde widerrufen.');
     if r.revision is distinct from expected_revision then raise exception 'Fahrzeug wurde geändert.' using errcode='40001'; end if;
-    select to_jsonb(r)||to_jsonb(v) into previous from public.vehicles v where resource_id=r.id;
+    select to_jsonb(r)||to_jsonb(v)||jsonb_build_object(
+      'manager_ids',(select jsonb_agg(user_id order by user_id) from public.vehicle_managers where vehicle_id=r.id),
+      'usage_units',(select jsonb_agg(unit_id order by unit_id) from public.vehicle_usage_units where vehicle_id=r.id))
+      into previous from public.vehicles v where resource_id=r.id;
     result:=r.id;
   end if;
   if global_admin then
@@ -319,6 +327,7 @@ begin
   conflicts:=ff_private.vehicle_conflicts(target,start_time,end_time);
   perform ff_private.require_rule(not blocked or jsonb_array_length(conflicts)=0,
     'Sperrung kollidiert mit verbindlicher Reservierung/Sperrung. Bestehenden Vorgang zuerst ausdrücklich klären.');
+  if not blocked then conflicts:=ff_private.vehicle_conflicts(target,start_time,end_time,null,true); end if;
   select id into category from public.calendar_categories where name='Fahrzeugreservierung';
   insert into public.events(title,description,event_type,starts_at,ends_at,location,scope_kind,unit_id,organizer_id)
     values(btrim(input->>'title'),coalesce(input->>'description',''),'other',start_time,end_time,
