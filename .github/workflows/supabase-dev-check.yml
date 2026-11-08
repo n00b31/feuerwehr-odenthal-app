@@ -27,6 +27,11 @@ jobs:
           --health-retries 10
     steps:
       - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Type-check protected recovery Edge Function
+        run: deno check supabase/functions/password-recovery/index.ts
       - name: Create isolated Auth test fixture
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
@@ -85,6 +90,14 @@ jobs:
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/vehicles.sql
+      - name: Verify recovery roles, shared atomic reservations and immutable audit
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/password-recovery.sql
+      - name: Verify real parallel recovery limits and one-time PKCE claims
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: bash supabase/tests/recovery-concurrency.sh
       - name: Verify overlapping attendance initialization with two connections
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}

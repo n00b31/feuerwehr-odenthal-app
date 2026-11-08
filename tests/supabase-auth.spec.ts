@@ -15,6 +15,7 @@ async function fixture(context: BrowserContext) {
     verified: false, approved: false, suspended: false, missingUnit: false,
     admin: false, broken: false, mailLimited: false, unauthorizedMail: false,
     protectedReads: [] as string[], signup: null as null | Record<string, unknown>, callbackCalls: 0, signupCalls: 0,
+    resetCalls: 0, passwordChanges: 0, resetUnavailable: false,
   };
   const user = () => ({
     id: state.admin ? adminId : memberId,
@@ -26,7 +27,9 @@ async function fixture(context: BrowserContext) {
   });
   const session = () => {
     const body = Buffer.from(JSON.stringify({ sub: user().id, aud: "authenticated", role: "authenticated", exp: Math.floor(Date.now() / 1000) + 3600 })).toString("base64url");
-    return { access_token: `eyJhbGciOiJIUzI1NiJ9.${body}.synthetic`, refresh_token: "synthetic-refresh-only", token_type: "bearer", expires_in: 3600, user: user() };
+    const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
+    const signature = Buffer.from("synthetic-fixture-not-a-valid-signature").toString("base64url");
+    return { access_token: [header, body, signature].join("."), refresh_token: "synthetic-refresh-only", token_type: "bearer", expires_in: 3600, user: user() };
   };
   await context.route(`${api}/**`, async (route) => {
     const request = route.request();
@@ -52,7 +55,31 @@ async function fixture(context: BrowserContext) {
       if (!state.verified && !state.admin) return respond({ code: "email_not_confirmed", msg: "Synthetic unconfirmed" }, 400);
       return respond(session());
     }
-    if (url.pathname === "/auth/v1/user") return respond(user());
+    if (url.pathname === "/functions/v1/password-recovery") {
+      if (request.postDataJSON().mode === "exchange") {
+        expect(request.postDataJSON()).toEqual({ mode: "exchange", request_id: memberId, code: "synthetic-server-code" });
+        state.verified = true;
+        const granted = session();
+        return respond({ status: "verified", user_id: user().id,
+          session: { access_token: granted.access_token, refresh_token: granted.refresh_token } });
+      }
+      state.resetCalls++;
+      expect(request.postDataJSON().mode).toBe("self");
+      expect([email, "synthetic.unknown@feuerwehr-odenthal.de"]).toContain(request.postDataJSON().email);
+      return state.resetUnavailable ? respond({ code: "recovery_unavailable" }, 503) : respond({ status: "conditional" });
+    }
+    if (url.pathname === "/auth/v1/verify") {
+      expect(request.postDataJSON()).toMatchObject({ type: "recovery", token_hash: "synthetic-recovery-hash" });
+      state.verified = true;
+      return respond(session());
+    }
+    if (url.pathname === "/auth/v1/user") {
+      if (request.method() === "PUT") {
+        state.passwordChanges++;
+        expect(request.postDataJSON()).toEqual({ password, code_challenge: null, code_challenge_method: null });
+      }
+      return respond(user());
+    }
     if (url.pathname === "/auth/v1/logout") return route.fulfill({ status: 204 });
     if (url.pathname === "/auth/v1/resend") return respond({});
     if (url.pathname === "/rest/v1/rpc/ff_my_access") {
@@ -119,6 +146,7 @@ test("full DEV registration, PKCE confirmation, pending approval, admin release 
   await page.getByLabel("Anzeigename").fill("Synthetic Mitglied");
   await page.getByLabel("Feuerwehr-E-Mail").fill(email);
   await page.getByLabel("Passwort", { exact: true }).fill(password);
+  await page.getByLabel("Passwort wiederholen", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Registrierung anfordern" }).click();
   await expect(page.getByRole("status")).toContainText("Bestätigung angefordert");
   expect(state.signup).toMatchObject({ email, data: { display_name: "Synthetic Mitglied" } });
@@ -204,11 +232,13 @@ test("mail limits and unauthorized recipients are visible; no automatic retry", 
   await page.getByLabel("Anzeigename").fill("Synthetic Mitglied");
   await page.getByLabel("Feuerwehr-E-Mail").fill(email);
   await page.getByLabel("Passwort", { exact: true }).fill(password);
+  await page.getByLabel("Passwort wiederholen", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Registrierung anfordern" }).click();
   await expect(page.getByRole("main").getByRole("alert")).toContainText(/limit/i);
   expect(state.signupCalls).toBe(1);
   state.mailLimited = false; state.unauthorizedMail = true;
   await page.getByLabel("Passwort", { exact: true }).fill(password);
+  await page.getByLabel("Passwort wiederholen", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Registrierung anfordern" }).click();
   await expect(page.getByRole("main").getByRole("alert")).toContainText("nicht autorisiert");
   expect(state.signupCalls).toBe(2);
@@ -222,11 +252,123 @@ test("foreign-domain registration is rejected before a network request", async (
   await page.getByLabel("Anzeigename").fill("Synthetic Mitglied");
   await page.getByLabel("Feuerwehr-E-Mail").fill("synthetic@example.test");
   await page.getByLabel("Passwort", { exact: true }).fill(password);
+  await page.getByLabel("Passwort wiederholen", { exact: true }).fill(password);
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await expect(page.getByLabel("Anzeigename")).toHaveValue("Synthetic Mitglied");
   await page.getByRole("button", { name: "Registrierung anfordern" }).click();
   await expect(page.getByRole("main").getByRole("alert")).toContainText("Nur @feuerwehr-odenthal.de");
   expect(state.signupCalls).toBe(0);
+  expect(state.protectedReads).toEqual([]);
+});
+
+test("registration rejects differing passwords, visibility is explicit and abort discards both", async ({ context, page }) => {
+  const state = await fixture(context);
+  await page.goto(publicPath("/"));
+  await page.getByRole("button", { name: "Testkonto registrieren", exact: true }).click();
+  await page.getByLabel("Anzeigename").fill("Synthetic Mitglied");
+  await page.getByLabel("Feuerwehr-E-Mail").fill(email);
+  await page.getByLabel("Passwort", { exact: true }).fill(password);
+  await page.getByLabel("Passwort wiederholen", { exact: true }).fill(`${password} `);
+  await page.getByRole("button", { name: "Registrierung anfordern" }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("stimmen nicht überein");
+  expect(state.signupCalls).toBe(0);
+  await page.getByRole("button", { name: "Passwörter anzeigen" }).click();
+  await expect(page.getByLabel("Passwort", { exact: true })).toHaveAttribute("type", "text");
+  await expect(page.getByLabel("Passwort wiederholen", { exact: true })).toHaveAttribute("type", "text");
+  await page.getByRole("button", { name: "Zur Anmeldung", exact: true }).click();
+  await expect(page.getByLabel("Passwort", { exact: true })).toHaveValue("");
+  await page.getByRole("button", { name: "Testkonto registrieren", exact: true }).click();
+  await expect(page.getByLabel("Passwort wiederholen", { exact: true })).toHaveValue("");
+  expect(await page.evaluate((secret) => JSON.stringify(localStorage).includes(secret) || JSON.stringify(sessionStorage).includes(secret), password)).toBe(false);
+});
+
+test("forgot password has a conditional response and no automatic retry or account disclosure", async ({ context, page }) => {
+  const state = await fixture(context);
+  await page.goto(publicPath("/"));
+  await page.getByRole("button", { name: "Passwort vergessen?" }).click();
+  await page.getByLabel("Feuerwehr-E-Mail").fill(email);
+  await page.getByRole("button", { name: "Wiederherstellung anfordern", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("bestätigt weder ein Konto noch den Mailversand");
+  const knownText = await page.getByRole("status").textContent();
+  await page.getByLabel("Feuerwehr-E-Mail").fill("synthetic.unknown@feuerwehr-odenthal.de");
+  await page.getByRole("button", { name: "Wiederherstellung anfordern", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText(knownText!);
+  expect(state.resetCalls).toBe(2);
+  expect(state.protectedReads).toEqual([]);
+  state.resetUnavailable = true;
+  await page.getByRole("button", { name: "Wiederherstellung anfordern", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toBeVisible();
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  expect(state.resetCalls).toBe(3);
+});
+
+test("real SDK token-hash recovery requires matching passwords and keeps pending approval intact", async ({ context, page }) => {
+  const state = await fixture(context);
+  await page.goto(publicPath("/auth/recovery/?token_hash=synthetic-recovery-hash&type=recovery&next=https://evil.test"));
+  await expect(page.getByRole("heading", { name: "Neues Passwort setzen" })).toBeVisible();
+  expect(new URL(page.url()).search).toBe("");
+  expect(state.protectedReads).toEqual([]);
+  await page.getByLabel("Passwort", { exact: true }).fill(password);
+  await page.getByLabel("Passwort wiederholen", { exact: true }).fill(`${password}x`);
+  await page.getByRole("button", { name: "Neues Passwort speichern" }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("stimmen nicht überein");
+  expect(state.passwordChanges).toBe(0);
+  await page.getByLabel("Passwort wiederholen", { exact: true }).fill(password);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(page.getByLabel("Passwort", { exact: true })).toHaveValue(password);
+  await page.getByRole("button", { name: "Neues Passwort speichern" }).click();
+  await expect(page.getByRole("heading", { name: "Anmelden", exact: true })).toBeVisible();
+  await expect(page.getByRole("status")).toContainText("Passwort erfolgreich geändert");
+  expect(state.passwordChanges).toBe(1);
+  expect(state.approved).toBe(false);
+  expect(state.protectedReads).toEqual([]);
+  expect(await page.evaluate((secret) => JSON.stringify(localStorage).includes(secret) || JSON.stringify(sessionStorage).includes(secret), password)).toBe(false);
+  await login(page);
+  await expect(page.getByRole("heading", { name: "Wartet auf Freigabe" })).toBeVisible();
+  expect(state.protectedReads).toEqual([]);
+});
+
+test("an ordinary session or URL recovery flag does not open password recovery", async ({ context, page }) => {
+  const state = await fixture(context);
+  state.verified = true; state.approved = true;
+  await page.goto(publicPath("/"));
+  await login(page);
+  await expect(page.getByRole("heading", { name: "Hallo Synthetic Mitglied" })).toBeVisible();
+  await page.goto(publicPath("/auth/recovery/?type=recovery"));
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("Wiederherstellungslink");
+  await expect(page.getByRole("heading", { name: "Neues Passwort setzen" })).toHaveCount(0);
+  expect(state.passwordChanges).toBe(0);
+});
+
+test("standard-mail server PKCE callback works in a fresh recipient browser without a stored verifier", async ({ context, page }) => {
+  const state = await fixture(context);
+  await page.goto(publicPath(`/auth/recovery/?code=synthetic-server-code&recovery_request=${memberId}`));
+  await expect(page.getByRole("heading", { name: "Neues Passwort setzen" })).toBeVisible();
+  expect(new URL(page.url()).search).toBe("");
+  expect(state.protectedReads).toEqual([]);
+  const storage = await page.evaluate(() => Object.keys(localStorage).concat(Object.keys(sessionStorage)));
+  expect(storage.some((key) => key.includes("code-verifier"))).toBe(false);
+  await page.getByRole("button", { name: "Abbrechen und Sitzung entfernen" }).click();
+  await expect(page.getByRole("heading", { name: "Anmelden", exact: true })).toBeVisible();
+  expect(state.passwordChanges).toBe(0);
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Anmelden", exact: true })).toBeVisible();
+});
+
+test("standard-mail server PKCE saves the new password and renewed login still requires approval", async ({ context, page }) => {
+  const state = await fixture(context);
+  await page.goto(publicPath(`/auth/recovery/?code=synthetic-server-code&recovery_request=${memberId}`));
+  await expect(page.getByRole("heading", { name: "Neues Passwort setzen" })).toBeVisible();
+  await page.getByLabel("Passwort", { exact: true }).fill(password);
+  await page.getByLabel("Passwort wiederholen", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "Neues Passwort speichern" }).click();
+  await expect(page.getByRole("heading", { name: "Anmelden", exact: true })).toBeVisible();
+  await expect(page.getByRole("status")).toContainText("Passwort erfolgreich geändert");
+  expect(state.passwordChanges).toBe(1);
+  expect(state.protectedReads).toEqual([]);
+  expect(await page.evaluate((secret) => JSON.stringify(localStorage).includes(secret) || JSON.stringify(sessionStorage).includes(secret), password)).toBe(false);
+  await login(page);
+  await expect(page.getByRole("heading", { name: "Wartet auf Freigabe" })).toBeVisible();
   expect(state.protectedReads).toEqual([]);
 });
 

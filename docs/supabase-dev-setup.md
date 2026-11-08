@@ -1,5 +1,12 @@
 # Supabase DEV – Verbindung, Authentifizierung und Freigabe
 
+**DEV 0.6.1 – unabhängiger Auth-Hotfix:** Passwortbestätigung, Self-Service und
+GLOBAL_ADMIN-Wiederherstellung über einen geschützten serverseitigen PKCE-
+Versandpfad. Integrierter DEV-Mailversand bleibt erhalten; zusätzliche atomare
+App-Grenzen decken direkte Supabase-Auth-Recovery-Aufrufe ausdrücklich nicht ab.
+Schema/Edge-Installation, Redirects, Sicherheitsgrenzen und vorbereitete
+echte Mail-/Geräteabnahme: [Passwort-Wiederherstellung](auth-password-recovery.md).
+
 **DEV 0.6:** Migrationen 021–024 sind am 08.11.2026 im bestehenden DEV
 installiert, Quellen/Funktionskörper und tatsächliche RLS-Rechte geprüft.
 Vier synthetische Fahrzeuge, fünf Beispielvorgänge und transaktionale

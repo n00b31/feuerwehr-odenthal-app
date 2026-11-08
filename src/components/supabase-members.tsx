@@ -9,6 +9,7 @@ import {
 import { memberErrorMessage, memberRoleSchema, type MembersWorkspace, type ManagedMember, type MemberRole } from "@/domain/dev-members";
 import { dateLabel } from "@/domain/time";
 import { DEV_ROLE_LABELS } from "@/config/app";
+import { requestPasswordRecovery } from "@/auth/recovery-client";
 
 export function SupabaseMembers({ client, actorId, refreshAccess }: {
   client: SupabaseClient; actorId: string; refreshAccess: () => void;
@@ -109,6 +110,13 @@ function MemberRow({ person, workspace, client, busy, run }: {
         onClick={() => void run(() => setUnitMembership(client, person.user_id, currentUnit, false, reason), "Mitgliedschaft beendet; Historie erhalten.")}>Aktuelle Mitgliedschaft beenden</button>}
     </form>}
     {workspace.global_admin && <>
+      <h3>Passwort-Wiederherstellung für {person.display_name}</h3>
+      <p>Nur an die bereits verifizierte Feuerwehr-Adresse dieses Kontos. Die Person setzt ihr Passwort selbst.
+        Kein Klartextpasswort. Gemeinsame App-Anfragegrenzen; direkte Auth-API-Aufrufe bleiben eine DEV-Einschränkung.</p>
+      <button className="button secondary" disabled={busy} onClick={() => void run(
+        () => requestPasswordRecovery(client, { mode: "admin", target_user: person.user_id }),
+        "Wiederherstellung von Supabase angenommen. Mailzustellung ist nicht bestätigt; Versandresultat ist serverseitig protokolliert."
+      )}>Wiederherstellung für {person.display_name} anfordern</button>
       <h3>Rollen für {person.display_name}</h3>
       <ul className="member-role-list" aria-label={`Zugewiesene Rollen für ${person.display_name}`}>{person.roles.map((item) => {
         const assignedRole = item.role;
