@@ -2,10 +2,10 @@
 
 ## DEV 0.6.2: verbindliche Reservierung und explizite Antragsteller
 
-**Entwicklungsstand, noch keine installierte oder manuell abgenommene Freigabe.**
-Die Migrationen 026–032 werden zuerst in isoliertem PostgreSQL geprüft.
-Der veröffentlichte DEV-0.6.1-Stand und die unabhängige Demo bleiben bis zur
-kontrollierten Installation beziehungsweise zum manuellen Merge unverändert.
+**Backend kontrolliert im Supabase DEV installiert; Frontend noch nicht
+veröffentlicht, reale manuelle Abnahme offen.** Die Migrationen 026–032 wurden
+zuerst in isoliertem PostgreSQL geprüft. Der veröffentlichte Client bleibt
+bis zum manuellen Merge DEV 0.6.1. Die unabhängige Demo wurde nicht verändert.
 
 Die Bestandsprüfung im DEV zeigte keine verbindlichen Überschneidungen.
 Die bisherigen Genehmigungs-RPCs sperrten bereits die Fahrzeugzeile; es fehlte
@@ -57,6 +57,65 @@ ebenfalls prüfen. Native iPhone-/Android-PWA-Abnahme bleibt offen.
 SQL-/RLS-Tests verwenden ausschließlich die gesicherte Wegwerf-Datenbank
 `ff_dev_ci`; synthetische Browsertests ersetzen keine reale DEV-Abnahme.
 Es werden für diese Tests keine echten Konten, Passwörter oder E-Mails verändert.
+
+### Kontrollierte Installation und Prüfnachweis am 08.11.2026
+
+Geprüfte und installierte Git-Quelle:
+`cf0ba35e909acbcf6ebc9b4e449359c52c2890da`.
+[PostgreSQL-Lauf 42509612468](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42509612468):
+alle bestehenden SQL-/RLS-Suiten, neue dynamische Mitgliedschafts- und
+Antragstellertests, echte parallele Genehmigungen sowie echte parallele
+Direktupdates ohne RPC-Fahrzeugsperre erfolgreich. Beim Direktupdate wartete
+die zweite Transaktion tatsächlich auf die erste und wurde mit `23P01`
+abgewiesen.
+
+Ein separater PostgreSQL-17-Container installierte zuerst 001–025, erzeugte
+rein fiktive bestätigte Altdaten, Buchungen und den registrierten History-Seed
+und aktualisierte dann auf 026–032. Sämtliche ursprünglichen Datenfelder,
+vollständigen persönlichen/organisationsweiten Jahresberichte, der
+registrierte Seed-Fingerprint und die Wiederholbarkeit des Seeds blieben
+identisch. Neue, nicht standardmäßige Roster-Metadaten werden weiterhin
+als Fingerprint-Abweichung erkannt.
+
+Nach ausdrücklicher Nutzerfreigabe wurden die sieben Dateien vom exakten
+Git-Commit in den sichtbaren DEV-SQL-Editor übernommen. Jede Datei und der
+gesamte atomare Installationsblock wurden vor Ausführung SHA256-geprüft.
+Der Block entfernte nur die äußeren Einzeltransaktionsgrenzen und registrierte
+die unveränderten LF-Git-Quellen innerhalb eines gemeinsamen Commit.
+Bundle-SHA256: `1b5f3de762364c3b2607eaf7a944a22c7afa81d8e7b1f1e32921e423a1732296`.
+
+| Migration | Hosted-Version | SHA256 der gespeicherten LF-Quelle |
+|---|---|---|
+| 026 | 20261108183124 | `7095ab217d38ed23fad9d05cd602f55ac89f16007005d6912ef012c0806f4e75` |
+| 027 | 20261108183125 | `c1d4dc62afda5e0520c107efbe8b47ac82b792944d73f3f70a557e971be99b85` |
+| 028 | 20261108183126 | `c128d484025f461bbafbe8285130c6861d5a2b81cb9571e506ae06b1a93a9300` |
+| 029 | 20261108183127 | `8ff86b0253e5ba865d3d41742768f99b6cdad94f5cd6bf89273febc21de5f336` |
+| 030 | 20261108183128 | `7ad925e1f7ea8c566cba5f619e51cee401434fcc6fbc1647a81274fb9eb24b4b` |
+| 031 | 20261108183129 | `427adcbaaf154a847548022f3d79be8f54c60ac5d06325a42342622372f8c301` |
+| 032 | 20261108183130 | `b7d79ae469d71d7b69128e94208f1bc3b6f4fdf2dfdb7466864cd76f04d1f70d` |
+
+Vor dem Commit erzwangen serverseitige Vergleichsprüfungen die Identität aller
+ursprünglichen Auth-/Profil-/Rollen-/Mitgliedschafts-/Termin-/Rückmeldungs-/
+Anwesenheits-/Bestätigungs-/Buchungs-/Auditfelder, aller historischen
+Berichtszeilen und der Fixture-Registrierung. Jede Abweichung hätte die
+gesamte Installation zurückgerollt. Die sieben gespeicherten Quellen wurden
+danach unabhängig über MCP bytegenau geprüft; Constraint, kanonische
+Zeitkopien, aktivierte RLS und entzogene direkte Schreib-/Helper-Rechte
+wurden bestätigt.
+
+Bestandszahlen vor/nachher identisch: 9 Auth-Konten, 59 Profile, 17 Rollen,
+65 Einheitsintervalle, 279 Termine, 2.691 Roster-Zeilen, 2.661 Rückmeldungen,
+2.685 Anwesenheitszeilen und 262 Bestätigungen.
+Registrierter und berechneter History-Fingerprint unverändert:
+`6fd6737be8dab684db406d63507b7989`.
+Keine tatsächlichen Testmails, Passwortänderungen oder neuen DEV-Testkonten.
+
+Lokale Abschlussprüfung: Lint und Typen erfolgreich, 123 Fach-/Konfigurations-/
+Auth-Tests plus 17 Skripttests erfolgreich, DEV-Static-Export erfolgreich
+und **62/62 synthetische DEV-Browsertests** erfolgreich. Darin enthalten:
+Einheitsfilter/-sortierung, Mehrfachmitgliedschaften, Suche und Deduplizierung,
+alle vier persönlichen Antwortfarben in Light/Dark und Kontrastprüfungen.
+Eine reale JWT-/Geräte-/Benutzerabnahme wird dadurch nicht behauptet.
 
 ## Implementierungsplan
 

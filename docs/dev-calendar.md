@@ -2,7 +2,10 @@
 
 ## DEV 0.6.2: dynamische Zuordnung und persönliche Rückmeldungen
 
-**Vorbereiteter Entwicklungsstand, noch keine bestätigte DEV-Installation.**
+**Backend nach erfolgreicher PostgreSQL-/Upgrade-Prüfung kontrolliert im DEV
+installiert; Frontend-Veröffentlichung und reale Abnahme stehen aus.**
+Der [Installations- und Prüfnachweis](dev-vehicles.md#kontrollierte-installation-und-prüfnachweis-am-08112026)
+dokumentiert unveränderte Altdaten und historische Berichte.
 Migrationen 028–032 ergänzen Mehrfachmitgliedschaften und die neue
 Zuordnungslogik. Ein zusätzliches aktuelles Einheitsintervall ist nur durch
 GLOBAL_ADMIN mit Änderungsgrund möglich. Die bisherige Wechselaktion
