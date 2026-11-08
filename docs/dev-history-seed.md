@@ -1,5 +1,36 @@
 # DEV 0.4.1: nicht anmeldbare historische Testdaten
 
+## Abschluss und manuelle Nutzerabnahme
+
+Am **07.11.2026** hat der Projektverantwortliche die reale Abnahme ausdrücklich
+bestätigt: Jahresauswahl 2025/2026 und persönliche Diensthistorie,
+Einheitsstatistiken einschließlich Scheuren/Scherf und weiterer Einheiten,
+Wehrleiter-Dashboard mit Jahresvergleich/Gesamtstatistiken/CSV-Export sowie
+Terminverwaltung, Teilnahme, Anwesenheit, Delegation und Benutzerverwaltung.
+Dies sind **manuell vom Projektverantwortlichen bestätigte Ergebnisse**,
+nicht neu erfundene oder durch automatisierte Tests ersetzte Browserprüfungen.
+Native PWA-Gerätetests auf iPhone/Android bleiben offen.
+
+Abgenommen wurde **DEV 0.4.1**, Commit
+`ab596e58a9735fec1cba8826ecdab4bf7a7296bc`.
+Die Kette ist nachgewiesen: manuell gemergter PR #15 → derselbe `main`-Commit →
+[erfolgreicher Workflow 42411613373](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42411613373)
+→ heruntergeladenes Artefakt `supabase-dev-export` →
+[öffentliches release.json](https://n00b31.github.io/feuerwehr-odenthal-app/release.json).
+Artefakt und veröffentlichte Anwendung enthalten identische Release-Metadaten:
+Build `ab596e58a973-fec35054-e096-4643-a73a-e728df67c574`,
+Buildzeit `2026-11-07T20:37:16.931Z`, Modus `supabase-dev`,
+`sourceDirty=false`. Auch die SQL-CI
+[42411613297](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42411613297)
+war erfolgreich.
+
+Der zuvor lokal und remote nicht vorhandene annotierte Tag
+**`v0.4.1-seed-dev`** wurde ohne Überschreiben auf genau diesen Commit gesetzt
+und zu GitHub gepusht. Diese Dokumentation wird vor Kalender-Code separat
+committet und gepusht; ihre PR-Sicherung erfolgt zusammen mit dem anschließenden
+DEV-0.5-PR, ohne automatischen Merge. Die abgenommenen Daten werden nicht
+zurückgesetzt, entfernt oder erneut überschrieben.
+
 ## Abgrenzung und Architektur
 
 Ziel ist ausschließlich das bestehende isolierte Projekt

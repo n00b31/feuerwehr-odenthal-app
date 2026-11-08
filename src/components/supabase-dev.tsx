@@ -191,7 +191,7 @@ function DevWorkspace({ client, access, data, pathname, refresh, eventEditor, se
     : pathname === "/dokumente" ? <section className="card section-card"><h2>Dokumentenbereiche</h2><p>App-Sichtbarkeit ersetzt keine SharePoint-Berechtigung.</p>{data.documents.length === 0 && <p>Noch keine sichtbaren DEV-Dokumentenbereiche.</p>}{data.documents.map((item) => <article key={item.id}><h3>{item.name}</h3><p>{item.description}</p><a href={item.sharepoint_url} target="_blank" rel="noopener noreferrer">SharePoint öffnen</a></article>)}</section>
     : pathname === "/statistik" ? <SupabaseReports client={client} access={access} />
     : pathname === "/profil" ? <><section className="card section-card"><h2>Verifiziertes DEV-Profil</h2><p>{access.display_name} · Einheit {access.unit_name}</p><p>Status: Freigegeben. Kein Identitäts- oder Rollenwechsel über lokale Demo-Profile.</p><p>Die Sitzung liegt ausschließlich unter einem projekt- und unterpfadbezogenen SDK-Speicherschlüssel in diesem Browser. Zum Entfernen „Abmelden / Sitzung entfernen“ verwenden.</p></section><SupabaseReports client={client} access={access} personalOnly /></>
-    : <SupabaseEvents client={client} initial={data} preferredUnit={access.unit_id} editor={eventEditor} setEditor={setEventEditor} />}
+    : <SupabaseEvents client={client} initial={data} preferredUnit={access.unit_id} actorId={access.user_id} editor={eventEditor} setEditor={setEventEditor} />}
   </>;
 }
 

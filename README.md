@@ -1,6 +1,7 @@
 # Feuerwehr Odenthal · Supabase DEV und lokale Regression
 
-**DEV 0.4.1:** [Scherf-Korrektur und nicht anmeldbare historische Testdaten](docs/dev-history-seed.md).
+**DEV 0.5:** [Gemeinsamer Kalender, Sichtbarkeit und Gerätehausbelegung](docs/dev-calendar.md).
+Die manuell abgenommene [DEV 0.4.1](docs/dev-history-seed.md) bleibt mit `v0.4.1-seed-dev` gesichert.
 Die zusätzliche gehostete Profilmigration war zunächst durch eine automatisch
 abgebrochene Client-Bestätigung blockiert. Nach direkter
 Nutzeranmeldung wurden die getesteten Migrationen regulär im sichtbaren
