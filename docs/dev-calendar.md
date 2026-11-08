@@ -227,3 +227,54 @@ Kalenderdialog/Filter/Formular mindestens 130 Sekunden geöffnet lassen.
 Native installierte iPhone-/Android-PWA-Abnahme bleibt offen.
 Keine neue Kalenderabnahme wird allein aus synthetischen Browserantworten
 oder erfolgreichen SQL-Tests abgeleitet.
+
+## DEV 0.5.1: Gerätehaus-Stammdaten und Auswahl
+
+PR #16 wurde am 08.11.2026 mit
+`f8a14d362c38a85c8068b732dd5d28f1738d9226` gemergt.
+Der Benutzer hat Kalenderansichten (A), organisatorische Termine (B) und
+bestehende Funktionen (D) erfolgreich abgenommen. Gerätehausbelegung (C)
+war nicht erfolgreich: Im gehosteten DEV waren **null Ressourcen** vorhanden.
+Migration 018 hatte den Ressourcentyp und die Konfiguration bereitgestellt,
+aber bewusst keine Gerätehaus-Stammdaten angelegt. RLS und
+`ff_calendar_context` filtern bestehende Zeilen korrekt; es fehlten die Zeilen.
+Zusätzlich bot das Formular weder die eigene Vorauswahl noch einen
+verständlichen Hinweis bei fehlenden Ressourcen.
+
+Die tatsächlichen fünf Einheiten sind Scheuren, Scherf, Blecher, Voiswinkel
+und **Eikamp**. Migration `20261108002000_firestations.sql` übernimmt IDs und
+Namen aus `units`, ohne neue Einheiten oder hart codierte UUIDs. Sie ergänzt
+je Einheit nur ein fehlendes `building` mit Namen `Gerätehaus <Einheit>`.
+Vorhandene Ressourcen werden nicht umbenannt, reaktiviert oder ersetzt.
+Eine Tabellensperre serialisiert konkurrierende Stammdatenanlage; vorhandene
+mehrfache Gerätehäuser je Einheit werden explizit zur Prüfung gemeldet,
+nicht gelöscht. Neue Ressourcen werden mit Herkunft `DEV051-firestations`
+über den bestehenden Audit-Helper protokolliert. Erneute Ausführung erzeugt
+weder Ressourcen- noch Audit-Duplikate.
+
+Das Formular verwendet ausschließlich aktive, vom Server gelieferte
+Gerätehäuser. Bei Einheitsverwaltung sind zusätzlich nur eigene oder
+gemeinsame Ressourcen auswählbar; GLOBAL_ADMIN behält die bestehende
+berechtigte Auswahl anderer Einheiten. Beim Wechsel zur Belegung wird
+das eigene Gerätehaus aus der aktuellen Hauptmitgliedschaft vorausgewählt,
+auch beim globalen Administrator. Bestehende Belegungen behalten ihre
+Auswahl. Ohne Ressourcen werden eine konkrete Fehlermeldung und keine
+leere Auswahlliste angezeigt; Speichern und Konfliktprüfung sind gesperrt.
+Wird eine gewählte Ressource während der Bearbeitung deaktiviert, bleibt
+der Entwurf erhalten, erfordert aber eine ausdrückliche neue Auswahl.
+
+Bestehende RLS, Schreib-RPCs und Rollen bleiben unverändert:
+UNIT_ADMIN verwaltet eigene Belegungen, MEMBER liest berechtigte Einträge,
+GLOBAL_ADMIN verwaltet alle Gerätehäuser. Technische Ressourcen-Stammdaten
+bleiben wie bisher GLOBAL_ADMIN vorbehalten. FIRE_CHIEF liest organisationsweit;
+seine in DEV 0.5 ausdrücklich eingeräumten fachlichen Kalenderrechte werden
+weder erweitert noch entzogen. Warnungen bei Überschneidungen bleiben
+nicht blockierend; keine verbindliche Reservierungssperre.
+
+Prüfplan: Migration in PostgreSQL-CI zweimal ausführen; fünf aktive
+Einheitsressourcen und unveränderte Auditanzahl prüfen; bestehende
+SQL-Kalendertests mit den tatsächlich angelegten Gerätehäusern nutzen;
+SDK-/Fach-/Browserregressionen, eigene Vorauswahl, Fremdauswahl,
+leere/deaktivierte Ressourcen und Belegungs-CRUD prüfen; anschließend
+kontrollierte DEV-Anwendung, zurückgerollte echte RPC-/RLS-Prüfung und
+signierte Leseprüfung mit den sechs bestehenden Testkonten.

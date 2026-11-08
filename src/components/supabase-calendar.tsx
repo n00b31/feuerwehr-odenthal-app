@@ -5,7 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { CalendarDays,ChevronLeft,ChevronRight,Plus,RefreshCw } from "lucide-react";
 import { readCalendar,saveCalendarEvent,changeCalendarEvent,calendarConflicts,saveCalendarResource,saveCalendarCategory } from "@/data/supabase-calendar";
 import { calendarDateSchema,calendarDraft,calendarInterval,calendarKindSchema,calendarPayload,calendarRange,calendarTime,eventsOnDay,
-  moveCalendar,weekColumns,emptyCalendarFilters,type CalendarView,type CalendarDraft,type CalendarEvent,
+  moveCalendar,weekColumns,emptyCalendarFilters,calendarBookingResources,preferredCalendarResource,type CalendarView,type CalendarDraft,type CalendarEvent,
   type CalendarContext,type CalendarFilters,type CalendarConflict } from "@/domain/calendar";
 import { berlinParts,dateLabel } from "@/domain/time";
 import { eventErrorMessage } from "@/domain/dev-events";
@@ -20,8 +20,8 @@ function errorMessage(error:unknown) {
 }
 const dayName=(day:string) => dateLabel(`${day}T12:00:00Z`,{ year:"numeric" });
 
-export function SupabaseCalendar({client,actorId,initialTime,openService}:{
-  client:SupabaseClient; actorId:string; initialTime:string; openService:(id:string,edit:boolean)=>Promise<void>;
+export function SupabaseCalendar({client,actorId,preferredUnit,initialTime,openService}:{
+  client:SupabaseClient; actorId:string; preferredUnit:string|null; initialTime:string; openService:(id:string,edit:boolean)=>Promise<void>;
 }) {
   const [date,setDate]=useState(()=>berlinParts(initialTime).date);
   const [view,setView]=useState<CalendarView>("month");
@@ -81,7 +81,8 @@ export function SupabaseCalendar({client,actorId,initialTime,openService}:{
       title:"",description:"",location:"",start:`${date}T18:00`,end:`${date}T19:30`,all_day:false,
       entry_kind:"information",scope_kind:snapshot.context.organization ? "organization" :
         snapshot.context.manageable_units.length ? "unit" : "function",
-      unit_id:snapshot.context.organization ? "" : snapshot.context.manageable_units[0]?.id ?? "",function_id:"",
+      unit_id:snapshot.context.organization ? "" : snapshot.context.manageable_units.find(u=>u.id===preferredUnit)?.id
+        ?? snapshot.context.manageable_units[0]?.id ?? "",function_id:"",
       organizer_id:actorId,category_id:snapshot.context.categories.find(c=>c.active)?.id ?? "",
       resource_id:"",audience:"scope",unit_ids:[],
     }});
@@ -117,7 +118,7 @@ export function SupabaseCalendar({client,actorId,initialTime,openService}:{
         <button key={value} className="button secondary" aria-pressed={view===value} onClick={()=>setView(value)}>{["Monat","Woche","Liste"][i]}</button>)}</div>
     </div>
     {ctx && <CalendarFilterControls context={ctx} filters={filters} change={setFilters}/>}
-    {editor && ctx && <CalendarForm editor={editor} context={ctx} busy={busy} change={setEditor} close={()=>setEditor(null)}
+    {editor && ctx && <CalendarForm editor={editor} context={ctx} preferredUnit={preferredUnit} busy={busy} change={setEditor} close={()=>setEditor(null)}
       check={()=>void checkConflicts()} submit={()=>void run(async()=>{
         const result=await saveCalendarEvent(client,calendarPayload(editor.draft),editor.event);
         setConflicts(result.conflicts);setEditor(null);
@@ -213,10 +214,25 @@ function CalendarFilterControls({context,filters,change}:{context:CalendarContex
     <button className="button secondary" onClick={()=>change(emptyCalendarFilters)}>Kalenderfilter zurücksetzen</button>
   </details>;
 }
-function CalendarForm({editor,context,busy,change,close,submit,check}:{editor:Editor;context:CalendarContext;busy:boolean;
+function CalendarForm({editor,context,preferredUnit,busy,change,close,submit,check}:{editor:Editor;context:CalendarContext;preferredUnit:string|null;busy:boolean;
   change:(e:Editor)=>void;close:()=>void;submit:()=>void;check:()=>void}) {
   const d=editor.draft;
   const field=<K extends keyof CalendarDraft>(key:K,value:CalendarDraft[K])=>change({...editor,draft:{...d,[key]:value}});
+  const resources=calendarBookingResources(context,d);
+  const selectedResource=resources.find(r=>r.id===d.resource_id);
+  const unavailable=d.entry_kind==="booking" && !selectedResource;
+  function changeScopeOrKind(draft:CalendarDraft) {
+    if(draft.entry_kind==="booking") {
+      const available=calendarBookingResources(context,draft);
+      if(!available.some(r=>r.id===draft.resource_id)) {
+        const resource=preferredCalendarResource(available,draft.scope_kind==="unit" ? draft.unit_id : preferredUnit);
+        draft={...draft,resource_id:resource?.id ?? "",
+          location:!draft.location || context.resources.find(r=>r.id===d.resource_id)?.name===draft.location
+            ? resource?.name ?? "" : draft.location};
+      }
+    } else draft={...draft,resource_id:""};
+    change({...editor,draft});
+  }
   const scopes=[...(context.organization ? [{value:"organization",name:"Gesamte Feuerwehr"}] : []),
     ...context.manageable_units.map(u=>({value:`unit:${u.id}`,name:u.name})),
     ...context.functions.filter(f=>f.manage).map(f=>({value:`function:${f.id}`,name:f.name}))];
@@ -225,13 +241,13 @@ function CalendarForm({editor,context,busy,change,close,submit,check}:{editor:Ed
     <form className="form-grid" onSubmit={e=>{e.preventDefault();submit();}}>
       <label className="span-2">Zweck / Titel<input value={d.title} required minLength={3} maxLength={120} onChange={e=>field("title",e.target.value)}/></label>
       <label className="span-2">Beschreibung<textarea value={d.description} rows={3} maxLength={2000} onChange={e=>field("description",e.target.value)}/></label>
-      <label>Eintragsart<select value={d.entry_kind} onChange={e=>field("entry_kind",calendarKindSchema.parse(e.target.value))}>
+      <label>Eintragsart<select value={d.entry_kind} onChange={e=>changeScopeOrKind({...d,entry_kind:calendarKindSchema.parse(e.target.value)})}>
         <option value="information">Information ohne Teilnahmeabfrage</option><option value="booking">Gerätehausbelegung</option></select></label>
       <label>Kalenderkategorie<select value={d.category_id} required onChange={e=>field("category_id",e.target.value)}>
         <option value="">Kategorie wählen</option>{context.categories.filter(c=>c.active || c.id===d.category_id).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
       <label>Verwaltungsbereich<select value={d.scope_kind==="organization" ? "organization" : `${d.scope_kind}:${d.scope_kind==="unit" ? d.unit_id : d.function_id}`}
-        required onChange={e=>{const [kind,id]=e.target.value.split(":");change({...editor,draft:{...d,scope_kind:kind==="unit" ? "unit" : kind==="function" ? "function" : "organization",
-          unit_id:kind==="unit" ? id : "",function_id:kind==="function" ? id : "",audience:"scope",unit_ids:[]}});}}>
+        required onChange={e=>{const [kind,id]=e.target.value.split(":");changeScopeOrKind({...d,scope_kind:kind==="unit" ? "unit" : kind==="function" ? "function" : "organization",
+          unit_id:kind==="unit" ? id : "",function_id:kind==="function" ? id : "",audience:"scope",unit_ids:[]});}}>
         <option value="">Bereich wählen</option>{scopes.map(s=><option key={s.value} value={s.value}>{s.name}</option>)}</select></label>
       <label>Sichtbarkeit<select value={d.audience} onChange={e=>change({...editor,draft:{...d,audience:e.target.value==="units" ? "units" :
         e.target.value==="leadership" ? "leadership" : "scope",unit_ids:[]}})}>
@@ -247,12 +263,19 @@ function CalendarForm({editor,context,busy,change,close,submit,check}:{editor:Ed
       <label>{d.all_day ? "Letzter Tag (einschließlich)" : "Ende (Europe/Berlin)"}<input type={d.all_day ? "date" : "datetime-local"} value={d.all_day ? d.end.slice(0,10) : d.end}
         required onChange={e=>field("end",d.all_day ? `${e.target.value}T00:00` : e.target.value)}/></label>
       <label>Ort<input value={d.location} required maxLength={200} onChange={e=>field("location",e.target.value)}/></label>
-      {d.entry_kind==="booking" && <label>Gerätehaus<select value={d.resource_id} required onChange={e=>field("resource_id",e.target.value)}>
-        <option value="">Gerätehaus wählen</option>{context.resources.filter(r=>r.active && r.resource_type==="building").map(r=><option key={r.id} value={r.id}>{r.name}</option>)}</select></label>}
+      {d.entry_kind==="booking" && (resources.length ? <>
+        <label>Gerätehaus<select value={selectedResource?.id ?? ""} required disabled={busy} onChange={e=>{
+          const resource=resources.find(r=>r.id===e.target.value);
+          change({...editor,draft:{...d,resource_id:e.target.value,
+            location:!d.location || context.resources.find(r=>r.id===d.resource_id)?.name===d.location ? resource?.name ?? "" : d.location}});
+        }}>
+          <option value="" disabled>Gerätehaus wählen</option>{resources.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}</select></label>
+        {unavailable && <p className="span-2 notice error" role="alert">Das gewählte Gerätehaus ist nicht mehr aktiv oder für diesen Bereich berechtigt. Bitte ein verfügbares Gerätehaus auswählen.</p>}
+      </> : <p className="span-2 notice error" role="alert">Keine berechtigten aktiven Gerätehäuser verfügbar. Die globale Administration muss die Gerätehaus-Stammdaten prüfen beziehungsweise Migration 020 anwenden. Belegung kann nicht gespeichert werden.</p>)}
       <p className="span-2 muted text-sm">Keine Teilnahmeabfrage. Ganztägige Termine verwenden Berliner Tagesgrenzen. Wiederkehrende organisatorische Termine sind noch nicht freigeschaltet.</p>
       <div className="span-2 dev-actions"><button className="button secondary" type="button" onClick={close} disabled={busy}>Kalenderbearbeitung verwerfen</button>
-        {d.entry_kind==="booking" && <button className="button secondary" type="button" onClick={check} disabled={busy}>Überschneidungen prüfen</button>}
-        <button className="button" disabled={busy}>Kalendereintrag speichern</button></div>
+        {d.entry_kind==="booking" && <button className="button secondary" type="button" onClick={check} disabled={busy || unavailable}>Überschneidungen prüfen</button>}
+        <button className="button" disabled={busy || unavailable}>Kalendereintrag speichern</button></div>
     </form>
   </section>;
 }

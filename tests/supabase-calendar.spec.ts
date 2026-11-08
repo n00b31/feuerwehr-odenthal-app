@@ -24,15 +24,23 @@ function event(id:string,title:string,kind:CalendarEvent["entry_kind"],hour:numb
 }
 
 // Intercepted protocol fixtures, not real authentication or hosted RLS proof.
-async function connect(page:Page,admin=true) {
+async function connect(page:Page,role:"global"|"unit"|"member"="global",stations:"single"|"five"|"none"="single") {
+  const admin=role!=="member",global=role==="global";
   const state={queries:[] as Record<string,unknown>[],events:[
     event(service,"Synthetic existing service","participation",18),
     event(info,"Synthetic public information","information",19),
   ],archived:new Set<string>(),conflict:false,fail:false,serviceQueries:0,nextId:9};
-  const context:CalendarContext={organization:admin,configure:admin,
+  const context:CalendarContext={organization:global,configure:global,
     units:[{id:unit,name:"Scheuren"}],manageable_units:admin ? [{id:unit,name:"Scheuren"}] : [],
     functions:[],organizers:[{id:actor,name:"Synthetic Calendar"}],categories:[{id:category,name:"Synthetic category",active:true}],
     resources:[{id:resource,name:"Synthetic building",resource_type:"building",unit_id:unit,active:true,revision:0}]};
+  if(stations==="five") {
+    context.units=["Scheuren","Scherf","Blecher","Voiswinkel","Eikamp"].map((name,i)=>({
+      id:`b0500000-0000-4000-8000-${String(i+1).padStart(12,"0")}`,name}));
+    context.resources=context.units.filter(u=>global || u.id===unit).map(u=>({
+      id:u.id.replace("b050","d050"),name:`Gerätehaus ${u.name}`,resource_type:"building",unit_id:u.id,active:true,revision:0}));
+    if(global) context.manageable_units=context.units;
+  } else if(stations==="none") context.resources=[];
   const user={id:actor,aud:"authenticated",role:"authenticated",email:"synthetic.calendar@feuerwehr-odenthal.de",
     email_confirmed_at:now,created_at:now,app_metadata:{provider:"email",providers:["email"]},
     user_metadata:{display_name:"Synthetic Calendar"}};
@@ -50,7 +58,7 @@ async function connect(page:Page,admin=true) {
     if(pathname==="/auth/v1/user") return respond(user);
     if(pathname.endsWith("/ff_my_access")) return respond({user_id:actor,display_name:"Synthetic Calendar",
       account_status:"approved",access_granted:true,unit_id:unit,unit_name:"Scheuren",
-      roles:admin ? ["MEMBER","GLOBAL_ADMIN"] : ["MEMBER"]});
+      roles:global ? ["MEMBER","GLOBAL_ADMIN"] : admin ? ["MEMBER","UNIT_ADMIN"] : ["MEMBER"]});
     if(pathname.endsWith("/units")) return respond(context.units);
     if(pathname.endsWith("/document_areas") || pathname.endsWith("/ff_pending_registrations")) return respond([]);
     if(pathname.endsWith("/ff_calendar_context")) return respond(context);
@@ -90,7 +98,8 @@ async function connect(page:Page,admin=true) {
       const q=request.postDataJSON(),p=calendarPayloadSchema.parse(q.input);
       const id=q.target_event ?? `e0500000-0000-4000-8000-${String(state.nextId++).padStart(12,"0")}`;
       const previous=state.events.find(e=>e.id===id);
-      const row:CalendarEvent={...event(id,p.title,p.entry_kind,18),...p,revision:previous ? previous.revision+1 : 0};
+      const row:CalendarEvent={...event(id,p.title,p.entry_kind,18),...p,revision:previous ? previous.revision+1 : 0,
+        resource_name:context.resources.find(r=>r.id===p.resource_id)?.name ?? null};
       state.events=state.events.filter(e=>e.id!==id).concat(row);
       return respond({id,conflicts:conflicts()});
     }
@@ -142,7 +151,7 @@ test("calendar renders canonical services once, month/week/list, navigation and 
 });
 
 test("member sees global information without participation or administrative controls",async({page})=>{
-  await connect(page,false);
+  await connect(page,"member");
   await expect(page.getByRole("button",{name:"Kalendereintrag erstellen"})).toHaveCount(0);
   await expect(page.getByText("Kalenderkonfiguration · globale Administration")).toHaveCount(0);
   await page.locator(".calendar-chip").filter({hasText:"Synthetic public information"}).click();
@@ -196,6 +205,85 @@ test("resource successive edits keep revisions, drafts and explicit refresh erro
   state.fail=true;
   await page.getByRole("button",{name:"Kalender aktualisieren"}).click();
   await expect(page.locator(".calendar").getByRole("alert")).toBeVisible();
+});
+
+test("global selects all five fire stations, defaults to own and retains a saved booking after reload",async({page})=>{
+  const state=await connect(page,"global","five");
+  await page.getByRole("button",{name:"Kalendereintrag erstellen"}).click();
+  await page.getByRole("combobox",{name:"Eintragsart",exact:true}).selectOption("booking");
+  const houses=page.getByRole("combobox",{name:"Gerätehaus",exact:true});
+  await expect(houses).toHaveValue(resource);
+  await expect(houses.locator('option:not([value=""])')).toHaveCount(5);
+  await expect(houses).toContainText("Gerätehaus Eikamp");
+  await expect(page.getByLabel("Ort",{exact:true})).toHaveValue("Gerätehaus Scheuren");
+  await houses.selectOption({label:"Gerätehaus Scherf"});
+  await expect(page.getByLabel("Ort",{exact:true})).toHaveValue("Gerätehaus Scherf");
+  await page.getByLabel("Zweck / Titel").fill("Synthetic global house booking");
+  await page.getByRole("combobox",{name:"Verantwortliche Person",exact:true}).selectOption(actor);
+  await page.getByLabel("Beginn (Europe/Berlin)",{exact:true}).fill("2026-11-08T18:00");
+  await page.getByLabel("Ende (Europe/Berlin)",{exact:true}).fill("2026-11-08T19:30");
+  await page.getByRole("button",{name:"Kalendereintrag speichern"}).click();
+  expect(state.events.find(e=>e.title==="Synthetic global house booking")?.resource_id).toBe("d0500000-0000-4000-8000-000000000002");
+  await page.reload();
+  await page.getByRole("button",{name:"Gemeinsamer Kalender",exact:true}).click();
+  await page.locator(".calendar-chip").filter({hasText:"Synthetic global house booking"}).click();
+  await expect(page.getByRole("dialog")).toContainText("Gerätehaus: Gerätehaus Scherf");
+});
+
+test("unit leader selects own house, saves, edits and cancels a warning-only booking",async({page})=>{
+  const state=await connect(page,"unit","five");
+  await expect(page.getByText("Kalenderkonfiguration · globale Administration")).toHaveCount(0);
+  await page.getByRole("button",{name:"Kalendereintrag erstellen"}).click();
+  await page.getByRole("combobox",{name:"Eintragsart",exact:true}).selectOption("booking");
+  const houses=page.getByRole("combobox",{name:"Gerätehaus",exact:true});
+  await expect(houses).toHaveValue(resource);
+  await expect(houses.locator('option:not([value=""])')).toHaveCount(1);
+  await expect(houses).not.toContainText("Gerätehaus Scherf");
+  await page.getByLabel("Zweck / Titel").fill("Synthetic own house booking");
+  state.conflict=true;
+  await page.getByRole("button",{name:"Überschneidungen prüfen"}).click();
+  await expect(page.getByRole("heading",{name:/Überschneidung erkannt/})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Kalendereintrag speichern"})).toBeEnabled();
+  await page.getByRole("button",{name:"Kalendereintrag speichern"}).click();
+  await page.locator(".calendar-chip").filter({hasText:"Synthetic own house booking"}).click();
+  await page.getByRole("button",{name:"Kalendereintrag bearbeiten",exact:true}).click();
+  await expect(houses).toHaveValue(resource);
+  await page.getByLabel("Zweck / Titel").fill("Synthetic edited house booking");
+  await page.getByRole("button",{name:"Kalendereintrag speichern"}).click();
+  await page.locator(".calendar-chip").filter({hasText:"Synthetic edited house booking"}).click();
+  await page.getByLabel("Begründung für Absage / Archivierung").fill("Synthetic booking cancellation");
+  await page.getByRole("button",{name:"Kalendereintrag absagen"}).click();
+  await expect(page.locator(".calendar-chip").filter({hasText:"Synthetic edited house booking"})).toContainText("Abgesagt");
+});
+
+test("missing building reference data blocks only bookings with an explicit actionable error",async({page})=>{
+  await connect(page,"global","none");
+  await page.getByRole("button",{name:"Kalendereintrag erstellen"}).click();
+  await page.getByRole("combobox",{name:"Eintragsart",exact:true}).selectOption("booking");
+  await expect(page.locator(".calendar").getByRole("alert")).toContainText("Keine berechtigten aktiven Gerätehäuser verfügbar");
+  await expect(page.getByRole("combobox",{name:"Gerätehaus",exact:true})).toHaveCount(0);
+  await expect(page.getByRole("button",{name:"Kalendereintrag speichern"})).toBeDisabled();
+  await expect(page.getByRole("button",{name:"Überschneidungen prüfen"})).toBeDisabled();
+  await page.getByRole("combobox",{name:"Eintragsart",exact:true}).selectOption("information");
+  await expect(page.locator(".calendar").getByRole("alert")).toHaveCount(0);
+  await expect(page.getByRole("button",{name:"Kalendereintrag speichern"})).toBeEnabled();
+});
+
+test("deactivated selected building preserves the draft but requires an explicit authorized replacement",async({page})=>{
+  await connect(page,"global","five");
+  await page.getByRole("button",{name:"Kalendereintrag erstellen"}).click();
+  await page.getByRole("combobox",{name:"Eintragsart",exact:true}).selectOption("booking");
+  await page.getByLabel("Zweck / Titel").fill("Synthetic retained booking draft");
+  await page.getByText("Kalenderkonfiguration · globale Administration").click();
+  await page.getByLabel("Ressource bearbeiten").selectOption(resource);
+  await page.getByLabel("Ressource aktiv",{exact:true}).uncheck();
+  await page.getByRole("button",{name:"Gerätehaus speichern",exact:true}).click();
+  await expect(page.locator(".calendar").getByRole("alert")).toContainText("nicht mehr aktiv");
+  await expect(page.getByLabel("Zweck / Titel")).toHaveValue("Synthetic retained booking draft");
+  await expect(page.getByRole("button",{name:"Kalendereintrag speichern"})).toBeDisabled();
+  await page.getByRole("combobox",{name:"Gerätehaus",exact:true}).selectOption({label:"Gerätehaus Scherf"});
+  await expect(page.locator(".calendar").getByRole("alert")).toHaveCount(0);
+  await expect(page.getByRole("button",{name:"Kalendereintrag speichern"})).toBeEnabled();
 });
 
 test("four simulated background intervals retain month/filter/native dialog and editor DOM",async({page})=>{

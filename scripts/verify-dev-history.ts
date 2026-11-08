@@ -69,6 +69,14 @@ async function main() {
     const calendar = await readCalendar(client, range, emptyCalendarFilters);
     assert(!calendar.context.organization && !calendar.context.configure, "Member/unit calendar gained technical or organization privileges.");
     assert.deepEqual(calendar.context.manageable_units.map((u)=>u.id).sort(), context.units.map((u)=>u.id).sort());
+    stage = "actual own fire-station context and resource SELECT/RLS";
+    assert.equal(calendar.context.resources.length,1,"Existing member/unit account must see its own fire station.");
+    assert(calendar.context.resources.every(r=>r.resource_type==="building" && r.active && r.unit_id===access.unit_id));
+    const resources=await client.from("calendar_resources").select("id,unit_id,resource_type,active");
+    assert(!resources.error,"Live resource RLS query failed.");
+    const houses=z.array(z.object({id:z.uuid(),unit_id:z.uuid(),resource_type:z.literal("building"),active:z.literal(true)})).parse(resources.data);
+    assert.deepEqual(houses.map(r=>r.id).sort(),calendar.context.resources.map(r=>r.id).sort(),"Direct resource RLS differs from calendar context.");
+    assert(houses.every(r=>r.unit_id===access.unit_id),"Foreign fire station leaked through resource RLS.");
     assert(new Set(calendar.events.map((e)=>e.id)).size===calendar.events.length, "Calendar returned duplicate identities.");
     const legacy = z.array(z.object({ id:z.uuid(), starts_at:z.string(), ends_at:z.string() })).parse(events.data.events);
     for (const event of legacy.filter((e)=>Date.parse(e.starts_at)<Date.parse(range.upper_bound)
@@ -85,7 +93,7 @@ async function main() {
     const logout = await client.auth.signOut({ scope: "local" });
     assert(!logout.error, "Discarding the temporary local test session failed.");
   }
-  console.log("PASS: six existing Auth logins; actual profile RLS, annual report RPCs, scoped denials, shared calendar and canonical event compatibility. No new Auth users or business-data writes.");
+  console.log("PASS: six existing Auth logins; actual profile and own fire-station resource RLS, annual report RPCs, scoped denials, shared calendar and canonical event compatibility. No new Auth users or business-data writes.");
 }
 main().catch((error: unknown) => {
   const code = typeof error==="object" && error!==null && "code" in error

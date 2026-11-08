@@ -41,6 +41,10 @@ jobs:
             echo "Validating $migration"
             docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < "$migration"
           done
+      - name: Verify idempotent fire-station reference data migration
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/migrations/20261108002000_firestations.sql
       - name: Verify RLS and server-side authorization
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}

@@ -39,6 +39,13 @@ export type CalendarDraft = {
   unit_id: string; function_id: string; organizer_id: string; category_id: string; resource_id: string;
   audience: "scope" | "units" | "leadership"; unit_ids: string[];
 };
+export function calendarBookingResources(context: CalendarContext, scope: Pick<CalendarDraft,"scope_kind"|"unit_id">) {
+  return context.resources.filter(resource=>resource.active && resource.resource_type==="building"
+    && (context.configure || scope.scope_kind!=="unit" || resource.unit_id===null || resource.unit_id===scope.unit_id));
+}
+export function preferredCalendarResource(resources: CalendarContext["resources"], unit: string|null) {
+  return resources.find(resource=>resource.unit_id===unit) ?? resources[0];
+}
 export const calendarPayloadSchema = z.object({
   title: z.string().trim().min(3).max(120), description: z.string().max(2000), location: z.string().trim().min(1).max(200),
   event_type: z.literal("other"), response_deadline: z.null(), starts_at: instant, ends_at: instant,

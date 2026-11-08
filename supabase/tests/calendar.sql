@@ -18,6 +18,11 @@ returns jsonb language sql as $$
     'resource_id',resource,'category_id',(select id from public.calendar_categories order by name limit 1),
     'starts_at',clock_timestamp()+interval '2 days','ends_at',clock_timestamp()+interval '2 days 2 hours');
 $$;
+select pg_temp.calendar_assert((select count(*)=5 from public.calendar_resources),'exactly five initial fire-station resources');
+select pg_temp.calendar_assert((select count(*)=5 and count(distinct r.unit_id)=5 from public.calendar_resources r
+  join public.units u on u.id=r.unit_id where r.resource_type='building' and r.active),'one active building assigned to every existing unit');
+select pg_temp.calendar_assert((select count(*)=5 from public.audit_entries where after_data->>'source'='DEV051-firestations'),
+  'repeated fire-station migration creates no duplicate resources or audit rows');
 insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data)
 select ('a0500000-0000-4000-8000-'||lpad(i::text,12,'0'))::uuid,'synthetic.calendar.'||i||'@feuerwehr-odenthal.de',
   clock_timestamp(),jsonb_build_object('display_name','Synthetic Calendar '||i) from generate_series(1,7) i;
@@ -39,10 +44,9 @@ select public.ff_set_role('a0500000-0000-4000-8000-000000000003','UNIT_ADMIN',cu
 select public.ff_set_function_membership('a0500000-0000-4000-8000-000000000005',current_setting('cal.function')::uuid,true,'Synthetic calendar function');
 select public.ff_set_role('a0500000-0000-4000-8000-000000000005','FUNCTION_ADMIN',null,current_setting('cal.function')::uuid,true);
 select public.ff_set_role('a0500000-0000-4000-8000-000000000006','FIRE_CHIEF',null,null,true);
-select set_config('cal.resource',public.ff_save_calendar_resource(jsonb_build_object('name','Synthetic Scheuren building',
-  'resource_type','building','unit_id',current_setting('cal.unit'),'active',true))::text,true);
-select set_config('cal.foreign_resource',public.ff_save_calendar_resource(jsonb_build_object('name','Synthetic foreign building',
-  'resource_type','building','unit_id',current_setting('cal.other'),'active',true))::text,true);
+select pg_temp.calendar_assert(jsonb_array_length(public.ff_calendar_context()->'resources')=5,'GLOBAL_ADMIN sees all five buildings');
+select set_config('cal.resource',(select id::text from public.calendar_resources where unit_id=current_setting('cal.unit')::uuid and resource_type='building'),true);
+select set_config('cal.foreign_resource',(select id::text from public.calendar_resources where unit_id=current_setting('cal.other')::uuid and resource_type='building'),true);
 select pg_temp.calendar_assert(public.ff_save_calendar_event(pg_temp.calendar_payload('Synthetic global cross-unit booking','booking',
   current_setting('cal.unit')::uuid,current_setting('cal.foreign_resource')::uuid))->>'id' is not null,
   'GLOBAL_ADMIN may coordinate an authorized cross-unit resource booking');
@@ -72,6 +76,9 @@ reset role;
 
 select set_config('request.jwt.claim.sub','a0500000-0000-4000-8000-000000000002',true);
 set local role authenticated;
+select pg_temp.calendar_assert(jsonb_array_length(public.ff_calendar_context()->'resources')=1
+  and (select count(*)=1 from public.calendar_resources where unit_id=current_setting('cal.unit')::uuid),
+  'MEMBER resource SELECT/RLS is limited to own building');
 select pg_temp.calendar_assert((select count(*)=1 from public.events where id=current_setting('cal.info')::uuid),'global information visible to member');
 select pg_temp.calendar_assert((select count(*)=0 from public.events where id=current_setting('cal.private')::uuid),'leadership booking hidden by event RLS');
 select pg_temp.calendar_assert((select count(*)=0 from public.event_calendar where event_id=current_setting('cal.private')::uuid),'metadata RLS also protects private event');
@@ -89,6 +96,7 @@ reset role;
 
 select set_config('request.jwt.claim.sub','a0500000-0000-4000-8000-000000000003',true);
 set local role authenticated;
+select pg_temp.calendar_assert(jsonb_array_length(public.ff_calendar_context()->'resources')=1,'UNIT_ADMIN sees own authorized building');
 select pg_temp.calendar_assert(jsonb_array_length(public.ff_save_calendar_event(pg_temp.calendar_payload('Synthetic overlap warning','booking',
   current_setting('cal.unit')::uuid,current_setting('cal.resource')::uuid))->'conflicts')=1,'overlap warns without blocking permitted save');
 select set_config('cal.own',(public.ff_save_calendar_event(pg_temp.calendar_payload('Synthetic own information','information',current_setting('cal.unit')::uuid))->>'id'),true);
@@ -104,6 +112,7 @@ select pg_temp.calendar_denied($q$select public.ff_save_calendar_event(pg_temp.c
 select pg_temp.calendar_denied($q$select public.ff_save_calendar_event(pg_temp.calendar_payload('Forged foreign resource','booking',
   current_setting('cal.unit')::uuid,current_setting('cal.foreign_resource')::uuid))$q$);
 select pg_temp.calendar_denied($q$select public.ff_save_calendar_category('Forged category')$q$);
+select pg_temp.calendar_denied($q$update public.calendar_resources set active=false where id=current_setting('cal.resource')::uuid$q$);
 select pg_temp.calendar_denied($q$select public.ff_save_calendar_event(pg_temp.calendar_payload('Forged organization','information',null))$q$);
 reset role;
 
@@ -111,6 +120,7 @@ select set_config('request.jwt.claim.sub','a0500000-0000-4000-8000-000000000006'
 set local role authenticated;
 select pg_temp.calendar_assert((public.ff_calendar_context()->>'organization')::boolean and not(public.ff_calendar_context()->>'configure')::boolean,
   'FIRE_CHIEF has explicit organization calendar authority, no technical configuration');
+select pg_temp.calendar_assert(jsonb_array_length(public.ff_calendar_context()->'resources')=5,'FIRE_CHIEF reads organization-wide building resources');
 select public.ff_save_calendar_event(pg_temp.calendar_payload('Synthetic chief organization event','information',null));
 select pg_temp.calendar_denied($q$select public.ff_save_calendar_category('Forged chief category')$q$);
 select pg_temp.calendar_denied($q$select public.ff_set_account_status('a0500000-0000-4000-8000-000000000002','suspended','Forbidden chief suspension')$q$);
@@ -140,7 +150,12 @@ select pg_temp.calendar_assert(jsonb_array_length(public.ff_calendar_conflicts(c
   (select max(e.ends_at) from public.events e join public.event_calendar c on c.event_id=e.id where c.resource_id=current_setting('cal.resource')::uuid),
   (select max(e.ends_at)+interval '1 hour' from public.events e join public.event_calendar c on c.event_id=e.id where c.resource_id=current_setting('cal.resource')::uuid)))=0,
   'back-to-back bookings do not overlap');
-select public.ff_change_calendar_event((select id from public.events where title='Synthetic overlap warning'),0,'cancel','Synthetic booking cancellation');
+select public.ff_save_calendar_event(pg_temp.calendar_payload('Synthetic edited building booking','booking',
+  current_setting('cal.unit')::uuid,current_setting('cal.resource')::uuid),
+  (select id from public.events where title='Synthetic overlap warning'),0);
+select pg_temp.calendar_assert((select revision=1 from public.events where title='Synthetic edited building booking'),
+  'building booking can be edited without changing its resource identity');
+select public.ff_change_calendar_event((select id from public.events where title='Synthetic edited building booking'),1,'cancel','Synthetic booking cancellation');
 select pg_temp.calendar_assert(jsonb_array_length(public.ff_calendar_conflicts(current_setting('cal.resource')::uuid,
   current_setting('cal.lower')::timestamptz,current_setting('cal.upper')::timestamptz))=1,
   'cancelled booking no longer contributes a resource conflict');
