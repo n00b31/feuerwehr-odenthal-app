@@ -23,6 +23,18 @@ function event(id:string,title:string,kind:CalendarEvent["entry_kind"],hour:numb
     can_manage:true,unit_ids:[]};
 }
 
+test("browser back releases a native calendar dialog while retaining the selected event",async({page})=>{
+  await connect(page,"member");
+  await page.locator(".calendar-chip").filter({hasText:"Synthetic public information"}).click();
+  await expect(page.getByRole("dialog",{name:"Synthetic public information"})).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("button",{name:"Dienstverwaltung",exact:true})).toHaveAttribute("aria-pressed","true");
+  await page.getByRole("button",{name:"Gemeinsamer Kalender",exact:true}).click();
+  await expect(page.getByRole("dialog",{name:"Synthetic public information"})).toBeVisible();
+  await page.getByRole("button",{name:"Dialog schließen"}).click();
+  await expect(page.getByLabel("Kalendermonat")).toBeVisible();
+});
 test("calendar participation chips and details preserve personal status colors in light and dark mode",async({page})=>{
   const state=await connect(page,"member");
   for(const theme of ["light","dark"]){

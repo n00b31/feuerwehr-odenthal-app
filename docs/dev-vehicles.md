@@ -60,7 +60,7 @@ Es werden für diese Tests keine echten Konten, Passwörter oder E-Mails veränd
 
 ### Kontrollierte Installation und Prüfnachweis am 08.11.2026
 
-Geprüfte und installierte Git-Quelle:
+Git-Quelle der geprüften und installierten Migrationen:
 `cf0ba35e909acbcf6ebc9b4e449359c52c2890da`.
 [PostgreSQL-Lauf 42509612468](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42509612468):
 alle bestehenden SQL-/RLS-Suiten, neue dynamische Mitgliedschafts- und
@@ -112,10 +112,27 @@ Keine tatsächlichen Testmails, Passwortänderungen oder neuen DEV-Testkonten.
 
 Lokale Abschlussprüfung: Lint und Typen erfolgreich, 123 Fach-/Konfigurations-/
 Auth-Tests plus 17 Skripttests erfolgreich, DEV-Static-Export erfolgreich
-und **62/62 synthetische DEV-Browsertests** erfolgreich. Darin enthalten:
+und **64/64 synthetische DEV-Browsertests** erfolgreich. Darin enthalten:
 Einheitsfilter/-sortierung, Mehrfachmitgliedschaften, Suche und Deduplizierung,
 alle vier persönlichen Antwortfarben in Light/Dark und Kontrastprüfungen.
 Eine reale JWT-/Geräte-/Benutzerabnahme wird dadurch nicht behauptet.
+
+Zusätzlich erfolgreich: ein Browsertest mit ausdrücklich leerer
+DEV-Konfiguration (kein Demo-Fallback oder geschützter Zugriff) sowie ein
+lokaler Export mit der tatsächlichen öffentlichen DEV-Konfiguration,
+Secret-/Synthetic-Prüfung und HTTP 200.
+[Pages-Prüflauf 42510795728](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42510795728)
+bestand Demo-Build, synthetische DEV-Browserprüfung und realen DEV-Export;
+Deployment war auf dem Hotfix-Branch erwartungsgemäß übersprungen.
+
+Bei der ergänzenden Browserprüfung wurde ein direkt mit den beibehaltenen
+Ansichten zusammenhängender Navigationsfehler reproduziert: Ein natives
+Modal in einem ausgeblendeten Bereich war unsichtbar, blockierte aber
+weiterhin die übrige Seite. Eine gemeinsame Dialog-Sichtbarkeit für alle
+drei Terminbereiche schließt beim History-Wechsel nur das native Modal;
+Entwurf, Auswahl und Fachzustand bleiben erhalten. Zwei neue Browsertests
+prüfen Zurück-Navigation und erneutes Öffnen für Fahrzeug und Kalender;
+die gesamte 64er-Suite bestand anschließend.
 
 ## Implementierungsplan
 

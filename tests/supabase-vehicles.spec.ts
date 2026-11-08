@@ -242,3 +242,16 @@ test("three equal sections preserve vehicle controls, URL deep link and browser 
   await page.reload();
   await expect(page.getByLabel("Fahrzeug auswählen")).toBeVisible();
 });
+test("browser back releases the native vehicle modal without losing its draft",async({page})=>{
+  await connect(page);
+  await page.getByRole("button",{name:"Reservierung beantragen",exact:true}).click();
+  await page.getByLabel("Zweck / Titel").fill("Preserved request draft");
+  await page.goBack();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("button",{name:"Dienstverwaltung",exact:true})).toHaveAttribute("aria-pressed","true");
+  await page.getByRole("button",{name:"Fahrzeugkalender",exact:true}).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.getByLabel("Zweck / Titel")).toHaveValue("Preserved request draft");
+  await page.getByRole("button",{name:"Dialog schließen"}).click();
+  await expect(page.getByLabel("Fahrzeug auswählen")).toBeVisible();
+});

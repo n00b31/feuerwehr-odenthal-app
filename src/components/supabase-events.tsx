@@ -18,6 +18,7 @@ import { attendanceLabels } from "@/domain/dev-attendance";
 import { defaultEventList, monthLabel, monthKeySchema, type EventListQuery } from "@/domain/dev-event-list";
 import { SupabaseCalendar } from "./supabase-calendar";
 import { SupabaseVehicles } from "./supabase-vehicles";
+import { AppDialogVisibility } from "./app-dialog";
 
 export type EventEditorState = { id?: string; revision: number; draft: DevEventDraft };
 const responses: [DevResponse, string][] = [["yes", "Ich komme"], ["no", "Ich kann nicht"], ["maybe", "Vielleicht"]];
@@ -187,10 +188,11 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
       <button className="button secondary" aria-pressed={section==="kalender"} onClick={()=>changeSection("kalender")}>Gemeinsamer Kalender</button>
       <button className="button secondary" aria-pressed={section==="fahrzeuge"} onClick={()=>changeSection("fahrzeuge")}>Fahrzeugkalender</button>
     </div>
-    {calendarActivated && <div hidden={section!=="kalender"}><SupabaseCalendar key={actorId} client={client} actorId={actorId}
-      preferredUnit={preferredUnit} initialTime={initial.server_now} openService={openService} openVehicle={openVehicle}/></div>}
-    {vehiclesActivated && <div hidden={section!=="fahrzeuge"}><SupabaseVehicles key={actorId} client={client} actorId={actorId}
-      initialTime={initial.server_now} preferredUnit={preferredUnit} initialEventId={vehicleEvent?.id} initialEventSequence={vehicleEvent?.sequence}/></div>}
+    {calendarActivated && <AppDialogVisibility.Provider value={section==="kalender"}><div hidden={section!=="kalender"}><SupabaseCalendar key={actorId} client={client} actorId={actorId}
+      preferredUnit={preferredUnit} initialTime={initial.server_now} openService={openService} openVehicle={openVehicle}/></div></AppDialogVisibility.Provider>}
+    {vehiclesActivated && <AppDialogVisibility.Provider value={section==="fahrzeuge"}><div hidden={section!=="fahrzeuge"}><SupabaseVehicles key={actorId} client={client} actorId={actorId}
+      initialTime={initial.server_now} preferredUnit={preferredUnit} initialEventId={vehicleEvent?.id} initialEventSequence={vehicleEvent?.sequence}/></div></AppDialogVisibility.Provider>}
+    <AppDialogVisibility.Provider value={section==="dienste"}>
     <section className="card section-card" hidden={section!=="dienste"}>
     <div className="event-card-top"><h2>Sichtbare DEV-Termine</h2><div className="dev-actions">
       <button className="button secondary" disabled={busy} onClick={() => void refresh()}><RefreshCw size={18} />Termine aktualisieren</button>
@@ -239,7 +241,7 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
     {query.view === "month" && workspace.next_cursor && <button className="button secondary" disabled={busy} onClick={() => void loadMore()}>Weitere Termine laden</button>}
     {query.view !== "month" && workspace.has_more && <p className="muted text-sm">Weitere Termine sind über die Monatsansicht zugänglich.</p>}
     </>}
-  </section></>;
+  </section></AppDialogVisibility.Provider></>;
 }
 
 function EventForm({ editor, units, busy, change, close, submit }: {
