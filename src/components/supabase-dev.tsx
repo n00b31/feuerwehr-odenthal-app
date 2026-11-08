@@ -6,7 +6,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Moon, Sun, LogOut, RefreshCw, ShieldCheck } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabasePublicConfig } from "@/config/supabase";
-import { DEV_ROLE_LABELS } from "@/config/app";
+import { DEV_ROLE_LABELS, publicPath } from "@/config/app";
 import { approveMember, type Access, type DevData, type PendingRegistration } from "@/data/supabase-repository";
 import { authErrorMessage, callbackUrl, emailSchema, registrationSchema } from "@/auth/validation";
 import { resetAuthCallback, useDevAuth } from "@/auth/use-dev-auth";
@@ -19,6 +19,7 @@ import { SidebarNavigation, BottomNavigation } from "./navigation";
 import { PwaStatus } from "./pwa-status";
 import { currentRelease } from "@/config/release";
 import { SupabaseReports } from "./supabase-reports";
+import { ForgotPasswordForm, PasswordFields, RecoveryPasswordForm } from "./auth-recovery";
 
 export function SupabaseDev() {
   const [client, setClient] = useState<SupabaseClient | null>(null);
@@ -28,6 +29,7 @@ export function SupabaseDev() {
   const pathname = usePathname().replace(/\/+$/, "") || "/";
   const [operationError, setOperationError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [recoveryMessage, setRecoveryMessage] = useState("");
   const [eventEditor, setEventEditor] = useState<EventEditorState | null>(null);
   if (eventEditor && (screen.phase === "blocked" || screen.phase === "signed-out" || screen.phase === "error")) setEventEditor(null);
 
@@ -59,10 +61,22 @@ export function SupabaseDev() {
     try {
       const { error } = await client.auth.signOut({ scope: "local" });
       if (error) throw error;
+      if (window.location.pathname.replace(/\/$/, "") === publicPath("/auth/recovery")) {
+        window.history.replaceState(null, "", publicPath("/"));
+      }
+      return true;
     } catch (error) {
       setOperationError(authErrorMessage(error));
+      return false;
     } finally {
       setBusy(false);
+      refresh();
+    }
+  }
+  async function exitRecovery(saved: boolean) {
+    if (await signOut()) {
+      resetAuthCallback();
+      setRecoveryMessage(saved ? "Passwort erfolgreich geändert. Bitte mit dem neuen Passwort anmelden. Eine ausstehende Administratorfreigabe bleibt erforderlich." : "");
       refresh();
     }
   }
@@ -86,10 +100,12 @@ export function SupabaseDev() {
     <main id="main" className="content" tabIndex={-1}>
       <PwaStatus />
       {(themeError || operationError) && <p className="notice error" role="alert">{themeError || operationError}</p>}
+      {recoveryMessage && screen.phase === "signed-out" && <p className="notice" role="status">{recoveryMessage}</p>}
       {setupError ? <section className="card section-card"><h1>Supabase DEV noch nicht eingerichtet</h1><p>{setupError}</p><p>Kein Zugriff auf Feuerwehrinhalte. Es wird nicht auf lokale Demo-Identitäten zurückgefallen.</p></section>
         : screen.phase === "loading" ? <p role="status">Sitzung und serverseitige Freigabe werden geprüft …</p>
         : screen.phase === "error" ? <section className="card section-card"><h1>DEV-Zugriff nicht verfügbar</h1><p className="error" role="alert">{screen.error}</p><button className="button" onClick={refresh}>Erneut prüfen</button><p>Ein Fehler öffnet niemals den Mitgliederbereich. Bei einem abgelaufenen Bestätigungslink zuerst die Sitzung entfernen und erneut anmelden.</p></section>
         : screen.phase === "signed-out" && client ? <AuthForm client={client} refresh={refresh} />
+        : screen.phase === "recovery" && client ? <RecoveryPasswordForm key={screen.userId} client={client} userId={screen.userId} onExit={exitRecovery} onBusy={setBusy} />
         : screen.phase === "blocked" ? <section className="card section-card auth-card">
           <ShieldCheck aria-hidden="true" /><h1>{access?.account_status === "pending" ? "Wartet auf Freigabe" : access?.account_status === "suspended" ? "Zugang gesperrt" : access?.account_status === "rejected" ? "Registrierung abgelehnt" : "Erneute Prüfung erforderlich"}</h1>
           <p>Hallo {screen.access.display_name}. Eine bestätigte E-Mail allein reicht nicht aus. Erst die Administratorfreigabe mit gültiger Einheitszuordnung öffnet den Mitgliederbereich.</p>
@@ -107,8 +123,10 @@ export function SupabaseDev() {
 
 function AuthForm({ client, refresh }: { client: SupabaseClient; refresh: () => void }) {
   const [register, setRegister] = useState(false);
+  const [forgot, setForgot] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -118,12 +136,12 @@ function AuthForm({ client, refresh }: { client: SupabaseClient; refresh: () => 
     event.preventDefault();
     setMessage("");
     setError("");
-    const parsed = register ? registrationSchema.safeParse({ email, password, displayName }) : emailSchema.safeParse(email);
+    const parsed = register ? registrationSchema.safeParse({ email, password, passwordConfirmation: confirmation, displayName }) : emailSchema.safeParse(email);
     if (!parsed.success) { setError(parsed.error.issues[0].message); return; }
     setBusy(true);
     try {
       if (register) {
-        const input = registrationSchema.parse({ email, password, displayName });
+        const input = registrationSchema.parse({ email, password, passwordConfirmation: confirmation, displayName });
         const { data, error } = await client.auth.signUp({
           email: input.email.toLowerCase(), password: input.password,
           options: { data: { display_name: input.displayName }, emailRedirectTo: callbackUrl(window.location.origin) },
@@ -145,6 +163,7 @@ function AuthForm({ client, refresh }: { client: SupabaseClient; refresh: () => 
       setError(authErrorMessage(error));
     } finally {
       setPassword("");
+      setConfirmation("");
       setBusy(false);
     }
   }
@@ -160,18 +179,21 @@ function AuthForm({ client, refresh }: { client: SupabaseClient; refresh: () => 
     } catch (error) { setError(authErrorMessage(error)); }
     finally { setBusy(false); }
   }
+  if (forgot) return <ForgotPasswordForm client={client} onBack={() => setForgot(false)} />;
   return <section className="card section-card auth-card">
     <PageHeading eyebrow="SUPABASE DEV" title={register ? "Testkonto registrieren" : "Anmelden"} description="Nur autorisierte Feuerwehr-Testadressen. E-Mail bestätigen und anschließend die Administratorfreigabe abwarten." />
     <form onSubmit={(event) => void submit(event)} className="form-grid">
       {register && <label>Anzeigename (Testdaten)<input autoComplete="nickname" value={displayName} onChange={(event) => setDisplayName(event.target.value)} required minLength={2} maxLength={120} disabled={busy} /></label>}
       <label>Feuerwehr-E-Mail<input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required disabled={busy} /></label>
-      <label>Passwort<input type="password" autoComplete={register ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} required minLength={register ? 12 : 1} maxLength={128} disabled={busy} /></label>
+      {register ? <PasswordFields password={password} confirmation={confirmation} onPassword={setPassword} onConfirmation={setConfirmation} disabled={busy} />
+        : <label>Passwort<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={1} maxLength={128} disabled={busy} /></label>}
       <button className="button" disabled={busy}>{busy ? "Anfrage läuft …" : register ? "Registrierung anfordern" : "Anmelden"}</button>
     </form>
     {message && <p className="notice" role="status">{message}</p>}
     {error && <p className="notice error" role="alert">{error}</p>}
     <div className="dev-actions">
-      <button className="button secondary" disabled={busy} onClick={() => { setRegister(!register); setError(""); setMessage(""); setPassword(""); }}>{register ? "Zur Anmeldung" : "Testkonto registrieren"}</button>
+      <button className="button secondary" disabled={busy} onClick={() => { setRegister(!register); setError(""); setMessage(""); setPassword(""); setConfirmation(""); }}>{register ? "Zur Anmeldung" : "Testkonto registrieren"}</button>
+      {!register && <button className="button secondary" disabled={busy} onClick={() => { setPassword(""); setConfirmation(""); setError(""); setMessage(""); setForgot(true); }}>Passwort vergessen?</button>}
       <button className="button secondary" disabled={busy} onClick={() => void resend()}>Bestätigung erneut senden</button>
     </div>
     <p className="muted text-sm">Die Domainprüfung im Formular ist nur Bedienhilfe. Auth-Hook, Datenbankfreigabe und RLS sind die serverseitige Zugriffsschranke. Keine produktiven Daten eingeben.</p>
