@@ -92,7 +92,7 @@ async function connect(page: Page, role: "MEMBER" | "UNIT_ADMIN" | "FIRE_CHIEF" 
     return respond({ message: `Unexpected synthetic endpoint: ${pathname}` }, 500);
   });
   await page.context().route(/https:\/\/(?!syntheticci\.supabase\.co)[^/]+\.supabase\.co\/.*/, (route) => route.abort());
-  await page.goto(publicPath("/"));
+  await page.goto(publicPath("/termine/"));
   await page.getByLabel("Feuerwehr-E-Mail").fill(user.email);
   await page.getByLabel("Passwort", { exact: true }).fill("synthetic-browser-only");
   await page.getByRole("button", { name: "Anmelden", exact: true }).click();

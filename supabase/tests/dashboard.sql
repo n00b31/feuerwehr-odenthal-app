@@ -79,6 +79,10 @@ set local role authenticated;
 select public.ff_add_unit_membership(pg_temp.d_user(2),current_setting('d.b')::uuid,'Synthetic additional unit');
 select pg_temp.d_ok(jsonb_array_length(public.ff_dashboard()->'tasks')>0,'global admin receives real actionable queues');
 select pg_temp.d_ok(exists(select 1 from jsonb_array_elements(public.ff_dashboard()->'tasks') t where t->>'kind'='registrations' and (t->>'count')::int=1),'only global sees actual pending registration count');
+select public.ff_set_role(pg_temp.d_user(1),'UNIT_ADMIN',current_setting('d.a')::uuid);
+select public.ff_set_role(pg_temp.d_user(1),'FUNCTION_ADMIN',null,current_setting('d.fn')::uuid);
+select pg_temp.d_ok((select count(*)=count(distinct t->>'kind') from jsonb_array_elements(public.ff_dashboard()->'tasks') t),
+  'combined global, unit and function roles never duplicate task kinds');
 reset role;
 select set_config('request.jwt.claim.sub',pg_temp.d_user(2)::text,true);
 set local role authenticated;
@@ -89,11 +93,28 @@ select set_config('d.request',(public.ff_request_vehicle(jsonb_build_object('veh
   'title','Synthetic cockpit own request','description','','destination','','notes','','purpose_key','course',
   'starts_at',statement_timestamp()+interval '20 days','ends_at',statement_timestamp()+interval '20 days 2 hours'))->>'id'),true);
 select pg_temp.d_ok(jsonb_array_length(public.ff_dashboard()->'reservations')=1,'own pending request is visible');
+select set_config('d.approved',(public.ff_request_vehicle(jsonb_build_object('vehicle_id',current_setting('d.vehicle'),
+  'unit_id',current_setting('d.a'),'requester_id',auth.uid(),'responsible_id',auth.uid(),'kind','reservation',
+  'title','Synthetic cockpit approved request','description','','destination','','notes','','purpose_key','course',
+  'starts_at',statement_timestamp()+interval '21 days','ends_at',statement_timestamp()+interval '21 days 2 hours'))->>'id'),true);
+select set_config('d.later',(public.ff_request_vehicle(jsonb_build_object('vehicle_id',current_setting('d.vehicle'),
+  'unit_id',current_setting('d.a'),'requester_id',auth.uid(),'responsible_id',auth.uid(),'kind','reservation',
+  'title','Synthetic cockpit later request','description','','destination','','notes','','purpose_key','course',
+  'starts_at',statement_timestamp()+interval '22 days','ends_at',statement_timestamp()+interval '22 days 2 hours'))->>'id'),true);
 reset role;
 select set_config('request.jwt.claim.sub',pg_temp.d_user(6)::text,true);
 set local role authenticated;
 select pg_temp.d_ok(exists(select 1 from jsonb_array_elements(public.ff_dashboard()->'tasks') t where t->>'kind'='vehicles'),'explicit vehicle manager receives authorized queue');
 select pg_temp.d_ok(public.ff_dashboard()->'reservations'='[]'::jsonb,'manager personal card never leaks foreign requests');
+select public.ff_decide_vehicle(current_setting('d.approved')::uuid,0,'APPROVED');
+select public.ff_decide_vehicle(current_setting('d.later')::uuid,0,'APPROVED');
+reset role;
+select set_config('request.jwt.claim.sub',pg_temp.d_user(2)::text,true);
+set local role authenticated;
+select pg_temp.d_ok(jsonb_array_length(public.ff_dashboard()->'reservations')=2,'own reservation preview never exceeds two entries');
+select pg_temp.d_ok(public.ff_dashboard()->'reservations'->0->>'id'=current_setting('d.approved')
+  and public.ff_dashboard()->'reservations'->1->>'id'=current_setting('d.request'),
+  'nearest approved reservation and next pending request survive multiple approvals');
 reset role;
 select set_config('request.jwt.claim.sub',pg_temp.d_user(5)::text,true);
 set local role authenticated;

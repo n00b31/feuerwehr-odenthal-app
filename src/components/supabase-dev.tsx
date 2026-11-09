@@ -20,13 +20,14 @@ import { PwaStatus } from "./pwa-status";
 import { currentRelease } from "@/config/release";
 import { SupabaseReports } from "./supabase-reports";
 import { ForgotPasswordForm, PasswordFields, RecoveryPasswordForm } from "./auth-recovery";
+import { SupabaseDashboard } from "./supabase-dashboard";
 
 export function SupabaseDev() {
   const [client, setClient] = useState<SupabaseClient | null>(null);
   const [setupError, setSetupError] = useState("");
-  const { screen, refresh, clear } = useDevAuth(client);
-  const { resolved, setPreference, error: themeError } = useTheme();
   const pathname = usePathname().replace(/\/+$/, "") || "/";
+  const { screen, refresh, clear } = useDevAuth(client, pathname !== "/");
+  const { resolved, setPreference, error: themeError } = useTheme();
   const [operationError, setOperationError] = useState("");
   const [busy, setBusy] = useState(false);
   const [recoveryMessage, setRecoveryMessage] = useState("");
@@ -200,9 +201,11 @@ function AuthForm({ client, refresh }: { client: SupabaseClient; refresh: () => 
   </section>;
 }
 
-function DevWorkspace({ client, access, data, pathname, refresh, eventEditor, setEventEditor }: { client: SupabaseClient; access: Access; data: DevData; pathname: string; refresh: () => void; eventEditor: EventEditorState | null; setEventEditor: (value: EventEditorState | null) => void }) {
+function DevWorkspace({ client, access, data, pathname, refresh, eventEditor, setEventEditor }: { client: SupabaseClient; access: Access; data: DevData | null; pathname: string; refresh: () => void; eventEditor: EventEditorState | null; setEventEditor: (value: EventEditorState | null) => void }) {
   const globalAdmin = access.roles.includes("GLOBAL_ADMIN");
   const managesMembers = globalAdmin || access.roles.includes("UNIT_ADMIN");
+  if (pathname === "/") return <SupabaseDashboard key={access.user_id} client={client} access={access} />;
+  if (!data) return <p role="status">Berechtigte Moduldaten werden geladen …</p>;
   return <>
     <PageHeading eyebrow="GESCHÜTZTER DEV-BEREICH" title={pathname === "/administration" ? "Administration" : `Hallo ${access.display_name}`} description={`${access.unit_name} · ${access.roles.map((role) => DEV_ROLE_LABELS[role]).join(", ")} · live durch Supabase geprüft`} action={<button className="button secondary" onClick={refresh}><RefreshCw size={18} />Aktualisieren</button>} />
     <p className="notice">{currentRelease?.version ?? "DEV"}: Termine, Teilnahme, Anwesenheit und Mitgliederverwaltung liegen zentral in Supabase. Hintergrundprüfungen erhalten die Arbeitsansicht. Keine Übernahme lokaler Demo-Daten.</p>

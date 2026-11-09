@@ -141,7 +141,7 @@ test("full DEV registration, PKCE confirmation, pending approval, admin release 
   const page = await context.newPage();
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.goto(publicPath("/"));
+  await page.goto(publicPath("/termine/"));
   await page.getByRole("button", { name: "Testkonto registrieren", exact: true }).click();
   await page.getByLabel("Anzeigename").fill("Synthetic Mitglied");
   await page.getByLabel("Feuerwehr-E-Mail").fill(email);
@@ -174,7 +174,7 @@ test("full DEV registration, PKCE confirmation, pending approval, admin release 
   await page.getByRole("button", { name: /Abmelden/ }).click();
   await expect(page.getByRole("heading", { name: "Anmelden", exact: true })).toBeVisible();
   state.admin = false;
-  await page.goto(publicPath("/"));
+  await page.goto(publicPath("/termine/"));
   await login(page);
   await expect(page.getByRole("heading", { name: "Hallo Synthetic Mitglied" })).toBeVisible();
   await page.getByRole("link", { name: "Termine", exact: true }).click();
@@ -209,7 +209,7 @@ test("unverified and pending users cannot load protected data, including direct 
 test("suspension, missing unit and database errors close access without a demo fallback", async ({ context, page }) => {
   const state = await fixture(context);
   state.verified = true; state.approved = true;
-  await page.goto(publicPath("/"));
+  await page.goto(publicPath("/termine/"));
   await login(page);
   await expect(page.getByRole("heading", { name: "Hallo Synthetic Mitglied" })).toBeVisible();
   state.suspended = true;
@@ -227,7 +227,7 @@ test("suspension, missing unit and database errors close access without a demo f
 test("mail limits and unauthorized recipients are visible; no automatic retry", async ({ context, page }) => {
   const state = await fixture(context);
   state.mailLimited = true;
-  await page.goto(publicPath("/"));
+  await page.goto(publicPath("/termine/"));
   await page.getByRole("button", { name: "Testkonto registrieren", exact: true }).click();
   await page.getByLabel("Anzeigename").fill("Synthetic Mitglied");
   await page.getByLabel("Feuerwehr-E-Mail").fill(email);
@@ -247,7 +247,7 @@ test("mail limits and unauthorized recipients are visible; no automatic retry", 
 
 test("foreign-domain registration is rejected before a network request", async ({ context, page }) => {
   const state = await fixture(context);
-  await page.goto(publicPath("/"));
+  await page.goto(publicPath("/termine/"));
   await page.getByRole("button", { name: "Testkonto registrieren", exact: true }).click();
   await page.getByLabel("Anzeigename").fill("Synthetic Mitglied");
   await page.getByLabel("Feuerwehr-E-Mail").fill("synthetic@example.test");
@@ -263,7 +263,7 @@ test("foreign-domain registration is rejected before a network request", async (
 
 test("registration rejects differing passwords, visibility is explicit and abort discards both", async ({ context, page }) => {
   const state = await fixture(context);
-  await page.goto(publicPath("/"));
+  await page.goto(publicPath("/termine/"));
   await page.getByRole("button", { name: "Testkonto registrieren", exact: true }).click();
   await page.getByLabel("Anzeigename").fill("Synthetic Mitglied");
   await page.getByLabel("Feuerwehr-E-Mail").fill(email);
@@ -284,7 +284,7 @@ test("registration rejects differing passwords, visibility is explicit and abort
 
 test("forgot password has a conditional response and no automatic retry or account disclosure", async ({ context, page }) => {
   const state = await fixture(context);
-  await page.goto(publicPath("/"));
+  await page.goto(publicPath("/termine/"));
   await page.getByRole("button", { name: "Passwort vergessen?" }).click();
   await page.getByLabel("Feuerwehr-E-Mail").fill(email);
   await page.getByRole("button", { name: "Wiederherstellung anfordern", exact: true }).click();
@@ -331,7 +331,7 @@ test("real SDK token-hash recovery requires matching passwords and keeps pending
 test("an ordinary session or URL recovery flag does not open password recovery", async ({ context, page }) => {
   const state = await fixture(context);
   state.verified = true; state.approved = true;
-  await page.goto(publicPath("/"));
+  await page.goto(publicPath("/termine/"));
   await login(page);
   await expect(page.getByRole("heading", { name: "Hallo Synthetic Mitglied" })).toBeVisible();
   await page.goto(publicPath("/auth/recovery/?type=recovery"));
