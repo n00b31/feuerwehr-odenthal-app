@@ -1,10 +1,52 @@
 # DEV 0.6.4 – Mein Feuerwehr-Cockpit
 
-DEV 0.6.4 wurde über PR #22 manuell gemergt und vom Projektverantwortlichen
-erfolgreich abgenommen. Aktuelle Ergänzung: DEV 0.6.4.1 im Branch
-`feature/dev-0641-attendance-filter`, kein automatischer Merge.
-Öffentlich bleibt DEV 0.6.4 bis zum manuellen Merge dieser Ergänzung.
+DEV 0.6.4 und DEV 0.6.4.1 wurden über PR #22 beziehungsweise PR #23
+manuell gemergt und vom Projektverantwortlichen erfolgreich abgenommen.
+DEV 0.6.4.1 ist veröffentlicht und mit einem unveränderlichen
+annotierten Release-Tag gesichert.
 Die unabhängige Demo wurde nicht verändert.
+
+## DEV 0.6.4.1 – Erfolgreiche manuelle Abnahme
+
+Die folgenden Ergebnisse wurden vom Projektverantwortlichen ausdrücklich
+manuell bestätigt, nicht aus automatisierten oder synthetischen Tests abgeleitet.
+Bestätigung und Abnahme am 09.11.2026 dokumentiert; eine genauere Uhrzeit
+der manuellen Tests wurde nicht angegeben. Native iPhone-/Android-PWA-
+Gerätetests sind weiterhin offen.
+
+| Test | Manuell bestätigtes Ergebnis |
+|---|---|
+| A – Dashboard | Erfolgreich: offene Anwesenheitslisten, Dashboard-Zähler und direkte Navigation zur gefilterten Dienstverwaltung. |
+| B – Filter | Erfolgreich: nur begonnene, nicht abgeschlossene Dienste; nicht initialisierte Listen eingeschlossen, abgeschlossene Dienste ausgeschlossen; ältester offener Dienst zuerst. |
+| C – Abschluss | Erfolgreich: Liste abschließbar, abgeschlossenes Ergebnis verschwindet; Dashboard-Zähler aktualisiert sich ohne Seitenreload. |
+| D – Berechtigungen | Erfolgreich: MEMBER ohne administrative Übersicht, UNIT_ADMIN nur berechtigte Einheiten, delegierte Organisatoren nur zugewiesene Termine, GLOBAL_ADMIN alle berechtigten Listen. |
+| E – Regression | Erfolgreich: Terminverwaltung, Teilnahmeabstimmungen, Anwesenheit, Dienstbuch, Kalender und Fahrzeugreservierungen; keine störenden Ansichtsresets. |
+
+Gesicherter Main-/Abnahme-Commit:
+`794ba40d879182189317d7643e13385761b0a0d2`.
+PR #23 wurde am 09.11.2026 um 14:59:17 UTC manuell gemergt.
+Annotierter Tag `v0.6.4.1-dashboard-dev`, Tag-Objekt
+`5e82b8998ec21e143aa6a97062862107e190bd84`.
+Tag-Beschreibung:
+„Feuerwehr Odenthal DEV 0.6.4.1 – Dashboard attendance task filtering validated.“
+Vor Erstellung wurden lokale und entfernte Tags geprüft; nichts überschrieben.
+Der Tag wurde zu GitHub gepusht und wird durch spätere Dokumentations-
+oder DEV-0.7-Commits nicht verschoben.
+
+[Main-Build und Pages-Deployment](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42640050038)
+erfolgreich. Tatsächlich veröffentlicht: **DEV 0.6.4.1**, Build
+`794ba40d8791-e7515e68-628a-47b8-8f01-50d1cb5696f7`,
+gebaut am 09.11.2026 um 15:04:14 UTC, sauberer Source-Stand,
+Supabase DEV und korrekter Pages-BasePath.
+Alle **77 veröffentlichten Dateien einschließlich Service Worker und
+PWA-Buildinformationen** wurden bytegenau mit dem tatsächlichen
+`github-pages`-Artefakt dieses Runs verglichen. Nicht nur eine Versions-
+Anzeige oder ein grüner Workflow wurde als Veröffentlichungsnachweis verwendet.
+
+Die Dokumentationssicherung erfolgt als eigener Commit vor der
+DEV-0.7-Implementierung im Branch `feature/dev-070-push` und wird mit
+dessen PR zur manuellen Prüfung eingereicht. Kein automatischer Merge;
+ein separater Dokumentations-PR ist dafür nicht erforderlich.
 
 ## DEV 0.6.4 – Erfolgreiche manuelle Abnahme
 

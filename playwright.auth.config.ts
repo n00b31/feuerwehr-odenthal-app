@@ -2,7 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests",
-  testMatch: ["supabase-auth.spec.ts", "supabase-events.spec.ts", "supabase-reports.spec.ts", "supabase-calendar.spec.ts", "supabase-vehicles.spec.ts", "supabase-planning.spec.ts", "supabase-dashboard.spec.ts"],
+  testMatch: ["supabase-auth.spec.ts", "supabase-events.spec.ts", "supabase-reports.spec.ts", "supabase-calendar.spec.ts", "supabase-vehicles.spec.ts", "supabase-planning.spec.ts", "supabase-dashboard.spec.ts", "supabase-notifications.spec.ts"],
   workers: 1,
   fullyParallel: false,
   timeout: 45_000,

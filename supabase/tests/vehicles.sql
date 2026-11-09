@@ -124,12 +124,21 @@ select public.ff_decide_vehicle(current_setting('v.first')::uuid,1,'CANCELLED','
 select pg_temp.v_assert((select cancelled_by=auth.uid() and cancelled_at is not null and state='CANCELLED'
   from public.vehicle_reservations where event_id=current_setting('v.first')::uuid),'own cancellation preserves history and actor');
 reset role;
+select pg_temp.v_assert(exists(select 1 from public.vehicle_notifications where event_id=current_setting('v.first')::uuid
+  and recipient_id='a0600000-0000-4000-8000-000000000003' and event_type='vehicle_requested'),
+  'central inbox classifies request for assigned vehicle manager');
+select pg_temp.v_assert(exists(select 1 from public.vehicle_notifications where event_id=current_setting('v.first')::uuid
+  and recipient_id='a0600000-0000-4000-8000-000000000002' and event_type='vehicle_approved'),
+  'central inbox classifies approval for applicant');
 select set_config('request.jwt.claim.sub','a0600000-0000-4000-8000-000000000003',true);
 set local role authenticated;
 select public.ff_decide_vehicle(current_setting('v.second')::uuid,0,'REJECTED','Synthetic rejection reason');
 select set_config('v.block',(public.ff_request_vehicle(pg_temp.v_payload('Synthetic maintenance block','block'))->>'id'),true);
 select pg_temp.v_assert((select state='APPROVED' and kind='block' from public.vehicle_reservations where event_id=current_setting('v.block')::uuid),'authorized maintenance block is binding');
 reset role;
+select pg_temp.v_assert(exists(select 1 from public.vehicle_notifications where event_id=current_setting('v.second')::uuid
+  and recipient_id='a0600000-0000-4000-8000-000000000002' and event_type='vehicle_rejected'),
+  'central inbox classifies rejection for applicant');
 select set_config('request.jwt.claim.sub','a0600000-0000-4000-8000-000000000002',true);
 set local role authenticated;
 select pg_temp.v_assert(jsonb_array_length(public.ff_request_vehicle(pg_temp.v_payload('Warned conflicting request'))->'conflicts')=1,'binding block warns on request without pretending approval');
