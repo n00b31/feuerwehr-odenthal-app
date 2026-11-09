@@ -50,9 +50,12 @@ jobs:
           pg < supabase/tests/upgrade-063-after.sql
           pg < supabase/tests/upgrade-064-before.sql
           for migration in supabase/migrations/*.sql; do
-            if [[ "$(basename "$migration")" > 20261109003399 ]]; then pg < "$migration"; fi
+            if [[ "$(basename "$migration")" > 20261109003399 && "$(basename "$migration")" < 20261109003600 ]]; then pg < "$migration"; fi
           done
           pg < supabase/tests/upgrade-064-after.sql
+          pg < supabase/tests/upgrade-070-before.sql
+          pg < supabase/migrations/20261109003600_notifications.sql
+          pg < supabase/tests/upgrade-070-after.sql
   database:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -74,6 +77,8 @@ jobs:
           deno-version: v2.x
       - name: Type-check protected recovery Edge Function
         run: deno check supabase/functions/password-recovery/index.ts
+      - name: Type-check server-only VAPID dispatcher
+        run: deno check supabase/functions/push-dispatch/index.ts
       - name: Create isolated Auth test fixture
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
@@ -169,6 +174,11 @@ jobs:
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/dashboard.sql
+      - name: Verify central inbox, device RLS, reminders and bounded delivery retries
+        if: ${{ !cancelled() && steps.migrations.outcome == 'success' }}
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/notifications.sql
       - name: Verify real parallel recovery limits and one-time PKCE claims
         if: ${{ !cancelled() && steps.migrations.outcome == 'success' }}
         env:
