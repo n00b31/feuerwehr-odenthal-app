@@ -275,7 +275,7 @@ begin
   perform pg_advisory_xact_lock(hashtextextended('push-device:'||(subscription->>'endpoint'),0));
   select * into previous from public.push_subscriptions s where s.endpoint=subscription->>'endpoint' for update;
   perform ff_private.require_rule(previous.id is null or previous.user_id=auth.uid(),'Gerät kann nicht registriert werden. Browser-Abonnement bitte neu einrichten.');
-  perform ff_private.require_rule(previous.id is not null or
+  perform ff_private.require_rule(coalesce(previous.active,false) or
     (select count(*) from public.push_subscriptions where user_id=auth.uid() and active)<10,'Höchstens zehn aktive Geräte.');
   insert into public.push_subscriptions(user_id,endpoint,p256dh,auth_key,device_name)
     values(auth.uid(),subscription->>'endpoint',subscription#>>'{keys,p256dh}',subscription#>>'{keys,auth}',btrim(device_name))
@@ -331,7 +331,7 @@ $$;
 
 create function public.ff_notification_tick()
 returns integer language plpgsql security definer set search_path='' as $$
-declare cfg ff_private.notification_config; item record; candidate record; person uuid; notice_title text; notice_body text;
+declare cfg ff_private.notification_config; item record; person uuid; notice_title text; notice_body text;
   processed integer:=0;
 begin
   if not pg_try_advisory_xact_lock(hashtextextended('ff-notification-tick',0)) then return 0; end if;

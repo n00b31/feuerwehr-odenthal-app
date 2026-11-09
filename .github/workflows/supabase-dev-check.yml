@@ -78,7 +78,7 @@ jobs:
       - name: Type-check protected recovery Edge Function
         run: deno check supabase/functions/password-recovery/index.ts
       - name: Type-check server-only VAPID dispatcher
-        run: deno check supabase/functions/push-dispatch/index.ts
+        run: deno check --node-modules-dir=none supabase/functions/push-dispatch/index.ts
       - name: Create isolated Auth test fixture
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}

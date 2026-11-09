@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
-import { Moon, Sun, LogOut, RefreshCw, ShieldCheck } from "lucide-react";
+import { Moon, Sun, LogOut, RefreshCw, ShieldCheck, Bell } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabasePublicConfig } from "@/config/supabase";
 import { DEV_ROLE_LABELS, publicPath } from "@/config/app";
@@ -21,6 +21,8 @@ import { currentRelease } from "@/config/release";
 import { SupabaseReports } from "./supabase-reports";
 import { ForgotPasswordForm, PasswordFields, RecoveryPasswordForm } from "./auth-recovery";
 import { SupabaseDashboard } from "./supabase-dashboard";
+import { NotificationAdministration,NotificationBridge,SupabaseNotifications } from "./supabase-notifications";
+import { releaseCurrentPush } from "@/data/supabase-notifications";
 
 export function SupabaseDev() {
   const [client, setClient] = useState<SupabaseClient | null>(null);
@@ -55,13 +57,18 @@ export function SupabaseDev() {
 
   async function signOut() {
     if (!client) return;
-    clear();
-    resetAuthCallback();
     setBusy(true);
     setOperationError("");
+    let cleanupFailed=false;
+    if(screen.phase==="active"){
+      try { await releaseCurrentPush(client); } catch { cleanupFailed=true; }
+    }
+    clear();
+    resetAuthCallback();
     try {
       const { error } = await client.auth.signOut({ scope: "local" });
       if (error) throw error;
+      if(cleanupFailed)setOperationError("Abgemeldet. Die Push-Abmeldung konnte nicht vollständig bestätigt werden. Browserberechtigung bei Bedarf in den Geräteeinstellungen entziehen.");
       if (window.location.pathname.replace(/\/$/, "") === publicPath("/auth/recovery")) {
         window.history.replaceState(null, "", publicPath("/"));
       }
@@ -93,6 +100,7 @@ export function SupabaseDev() {
     <header className="topbar">
       <Link href="/" className="header-brand"><BrandLogo /></Link>
       <div className="topbar-actions">
+        {active && <Link className="icon-button" href="/profil/#benachrichtigungen" aria-label="Benachrichtigungen öffnen"><Bell size={20}/></Link>}
         <button className="icon-button" aria-label="Farbschema wechseln" onClick={() => setPreference(resolved === "dark" ? "light" : "dark")}>{resolved === "dark" ? <Sun size={20} /> : <Moon size={20} />}</button>
         {client && <button className="button secondary" onClick={() => void signOut()} disabled={busy}><LogOut size={18} />Abmelden / Sitzung entfernen</button>}
       </div>
@@ -100,6 +108,7 @@ export function SupabaseDev() {
     <div className="demo-strip" role="region" aria-label="DEV-Testbetrieb"><span className="demo-tag">DEV</span><span>Supabase-Testbetrieb · nur autorisierte Testkonten · kein Demo-Profilwechsel</span></div>
     <main id="main" className="content" tabIndex={-1}>
       <PwaStatus />
+      {active && client && <NotificationBridge key={screen.access.user_id} client={client} actorId={screen.access.user_id}/>}
       {(themeError || operationError) && <p className="notice error" role="alert">{themeError || operationError}</p>}
       {recoveryMessage && screen.phase === "signed-out" && <p className="notice" role="status">{recoveryMessage}</p>}
       {setupError ? <section className="card section-card"><h1>Supabase DEV noch nicht eingerichtet</h1><p>{setupError}</p><p>Kein Zugriff auf Feuerwehrinhalte. Es wird nicht auf lokale Demo-Identitäten zurückgefallen.</p></section>
@@ -212,12 +221,13 @@ function DevWorkspace({ client, access, data, pathname, refresh, eventEditor, se
     {pathname === "/administration" ? managesMembers
       ? <>{globalAdmin && <section className="card section-card"><h2>Wartende Testregistrierungen</h2>{data.registrations.length === 0 && <p>Keine wartenden Registrierungen.</p>}{data.registrations.map((person) => <ApprovalRow key={person.user_id} client={client} person={person} units={data.units} refresh={refresh} />)}</section>}
         <SupabaseMembers client={client} actorId={access.user_id} refreshAccess={refresh} />
+        <NotificationAdministration client={client}/>
         <section className="card section-card"><h2>Fahrzeugverwaltung</h2><p>Fahrzeuge, zugewiesene Verwalter und Reservierungsaufgaben liegen im Kalenderbereich. Einheitsführung erhält nur ausdrücklich konfigurierte fahrzeugbezogene Rechte.</p>
           <Link className="button secondary" href="/termine/?bereich=fahrzeuge">Fahrzeugkalender direkt öffnen</Link></section></>
       : <p className="notice error" role="alert">Keine Berechtigung zur Mitgliederverwaltung. Direkte API-Aufrufe werden ebenfalls serverseitig geprüft.</p>
     : pathname === "/dokumente" ? <section className="card section-card"><h2>Dokumentenbereiche</h2><p>App-Sichtbarkeit ersetzt keine SharePoint-Berechtigung.</p>{data.documents.length === 0 && <p>Noch keine sichtbaren DEV-Dokumentenbereiche.</p>}{data.documents.map((item) => <article key={item.id}><h3>{item.name}</h3><p>{item.description}</p><a href={item.sharepoint_url} target="_blank" rel="noopener noreferrer">SharePoint öffnen</a></article>)}</section>
     : pathname === "/statistik" ? <SupabaseReports client={client} access={access} />
-    : pathname === "/profil" ? <><section className="card section-card"><h2>Verifiziertes DEV-Profil</h2><p>{access.display_name} · Einheit {access.unit_name}</p><p>Status: Freigegeben. Kein Identitäts- oder Rollenwechsel über lokale Demo-Profile.</p><p>Die Sitzung liegt ausschließlich unter einem projekt- und unterpfadbezogenen SDK-Speicherschlüssel in diesem Browser. Zum Entfernen „Abmelden / Sitzung entfernen“ verwenden.</p></section><SupabaseReports client={client} access={access} personalOnly /></>
+    : pathname === "/profil" ? <><section className="card section-card"><h2>Verifiziertes DEV-Profil</h2><p>{access.display_name} · Einheit {access.unit_name}</p><p>Status: Freigegeben. Kein Identitäts- oder Rollenwechsel über lokale Demo-Profile.</p><p>Die Sitzung liegt ausschließlich unter einem projekt- und unterpfadbezogenen SDK-Speicherschlüssel in diesem Browser. Zum Entfernen „Abmelden / Sitzung entfernen“ verwenden.</p></section><div id="benachrichtigungen"><SupabaseNotifications key={access.user_id} client={client} actorId={access.user_id}/></div><SupabaseReports client={client} access={access} personalOnly /></>
     : <SupabaseEvents client={client} initial={data} preferredUnit={access.unit_id} actorId={access.user_id} editor={eventEditor} setEditor={setEventEditor}
       canPlan={access.roles.some(role=>role==="GLOBAL_ADMIN" || role==="UNIT_ADMIN" || role==="FUNCTION_ADMIN")} />}
   </>;
