@@ -11,7 +11,7 @@ export function createRelease({ gitSha, sourceDirty = false }, env = process.env
   const basePath = env.NEXT_PUBLIC_BASE_PATH ?? "/feuerwehr-odenthal-app";
   if (!/^(?:\/[A-Za-z0-9_-]+)*$/.test(basePath)) throw new Error("Invalid release base path.");
   return {
-    format: 1, version: "DEV 0.6.4", buildId: `${gitSha.slice(0, 12)}-${nonce}`,
+    format: 1,     version: "DEV 0.6.4.1", buildId: `${gitSha.slice(0, 12)}-${nonce}`,
     gitSha, sourceDirty, mode, basePath, builtAt: now.toISOString(),
     repository: env.GITHUB_REPOSITORY ?? "n00b31/feuerwehr-odenthal-app",
     runId: env.GITHUB_RUN_ID ?? null, runAttempt: env.GITHUB_RUN_ATTEMPT ?? null,

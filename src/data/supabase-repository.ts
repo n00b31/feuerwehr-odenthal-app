@@ -27,6 +27,7 @@ export const devEventSchema = z.object({
   series_exception: z.boolean().default(false),
   response_deadline: z.iso.datetime({ offset: true }).nullable(),
   revision: z.number().int().nonnegative(), scope_name: z.string(),
+  organizer_name: z.string().optional(),
   can_manage: z.boolean(), can_lead: z.boolean(), in_roster: z.boolean(),
   can_delegate: z.boolean(), can_read_attendance: z.boolean(), attendance_state: attendanceStateSchema,
   own_attendance: z.enum(["present", "absent"]).nullable(),
@@ -44,6 +45,8 @@ export const eventWorkspaceSchema = z.object({
   retained_events: z.array(devEventSchema),
   has_more: z.boolean(),
   next_cursor: eventCursorSchema.nullable(),
+  can_filter_attendance: z.boolean().optional(),
+  open_attendance_count: z.number().int().nonnegative().nullable().optional(),
 });
 export type EventWorkspace = z.infer<typeof eventWorkspaceSchema>;
 const documentSchema = z.object({

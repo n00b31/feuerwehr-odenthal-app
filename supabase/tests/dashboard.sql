@@ -136,24 +136,66 @@ reset role;
 select set_config('request.jwt.claim.sub',pg_temp.d_user(8)::text,true);
 set local role authenticated;
 select pg_temp.d_ok(exists(select 1 from jsonb_array_elements(public.ff_dashboard()->'tasks') t where t->>'kind'='attendance' and (t->>'count')::int=1),'event delegation receives only authorized attendance task');
+select pg_temp.d_ok(public.ff_events_page('open_attendance')->>'open_attendance_count'='1'
+  and public.ff_events_page('open_attendance')->'events'->0->>'id'=pg_temp.d_event(9)::text,
+  'delegate sees only assigned started non-initialized attendance list, not future events');
 select pg_temp.d_deny(format('select public.ff_set_response(%L,''yes'')',pg_temp.d_event(9)));
 reset role;
 select set_config('request.jwt.claim.sub',pg_temp.d_user(4)::text,true);
 set local role authenticated;
 select pg_temp.d_ok(exists(select 1 from jsonb_array_elements(public.ff_dashboard()->'tasks') t where t->>'kind'='attendance'),'UNIT_ADMIN can see own scope attendance tasks');
 select pg_temp.d_ok(not exists(select 1 from jsonb_array_elements(public.ff_dashboard()->'tasks') t where t->>'kind' in ('registrations','vehicles')),'UNIT_ADMIN gets neither global registrations nor implicit vehicle rights');
+select pg_temp.d_ok(public.ff_events_page('open_attendance')->>'open_attendance_count'='1',
+  'UNIT_ADMIN open overview matches authorized dashboard count');
 reset role;
 select set_config('request.jwt.claim.sub',pg_temp.d_user(1)::text,true);
 set local role authenticated;
 select public.ff_prepare_attendance(pg_temp.d_event(9));
+select pg_temp.d_ok(public.ff_events_page('open_attendance')->>'open_attendance_count'='1',
+  'initialized but unfinished list remains open');
 select public.ff_record_attendance(pg_temp.d_event(9),m.user_id,'present')
   from public.event_roster m where m.event_id=pg_temp.d_event(9);
 select public.ff_confirm_attendance(pg_temp.d_event(9));
+select pg_temp.d_ok(public.ff_events_page('open_attendance')->>'open_attendance_count'='0'
+  and not exists(select 1 from jsonb_array_elements(public.ff_dashboard()->'tasks') t where t->>'kind'='attendance'),
+  'confirmation immediately removes filtered row and dashboard attendance task');
+select pg_temp.d_ok(public.ff_events_page('open_attendance',null,null,null,'all',array[pg_temp.d_event(9)])
+  ->'retained_events'->0->>'id'=pg_temp.d_event(9)::text,'completed open detail remains separately authorized and retained');
 reset role;
 select set_config('request.jwt.claim.sub',pg_temp.d_user(2)::text,true);
 set local role authenticated;
 select pg_temp.d_ok(public.ff_dashboard()->'statistics'=public.ff_year_report(extract(year from statement_timestamp() at time zone 'Europe/Berlin')::int)->'summary','nonempty confirmed statistics exactly match existing RPC');
 select pg_temp.d_ok((public.ff_dashboard()->'statistics'->>'present')::int=1,'confirmed attendance, never RSVP, counts as participation');
+select pg_temp.d_deny('select public.ff_events_page(''open_attendance'')');
+reset role;
+select set_config('request.jwt.claim.sub',pg_temp.d_user(5)::text,true);
+set local role authenticated;
+select pg_temp.d_deny('select public.ff_events_page(''open_attendance'')');
+reset role;
+insert into public.events(id,title,event_type,starts_at,ends_at,location,scope_kind,unit_id,organizer_id)
+select pg_temp.d_event(100+i),'Synthetic open pagination '||i,'regular',
+  statement_timestamp()-interval '3 days',statement_timestamp()-interval '3 days'+interval '2 hours',
+  'Synthetic CI','unit',current_setting('d.b')::uuid,pg_temp.d_user(1) from generate_series(1,52) i;
+update public.events set status='cancelled' where id=pg_temp.d_event(152);
+select set_config('request.jwt.claim.sub',pg_temp.d_user(4)::text,true);
+set local role authenticated;
+select pg_temp.d_ok(public.ff_events_page('open_attendance')->>'open_attendance_count'='0',
+  'UNIT_ADMIN never sees foreign-unit open lists');
+reset role;
+select set_config('request.jwt.claim.sub',pg_temp.d_user(1)::text,true);
+set local role authenticated;
+select set_config('d.openpage',public.ff_events_page('open_attendance')::text,true);
+select pg_temp.d_ok(jsonb_array_length(current_setting('d.openpage')::jsonb->'events')=50
+  and current_setting('d.openpage')::jsonb->>'open_attendance_count'='51',
+  'open list is bounded while exact counter excludes cancelled events');
+select pg_temp.d_ok((select t->>'count'='51' from jsonb_array_elements(public.ff_dashboard()->'tasks') t where t->>'kind'='attendance'),
+  'GLOBAL_ADMIN dashboard count exactly matches full paginated selection');
+select pg_temp.d_ok(current_setting('d.openpage')::jsonb->'events'->0->>'id'=pg_temp.d_event(101)::text,
+  'oldest start and stable ID order');
+select pg_temp.d_ok(jsonb_array_length(public.ff_events_page('open_attendance',null,
+  (current_setting('d.openpage')::jsonb->'next_cursor'->>'starts_at')::timestamptz,
+  (current_setting('d.openpage')::jsonb->'next_cursor'->>'id')::uuid)->'events')=1,
+  'keyset page retrieves every remaining open list without duplicates');
 reset role;
 select set_config('request.jwt.claim.sub',pg_temp.d_user(9)::text,true);
 set local role authenticated;

@@ -21,3 +21,12 @@ test("month picker rejects invalid months and displays German year boundaries", 
   assert.equal(monthLabel("2026-12"), "Dezember 2026");
   assert.equal(monthLabel("2027-01"), "Januar 2027");
 });
+test("open attendance filter carries a bounded cursor but no month or chosen actor", () => {
+  const id="30000000-0000-4000-8000-000000000001";
+  const parameters=eventListParameters({view:"open_attendance",month:"invalid unused month",status:"all"},
+    {id,starts_at:"2026-11-08T12:00:00Z"},[id]);
+  assert.equal(parameters.list_view,"open_attendance");
+  assert.equal(parameters.month_key,null);
+  assert.equal(parameters.after_id,id);
+  assert.equal("user_id" in parameters,false);
+});

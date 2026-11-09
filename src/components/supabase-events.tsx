@@ -15,7 +15,7 @@ import {
 import { dateLabel, localInput, timeLabel } from "@/domain/time";
 import { EVENT_TYPES } from "@/config/app";
 import { SupabaseAttendance } from "./supabase-attendance";
-import { attendanceLabels } from "@/domain/dev-attendance";
+import { attendanceLabels, attendanceStateLabels } from "@/domain/dev-attendance";
 import { defaultEventList, monthLabel, monthKeySchema, type EventListQuery } from "@/domain/dev-event-list";
 import { SupabaseCalendar } from "./supabase-calendar";
 import { SupabaseVehicles } from "./supabase-vehicles";
@@ -52,6 +52,10 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
       const value=new URLSearchParams(window.location.search).get("bereich");
       activateSection(value==="fahrzeuge" || value==="kalender" ? value : "dienste");
       const params=new URLSearchParams(window.location.search);
+      if(params.get("ansicht")==="open_attendance") {
+        pages.current=1;
+        setQuery(current=>current.view==="open_attendance" ? current : {...defaultEventList,view:"open_attendance"});
+      } else setQuery(current=>current.view==="open_attendance" ? {...defaultEventList} : current);
       const target=z.uuid().safeParse(params.get(value==="fahrzeuge" ? "vorgang" : "termin"));
       if(target.success && value==="fahrzeuge")setVehicleEvent(previous=>previous?.id===target.data ? previous : {id:target.data,sequence:(previous?.sequence ?? 0)+1});
       if(target.success && value==="kalender")setCalendarTarget(target.data);
@@ -142,6 +146,10 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
     epoch.current.value++;
   }, []);
   function changeQuery(next: EventListQuery) {
+    const url=new URL(window.location.href);
+    if(next.view==="open_attendance")url.searchParams.set("ansicht","open_attendance");
+    else url.searchParams.delete("ansicht");
+    if(url.href!==window.location.href)window.history.pushState(null,"",url);
     pages.current = 1; epoch.current.value++;
     setMonthInput(next.view === "month" ? next.month : "");
     setError(""); setBusy(true); setQuery(next);
@@ -186,7 +194,8 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
     pages.current++;
     await refresh();
   }
-  const listed = workspace ? [...workspace.events, ...workspace.retained_events.filter((item) => !workspace.events.some((row) => row.id === item.id))] : [];
+  const attendanceReady=query.view!=="open_attendance" || typeof workspace?.open_attendance_count==="number";
+  const listed = workspace && attendanceReady ? [...workspace.events, ...workspace.retained_events.filter((item) => !workspace.events.some((row) => row.id === item.id))] : [];
   function edit(item?: DevEvent) {
     setMessage(""); setError("");
     if(item?.series_id){setPlanning({eventId:item.id});return;}
@@ -224,7 +233,7 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
       initialTime={initial.server_now} preferredUnit={preferredUnit} initialEventId={vehicleEvent?.id} initialEventSequence={vehicleEvent?.sequence}/></div></AppDialogVisibility.Provider>}
     <AppDialogVisibility.Provider value={section==="dienste"}>
     <section className="card section-card" hidden={section!=="dienste"}>
-    <div className="event-card-top"><h2>Sichtbare DEV-Termine</h2><div className="dev-actions">
+    <div className="event-card-top"><h2>{query.view==="open_attendance" ? "Offene Anwesenheitslisten" : "Sichtbare DEV-Termine"}</h2><div className="dev-actions">
       <button className="button secondary" disabled={busy} onClick={() => void refresh()}><RefreshCw size={18} />Termine aktualisieren</button>
       {!!workspace?.manageable_units.length && !editor && <button className="button" disabled={busy} onClick={() => edit()}><CalendarPlus size={18} />Einzeltermin erstellen</button>}
     </div></div>
@@ -248,11 +257,12 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
       }, editor.id ? "Termin in Supabase geändert." : "Termin in Supabase erstellt.")} />}
     <div className="form-grid dev-list-filters">
       <label>Terminansicht<select value={query.view} disabled={busy} onChange={(event) => changeQuery({ ...query,
-        view: event.target.value === "past" ? "past" : event.target.value === "month" ? "month" : "upcoming",
+        view: event.target.value === "open_attendance" ? "open_attendance" : event.target.value === "past" ? "past" : event.target.value === "month" ? "month" : "upcoming",
         month: event.target.value === "month" ? query.month || localInput(initial.server_now).slice(0, 7) : "" })}>
         <option value="upcoming">Aktuelle und zukünftige Termine</option><option value="past">Vergangene Termine</option><option value="month">Monatsansicht</option>
+        {(workspace?.can_filter_attendance || query.view==="open_attendance") && <option value="open_attendance">Offene Anwesenheitslisten</option>}
       </select></label>
-      <label>Monat und Jahr<input type="month" min="2000-01" max="9998-12" placeholder="JJJJ-MM" disabled={busy} value={monthInput}
+      <label>Monat und Jahr<input type="month" min="2000-01" max="9998-12" placeholder="JJJJ-MM" disabled={busy || query.view==="open_attendance"} value={monthInput}
         onChange={(event) => {
           const value = event.target.value;
           setMonthInput(value);
@@ -260,25 +270,27 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
           else if (monthKeySchema.safeParse(value).success) changeQuery({ ...query, month: value, view: "month" });
           else setError("Bitte einen gültigen Monat im Format JJJJ-MM wählen (Jahr 2000–9998).");
         }} /></label>
-      <label>Terminstatus<select value={query.status} disabled={busy} onChange={(event) => changeQuery({ ...query,
+      <label>Terminstatus<select value={query.status} disabled={busy || query.view==="open_attendance"} onChange={(event) => changeQuery({ ...query,
         status: event.target.value === "scheduled" ? "scheduled" : event.target.value === "cancelled" ? "cancelled" : "all" })}>
         <option value="all">Alle sichtbaren Termine</option><option value="scheduled">Geplant</option><option value="cancelled">Abgesagt</option>
       </select></label>
       <button className="button secondary" disabled={busy} onClick={() => changeQuery({ ...defaultEventList })}>Standardansicht wiederherstellen</button>
     </div>
-    <p className="muted text-sm">{query.view === "month" ? `${monthLabel(query.month)} · chronologisch · 50 Termine pro Seite`
+    <p className="muted text-sm">{query.view === "open_attendance" ? "Begonnene, bearbeitbare Listen ohne Abschluss · ältester Dienst zuerst · 50 Termine pro Seite"
+      : query.view === "month" ? `${monthLabel(query.month)} · chronologisch · 50 Termine pro Seite`
       : query.view === "past" ? "Vergangene Termine · neueste zuerst · maximal fünf"
-      : "Aktuelle und zukünftige Termine · nächste zuerst · maximal fünf"} · Europe/Berlin · Einordnung nach geplantem Ende</p>
+      : "Aktuelle und zukünftige Termine · nächste zuerst · maximal fünf"} · Europe/Berlin{query.view!=="open_attendance" && " · Einordnung nach geplantem Ende"}</p>
     {workspace && <>
-    {workspace.events.length === 0 && <p>Noch keine sichtbaren DEV-Termine. Es werden keine Demo-Daten übernommen.</p>}
+    {query.view==="open_attendance" && <p role="status">{attendanceReady ? `${workspace.open_attendance_count} offene Anwesenheitslisten` : "Offene Anwesenheitslisten werden geladen …"}</p>}
+    {attendanceReady && workspace.events.length === 0 && <p>{query.view==="open_attendance" ? "Keine offenen, für dich bearbeitbaren Anwesenheitslisten." : "Noch keine sichtbaren DEV-Termine. Es werden keine Demo-Daten übernommen."}</p>}
     {listed.map((item) =>
       <EventCard key={item.id} client={client} changed={async () => { accept(await reload()); }} keepOpen={keepOpen}
-        retained={!workspace.events.some((row) => row.id === item.id)} item={item} serverNow={serverNow} busy={busy} edit={() => edit(item)}
+        attendanceFilter={query.view==="open_attendance"} retained={!workspace.events.some((row) => row.id === item.id)} item={item} serverNow={serverNow} busy={busy} edit={() => edit(item)}
         reply={(answer) => run(() => setEventResponse(client, item.id, answer), "Rückmeldung in Supabase gespeichert.")}
         cancel={(reason) => run(() => cancelSingleEvent(client, item, reason), "Termin in Supabase abgesagt. Rückmeldungen und Historie bleiben erhalten.")}
         correct={(user, answer, reason) => run(() => correctEventResponse(client, item.id, user, answer, reason), "Rückmeldung mit Korrekturgrund protokolliert.")} />)}
-    {query.view === "month" && workspace.next_cursor && <button className="button secondary" disabled={busy} onClick={() => void loadMore()}>Weitere Termine laden</button>}
-    {query.view !== "month" && workspace.has_more && <p className="muted text-sm">Weitere Termine sind über die Monatsansicht zugänglich.</p>}
+    {(query.view === "month" || query.view==="open_attendance") && workspace.next_cursor && <button className="button secondary" disabled={busy} onClick={() => void loadMore()}>Weitere Termine laden</button>}
+    {query.view !== "month" && query.view!=="open_attendance" && workspace.has_more && <p className="muted text-sm">Weitere Termine sind über die Monatsansicht zugänglich.</p>}
     </>}
   </section></AppDialogVisibility.Provider></>;
 }
@@ -312,12 +324,12 @@ function EventForm({ editor, units, busy, change, close, submit }: {
   </section>;
 }
 
-function EventCard({ client, changed, item, serverNow, busy, edit, reply, cancel, correct, keepOpen, retained }: {
+function EventCard({ client, changed, item, serverNow, busy, edit, reply, cancel, correct, keepOpen, retained, attendanceFilter }: {
   client: SupabaseClient; changed: () => Promise<void>;
   item: DevEvent; serverNow: number; busy: boolean; edit: () => void;
   reply: (response: DevResponse) => Promise<void>; cancel: (reason: string) => Promise<void>;
   correct: (user: string, answer: DevResponse, reason: string) => Promise<void>;
-  keepOpen: (id: string, open: boolean) => void; retained: boolean;
+  keepOpen: (id: string, open: boolean) => void; retained: boolean; attendanceFilter: boolean;
 }) {
   const [cancelling, setCancelling] = useState(false);
   const [reason, setReason] = useState("");
@@ -338,11 +350,12 @@ function EventCard({ client, changed, item, serverNow, busy, edit, reply, cancel
   const unlocked = serverNow < Date.parse(item.starts_at) && (!item.response_deadline || serverNow < Date.parse(item.response_deadline));
   const counts = item.participants ? responseCounts(item.participants) : null;
   const responseStyle=responsePresentation(item.own_response);
-  return <article className={`dev-event ${responseStyle.className}`} aria-labelledby={`event-${item.id}`}>
-    {retained && <p className="notice">Geöffneter Termin außerhalb der aktuellen Ergebnisliste · Berechtigung weiterhin live geprüft</p>}
+  return <article className={`dev-event ${responseStyle.className} ${attendanceFilter && !retained ? "open-attendance-result" : ""}`} aria-labelledby={`event-${item.id}`}>
+    {retained && <p className="notice">{attendanceFilter ? "Geöffneter Dienst gehört nicht mehr zur offenen Ergebnisliste; abgeschlossene Listen bleiben hier zur Ansicht erhalten." : "Geöffneter Termin außerhalb der aktuellen Ergebnisliste · Berechtigung weiterhin live geprüft"}</p>}
     <div className="event-card-top"><h3 id={`event-${item.id}`}>{item.title}</h3><span className={`badge ${planned ? "" : "muted"}`}>{planned ? "Geplant" : "Abgesagt"}</span></div>
     <p>{dateLabel(item.starts_at, { year: "numeric" })} · {timeLabel(item.starts_at)} – {dateLabel(item.ends_at)} {timeLabel(item.ends_at)} · {item.location}</p>
     <p className="muted text-sm">{item.scope_name} · {EVENT_TYPES[item.event_type]}{item.series_id && " · Serieninstanz"}{item.series_exception && " · Individuelle Ausnahme"}</p>
+    {attendanceFilter && <p>Dienstleitung: <strong>{item.organizer_name ?? "Nicht verfügbar"}</strong> · {attendanceStateLabels[item.attendance_state]}</p>}
     <p className="description">{item.description}</p>
     <p className={`personal-response-label ${responseStyle.className}`}><span className="response-symbol" aria-hidden="true">{responseStyle.symbol}</span> {responseStyle.label}</p>
     {item.response_deadline && <p className="muted text-sm">Anmeldeschluss: {dateLabel(item.response_deadline)} · {timeLabel(item.response_deadline)}</p>}
@@ -357,7 +370,7 @@ function EventCard({ client, changed, item, serverNow, busy, edit, reply, cancel
     {(item.can_read_attendance || item.can_delegate) && <>
       <div className="dev-actions">
         {item.can_read_attendance && <button className="button secondary" disabled={busy || serverNow < Date.parse(item.starts_at)}
-          onClick={() => setAttendanceMode("attendance")}>Anwesenheit öffnen</button>}
+          onClick={() => setAttendanceMode("attendance")}>{attendanceFilter && item.can_lead ? "Anwesenheit erfassen" : "Anwesenheit öffnen"}</button>}
         {item.can_delegate && <button className="button secondary" disabled={busy} onClick={() => setAttendanceMode("organizer")}>Organisator zuweisen</button>}
       </div>
       {serverNow < Date.parse(item.starts_at) && <p className="lock-note">Anwesenheit erst ab Dienstbeginn {timeLabel(item.starts_at)}; vorher ist nur die Teilnahmeplanung möglich.</p>}

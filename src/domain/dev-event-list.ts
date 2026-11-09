@@ -5,12 +5,12 @@ export const monthKeySchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Monat
 export const eventCursorSchema = z.object({ starts_at: z.iso.datetime({ offset: true }), id: z.uuid() });
 export type EventCursor = z.infer<typeof eventCursorSchema>;
 export type EventListQuery = {
-  view: "upcoming" | "past" | "month"; month: string; status: "all" | "scheduled" | "cancelled";
+  view: "upcoming" | "past" | "month" | "open_attendance"; month: string; status: "all" | "scheduled" | "cancelled";
 };
 export const defaultEventList: EventListQuery = { view: "upcoming", month: "", status: "all" };
 export function eventListParameters(query: EventListQuery = defaultEventList, cursor: EventCursor | null = null, retained: string[] = []) {
   return {
-    list_view: z.enum(["upcoming", "past", "month"]).parse(query.view),
+    list_view: z.enum(["upcoming", "past", "month", "open_attendance"]).parse(query.view),
     month_key: query.view === "month" ? monthKeySchema.parse(query.month) : null,
     status_filter: z.enum(["all", "scheduled", "cancelled"]).parse(query.status),
     after_start: cursor ? eventCursorSchema.parse(cursor).starts_at : null,
