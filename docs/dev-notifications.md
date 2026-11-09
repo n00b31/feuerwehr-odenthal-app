@@ -169,6 +169,8 @@ Transporten und begrenzter Laufzeit. Größere Mengen bleiben in der Queue.
 2. Isolierte SQL-/RLS-/Upgrade-/Parallelitäts- und Transporttests abwarten.
    Migration 036 nur gegen den geprüften 035-Stand anwenden; Originalwerte,
    Auth, ursprüngliche Funktionen und Berechtigungen transaktional vergleichen.
+   Anschließend die additive Safeupdate-Korrektur 037 mit unveränderten
+   Daten und RPC-ACLs installieren.
 3. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\configure-dev-push.ps1` mit autorisierter
    Supabase-CLI-Sitzung ausführen. Das Skript ist auf DEV festgelegt.
    Es legt `FF_VAPID_PUBLIC_KEY`, `FF_VAPID_PRIVATE_KEY` und
@@ -183,10 +185,15 @@ Transporten und begrenzter Laufzeit. Größere Mengen bleiben in der Queue.
    Den erfolgreichen Crypto-/Bootstrap-Status unabhängig aus der DB prüfen.
 5. `supabase/operations/notification-scheduler.sql` als getrennte,
    registrierte Hosted-Operation anwenden. Sie benötigt Supabase Vault,
-   `pg_cron` und `pg_net`; der normale PostgreSQL-CI-Test installiert keine
+   `pg_cron` und `http`; der normale PostgreSQL-CI-Test installiert keine
    Supabase-spezifischen Erweiterungen. Genau ein Job
    `ff-notifications-dev` läuft minütlich. Ein vorhandener gleichnamiger Job
    führt zum Abbruch, nicht zu Überschreiben oder Verdoppelung.
+   Die HTTP-Erweiterung liegt im nicht zugänglichen Schema
+   `ff_push_transport`, nicht im öffentlichen API-Schema. Ausschließlich
+   der private Cron-Job wartet auf die kurze HTTP-202-Annahme; eigentlicher
+   Versand bleibt asynchron in der Edge Function. Die installierte
+   HTTP-Erweiterung 1.6 verwendet ihr natives Fünf-Sekunden-Timeout.
 6. Konfiguration, RPC-ACLs, genau einen Cron-Job, dessen Ausführungsstatus und
    die geschützte HTTP-Antwort kontrollieren, ohne Vault-Werte auszulesen.
    Keine Testgeräte oder echten Testmitteilungen ungefragt erzeugen.
@@ -258,6 +265,65 @@ verifiziertem Pages-Deployment mit ausdrücklich autorisierten Konten.
 Je Fall Datum, DEV-Build-ID, Rolle, Gerät/Browser und tatsächliches Ergebnis
 eintragen. Keine Passwörter, Subscription-Endpunkte, Schlüssel oder Tokens
 in Abnahmeprotokolle übernehmen.
+
+## Tatsächlich installierter DEV-Stand vom 09.11.2026
+
+Nach den abgebrochenen MCP-Bestätigungen erfolgte die Installation mit
+ausdrücklicher Freigabe über die angemeldete, auf DEV festgelegte Supabase
+CLI. Alle Installationsschritte prüften Originaldaten, Auth und
+Berechtigungen innerhalb ihrer Transaktion; Abweichungen hätten vollständig
+zurückgerollt. Migration 036 entspricht der erfolgreich geprüften CI-Quelle.
+
+| Registry-Eintrag | Version | SHA-256 der normalisierten Quelldatei |
+|---|---|---|
+| `ff_036_notifications` | `20261109214440` | `813636138aade746f61144a0736993c1afdf7efb1e4a1995934232e6a1399a41` |
+| `ff_037_notification_safe_updates` | `20261109215249` | `6fa45d89125c1cb55b5922aae83fbd0d3e5b6ff99532f47e65b1f45f171afd92` |
+| `ff_038_notification_scheduler` | `20261109220410` | `7e5562a24c874717ddedc08a12860bae72d72420f9e432ba418094c150fcb27e` |
+
+038 ist bewusst die separate Datei
+`supabase/operations/notification-scheduler.sql`, keine auf einfachem
+PostgreSQL ausführbare Erweiterungsmigration.
+
+Der tatsächliche Plattformtest zeigte, dass `pg_net`-Objekte dem
+`supabase_admin` gehören und ihre Standardrechte vom normalen
+Migrationsbenutzer nicht zuverlässig entzogen werden können. Eine
+Credential-haltige HTTP-Queue wurde deshalb **nicht** installiert.
+Fehlgeschlagene Isolationsprüfungen wurden transaktional zurückgerollt.
+Stattdessen verwendet der Job die nicht öffentlich zugängliche
+HTTP-Erweiterung ohne persistierte Request-Queue. `pg_net` ist nicht installiert.
+
+Verifizierte Betriebsnachweise:
+
+- `push-dispatch`, Version 2, aktiv; vorhandene `password-recovery`, Version 2,
+  unverändert. Tatsächlicher Edge-Crypto-/Vault-Bootstrap erfolgreich.
+- Nicht autorisierter Dispatcher-Aufruf: **HTTP 401**.
+  Autorisierter privater Scheduler-Aufruf: **HTTP 202**.
+- Genau ein aktiver minütlicher Job `ff-notifications-dev`, ID 1.
+  Erste automatische Ausführung am 09.11.2026 um 22:05 UTC: **succeeded**.
+- Keine Schema-Nutzung für `anon`/`authenticated` auf `ff_push_transport`,
+  keine Browserausführung des Cron-Helfers oder der Service-Versand-RPCs.
+  Subscription-Endpoints und Auth-Schlüssel nicht per Spaltengrant lesbar.
+- 11 Auth-Konten, 61 Profile, 295 Termine und 53 ursprüngliche In-App-
+  Nachrichten unverändert; **null Geräte, null Versandaufträge, null
+  Versandversuche** bei der Betriebsprüfung.
+- Drei serverseitige Push-Secrets eingerichtet; Wiederholung bestätigt
+  Wiederverwendung ohne Rotation. Geschützte temporäre Dateien entfernt.
+- **Keine echten Test-Pushs oder Testmails versandt.** Keine bestehenden
+  Konten oder Passwörter geändert; unabhängiges Demo-Repository unverändert.
+
+Automatisierter Stand: 183 Domain/Auth/Konfigurationstests, 24 Skripttests,
+111 synthetische DEV-Browserfälle einschließlich zehn neuer
+Benachrichtigungsfälle sowie die bestehenden 19 Demo-Browserfälle.
+Isolierte PostgreSQL-/RLS-/Upgrade-/Parallelitäts- und tatsächliche
+VAPID/aes128gcm-Transporttests erfolgreich. Ein anfänglicher Pages-Lauf
+nahm die neuen DEV-Fälle versehentlich auch in den Demo-Runner auf;
+die Runner-Auswahl wurde wie bei den bestehenden DEV-Suiten getrennt.
+Typecheck erfolgreich; Lint ohne Fehler mit der bestehenden
+`supabase-planning.tsx`-Warnung.
+
+PR: [#24](https://github.com/n00b31/feuerwehr-odenthal-app/pull/24).
+Kein automatischer Merge. Die öffentliche DEV-Oberfläche bleibt bis zum
+manuellen Merge/Pages-Deployment auf DEV 0.6.4.1.
 
 Referenzen:
 [Supabase Cron](https://supabase.com/docs/guides/functions/schedule-functions),
