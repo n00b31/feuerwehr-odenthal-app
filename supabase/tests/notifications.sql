@@ -12,8 +12,8 @@ create function pg_temp.n_deny(statement text) returns void language plpgsql as 
 begin execute statement;raise exception 'FAIL: unauthorized notifications';
 exception when insufficient_privilege then raise notice 'PASS: notification action denied'; end $$;
 insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data)
-select pg_temp.n_user(i),'synthetic.notifications.'||i||'@feuerwehr-odenthal.de',clock_timestamp(),
- jsonb_build_object('display_name','Synthetic notification member '||i) from generate_series(1,7) i;
+select pg_temp.n_user(i),'synthetic.notifications.'||i||'@feuerwehr-odenthal.de',case when i<>8 then clock_timestamp() end,
+ jsonb_build_object('display_name','Synthetic notification member '||i) from generate_series(1,8) i;
 select set_config('n.a',(select id::text from public.units where code='scheuren'),true);
 select set_config('n.b',(select id::text from public.units where code='blecher'),true);
 select ff_private.bootstrap_global_admin(pg_temp.n_user(1),current_setting('n.a')::uuid);
@@ -36,11 +36,13 @@ select set_config('n.device1',public.ff_push_register(jsonb_build_object('endpoi
 select set_config('n.device2',public.ff_push_register(jsonb_build_object('endpoint','https://web.push.apple.com/synthetic-ci-two',
  'keys',jsonb_build_object('p256dh',repeat('B',87),'auth',repeat('A',22))),'Synthetic desktop')::text,true);
 select pg_temp.n_ok(jsonb_array_length(public.ff_notifications()->'devices')=2,'multiple own devices');
+select public.ff_notification_preferences(true,array['services','changes','reminders','vehicles','administration','information'],true);
 select pg_temp.n_ok(not(public.ff_notifications()->'devices'->0 ? 'endpoint')
  and not(public.ff_notifications()->'devices'->0 ? 'auth_key'),'device DTO contains no endpoint or subscription secrets');
 select pg_temp.n_deny('select endpoint from public.push_subscriptions');
 select pg_temp.n_deny('select public.ff_notification_tick()');
 select pg_temp.n_deny('select public.ff_push_claim()');
+select pg_temp.n_deny(format('select public.ff_push_complete(%L,%L,201)',gen_random_uuid(),gen_random_uuid()));
 select pg_temp.n_deny('select public.ff_push_bootstrap(''x'',''y'')');
 select pg_temp.n_deny('select public.ff_notification_configure(false,array[''vehicles''])');
 reset role;
@@ -48,12 +50,15 @@ select set_config('request.jwt.claim.sub',pg_temp.n_user(3)::text,true);
 set local role authenticated;
 select pg_temp.n_ok((select count(*)=0 from public.push_subscriptions),'RLS hides foreign devices');
 select pg_temp.n_deny(format('select public.ff_push_deactivate(%L)',current_setting('n.device1')));
+select pg_temp.n_deny($q$select public.ff_push_register('{"endpoint":"https://fcm.googleapis.com/fcm/send/synthetic-ci-one",
+ "keys":{"p256dh":"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB","auth":"AAAAAAAAAAAAAAAAAAAAAA"}}','Foreign takeover')$q$);
 reset role;
 insert into public.events(id,title,event_type,starts_at,ends_at,location,scope_kind,unit_id,organizer_id)
 select pg_temp.n_event(i),'Synthetic notification service '||i,'regular',
- statement_timestamp()+case when i=3 then interval '-2 hours' else interval '12 hours' end,
- statement_timestamp()+case when i=3 then interval '-1 hour' else interval '14 hours' end,
- 'Synthetic CI','unit',current_setting('n.a')::uuid,pg_temp.n_user(1) from generate_series(1,3)i;
+ statement_timestamp()+case when i in(3,4) then interval '-2 hours' when i=5 then interval '1 hour' else interval '12 hours' end,
+ statement_timestamp()+case when i in(3,4) then interval '-1 hour' when i=5 then interval '3 hours' else interval '14 hours' end,
+ 'Synthetic CI','unit',current_setting('n.a')::uuid,pg_temp.n_user(1) from generate_series(1,5)i;
+update public.events set attendance_state='COMPLETED' where id=pg_temp.n_event(4);
 select set_config('request.jwt.claim.sub',pg_temp.n_user(1)::text,true);
 set local role authenticated;
 select public.ff_set_primary_organizer(pg_temp.n_event(3),pg_temp.n_user(6),'Synthetic attendance delegation');
@@ -62,7 +67,7 @@ select set_config('request.jwt.claim.sub',pg_temp.n_user(2)::text,true);
 set local role authenticated;
 select public.ff_set_response(pg_temp.n_event(1),'yes');
 reset role;
-select public.ff_notification_tick();
+do $$ begin for i in 1..10 loop exit when public.ff_notification_tick()=0; end loop; end $$;
 select pg_temp.n_ok(auth.uid()=pg_temp.n_user(2),'private recipient evaluation restores caller identity');
 select pg_temp.n_ok(exists(select 1 from public.vehicle_notifications where recipient_id=pg_temp.n_user(2)
  and target_id=pg_temp.n_event(1) and event_type='event_created'),'new practice notifies dynamically eligible member');
@@ -76,13 +81,29 @@ select pg_temp.n_ok(exists(select 1 from public.vehicle_notifications where reci
  and target_id=pg_temp.n_event(3) and event_type='attendance_open'),'delegated organizer receives own open attendance task');
 select pg_temp.n_ok(not exists(select 1 from public.vehicle_notifications where recipient_id=pg_temp.n_user(2)
  and target_id=pg_temp.n_event(3)),'ordinary member receives no administrative attendance reminder');
+select pg_temp.n_ok(not exists(select 1 from public.vehicle_notifications where target_id=pg_temp.n_event(4)),
+ 'already finalized attendance never generates open-list reminder');
+select pg_temp.n_ok(exists(select 1 from public.vehicle_notifications where recipient_id=pg_temp.n_user(2)
+ and target_id=pg_temp.n_event(5) and event_type='service_reminder_two'),'optional two-hour reminder is delivered only after explicit opt-in');
+select pg_temp.n_ok(not exists(select 1 from public.vehicle_notifications where recipient_id=pg_temp.n_user(1)
+ and target_id=pg_temp.n_event(5) and event_type='service_reminder_two'),'two-hour reminder is disabled by default');
 select pg_temp.n_ok(exists(select 1 from public.vehicle_notifications where recipient_id=pg_temp.n_user(1)
  and target_id=pg_temp.n_user(7) and source_kind='registration'),'verified registration notifies GLOBAL_ADMIN');
 select pg_temp.n_ok(not exists(select 1 from public.vehicle_notifications where recipient_id in(pg_temp.n_user(4),pg_temp.n_user(5))
  and source_kind='registration'),'UNIT_ADMIN and FIRE_CHIEF do not receive global registration tasks');
+select pg_temp.n_ok(not exists(select 1 from public.vehicle_notifications where target_id=pg_temp.n_user(8)),
+ 'unverified registration never triggers an administrative notice');
 select set_config('n.before',(select count(*)::text from public.vehicle_notifications),true);
+set local time zone 'Europe/Berlin';
 select public.ff_notification_tick();
 select pg_temp.n_ok((select count(*)::text from public.vehicle_notifications)=current_setting('n.before'),'repeated cron is idempotent');
+select pg_temp.n_ok('2027-03-28 12:00+02'::timestamptz-make_interval(hours=>24)='2027-03-27 11:00+01'::timestamptz
+ and '2027-10-31 12:00+01'::timestamptz-make_interval(hours=>24)='2027-10-30 13:00+02'::timestamptz,
+ 'reminder offsets are actual elapsed hours across both Berlin DST transitions');
+update auth.users set email_confirmed_at=clock_timestamp() where id=pg_temp.n_user(8);
+select public.ff_notification_tick();
+select pg_temp.n_ok(exists(select 1 from public.vehicle_notifications where target_id=pg_temp.n_user(8)
+ and recipient_id=pg_temp.n_user(1)),'registration captured before verification is delivered only after real verified state');
 update public.events set title='Synthetic changed time',starts_at=starts_at+interval '1 hour',ends_at=ends_at+interval '1 hour',revision=revision+1 where id=pg_temp.n_event(1);
 select public.ff_notification_tick();
 select pg_temp.n_ok(exists(select 1 from public.vehicle_notifications where recipient_id=pg_temp.n_user(2)
@@ -114,6 +135,14 @@ select public.ff_push_complete((current_setting('n.jobs')::jsonb->0->>'id')::uui
  (current_setting('n.jobs')::jsonb->0->>'lease_id')::uuid,410);
 select pg_temp.n_ok((select not active from public.push_subscriptions where id=current_setting('n.device1')::uuid),
  'expired push endpoint is automatically deactivated');
+insert into public.vehicle_notifications(recipient_id,source_kind,target_id,event_type,category,title,message,dedup_key)
+select pg_temp.n_user(2),'test',pg_temp.n_user(2),'dev_test','information','Synthetic rate fixture','No transport',
+ 'synthetic-hourly-limit:'||i from generate_series(1,20)i;
+select jsonb_array_length(public.ff_push_claim());
+select pg_temp.n_ok((select count(*)=10 from ff_private.notification_delivery_attempts a
+ join ff_private.notification_deliveries d on d.id=a.delivery_id join public.push_subscriptions s on s.id=d.subscription_id
+ where s.user_id=pg_temp.n_user(2)),'exact ten-attempt hourly account limit counts retries and all devices together');
+select pg_temp.n_ok(public.ff_push_claim()='[]'::jsonb,'repeated claim cannot bypass hourly account limit');
 select set_config('request.jwt.claim.sub',pg_temp.n_user(2)::text,true);
 set local role authenticated;
 select public.ff_notification_preferences(false,array['vehicles']);

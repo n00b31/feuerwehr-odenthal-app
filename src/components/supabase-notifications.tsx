@@ -18,10 +18,12 @@ async function openNotice(client:SupabaseClient,actor:string,id:string){
   await readNotification(client,id);changed();
   return notificationHref(notice);
 }
-export function NotificationBridge({client,actorId}:{client:SupabaseClient;actorId:string}){
+export function NotificationBridge({client,actorId}:{client:SupabaseClient;actorId:string|null}){
   const router=useRouter(),[pending,setPending]=useState<string|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false);
   const observed=useRef<string|null>(null);
+  const [incoming]=useState(()=>typeof window==="undefined"?null:new URLSearchParams(window.location.search).get("notification"));
   const open=useCallback(async(id:string)=>{
+    if(!actorId)return;
     setBusy(true);setError("");
     try{const href=await openNotice(client,actorId,id);setPending(null);router.push(href);}
     catch{setError("Diese Benachrichtigung oder der zugehörige Vorgang ist nicht mehr berechtigt verfügbar.");}
@@ -29,12 +31,16 @@ export function NotificationBridge({client,actorId}:{client:SupabaseClient;actor
   },[client,actorId,router]);
   useEffect(()=>{
     let active=true;
-    const id=new URLSearchParams(window.location.search).get("notification");
-    if(id && observed.current!==id){
-      observed.current=id;
+    const id=incoming;
+    if(id && actorId && observed.current!==id){
       void openNotice(client,actorId,id).then(href=>{if(active)router.push(href);})
-        .catch(()=>{if(active)setError("Diese Benachrichtigung oder der zugehörige Vorgang ist nicht mehr berechtigt verfügbar.");});
-      const url=new URL(window.location.href);url.searchParams.delete("notification");window.history.replaceState(null,"",url);
+        .catch(()=>{if(active)setError("Diese Benachrichtigung oder der zugehörige Vorgang ist nicht mehr berechtigt verfügbar.");})
+        .finally(()=>{
+          if(!active)return;
+          observed.current=id;
+          const url=new URL(window.location.href);
+          if(url.searchParams.get("notification")===id){url.searchParams.delete("notification");window.history.replaceState(null,"",url);}
+        });
     }
     function receive(event:MessageEvent){
       if(event.data?.type!=="FF_NOTIFICATION_OPEN")return;
@@ -43,10 +49,11 @@ export function NotificationBridge({client,actorId}:{client:SupabaseClient;actor
     }
     if("serviceWorker" in navigator)navigator.serviceWorker.addEventListener("message",receive);
     return()=>{active=false;if("serviceWorker" in navigator)navigator.serviceWorker.removeEventListener("message",receive);};
-  },[client,actorId,router]);
+  },[client,actorId,router,incoming]);
   return <>{pending && <section className="notice" role="status"><strong>Neue organisatorische Nachricht</strong>
     <p>Die aktuelle Arbeitsansicht bleibt erhalten. Erst bewusstes Öffnen wechselt zum berechtigten Vorgang.</p>
-    <div className="dev-actions"><button className="button" disabled={busy} onClick={()=>void open(pending)}>Benachrichtigung öffnen</button>
+    {!actorId && <p>Bitte zuerst anmelden und die serverseitige Freigabe abwarten.</p>}
+    <div className="dev-actions"><button className="button" disabled={busy || !actorId} onClick={()=>void open(pending)}>Benachrichtigung öffnen</button>
       <button className="button secondary" disabled={busy} onClick={()=>setPending(null)}>Später</button></div></section>}
     {error && <p className="notice error" role="alert">{error}</p>}</>;
 }
@@ -55,7 +62,7 @@ function deliveryLabel(notice:Notice){
   if(!d.total)return "In-App verfügbar · kein Push-Auftrag";
   return `Push: ${d.accepted} vom Dienst angenommen · ${d.pending} ausstehend · ${d.failed} fehlgeschlagen · ${d.cancelled} nicht mehr zulässig`;
 }
-export function SupabaseNotifications({client,actorId}:{client:SupabaseClient;actorId:string}){
+export function SupabaseNotifications({client,actorId,onPushBusy}:{client:SupabaseClient;actorId:string;onPushBusy:(busy:boolean)=>void}){
   const router=useRouter();
   const [snapshot,setSnapshot]=useState<NotificationWorkspace|null>(null),[preferences,setPreferences]=useState<NotificationPreferences|null>(null);
   const [device,setDevice]=useState<string|null>(null),[name,setName]=useState("Mein Gerät");
@@ -83,10 +90,10 @@ export function SupabaseNotifications({client,actorId}:{client:SupabaseClient;ac
   },[reload]);
   async function run(operation:()=>Promise<unknown>,success:string){
     if(working.current)return;
-    working.current=true;setBusy(true);setError("");setMessage("");
+    working.current=true;setBusy(true);onPushBusy(true);setError("");setMessage("");
     try{await operation();await reload();setMessage(success);}
     catch{setPermission(pushSupport()?Notification.permission:"unsupported");setError(notificationError());}
-    finally{working.current=false;setBusy(false);}
+    finally{working.current=false;setBusy(false);onPushBusy(false);}
   }
   const current=snapshot?.devices.find(item=>item.id===device && item.active);
   const status=permission==="unsupported" ? "Auf diesem Gerät nicht unterstützt" : permission==="denied" ? "Vom Browser blockiert"
@@ -113,16 +120,16 @@ export function SupabaseNotifications({client,actorId}:{client:SupabaseClient;ac
       <form className="form-grid" onSubmit={event=>{event.preventDefault();void run(async()=>{
         await saveNotificationPreferences(client,preferences);dirty.current=false;
       },"Benachrichtigungseinstellungen gespeichert.");}}>
-        <h3>Benachrichtigungseinstellungen</h3>
-        {JSON.stringify(preferences)!==JSON.stringify(snapshot.preferences) && <p className="notice">Diese Einstellungen sind noch nicht gespeichert. Der Push-Status zeigt weiterhin den bestätigten Serverstand.</p>}
-        <label><input type="checkbox" checked={preferences.push_enabled} disabled={busy} onChange={event=>{dirty.current=true;setPreferences({...preferences,push_enabled:event.target.checked});}}/>Push global aktivieren</label>
-        <p className="muted text-sm">Die Kategorien steuern neue organisatorische In-App- und Push-Mitteilungen. Sicherheitsmails, E-Mail-Verifizierung und Freigabe bleiben unverändert.</p>
-        {Object.entries(notificationCategories).map(([key,label])=><label key={key}><input type="checkbox" disabled={busy}
+        <h3 className="span-2">Benachrichtigungseinstellungen</h3>
+        {JSON.stringify(preferences)!==JSON.stringify(snapshot.preferences) && <p className="notice span-2">Diese Einstellungen sind noch nicht gespeichert. Der Push-Status zeigt weiterhin den bestätigten Serverstand.</p>}
+        <label className="checkbox-label span-2"><input type="checkbox" checked={preferences.push_enabled} disabled={busy} onChange={event=>{dirty.current=true;setPreferences({...preferences,push_enabled:event.target.checked});}}/>Push global aktivieren</label>
+        <p className="muted text-sm span-2">Die Kategorien steuern neue organisatorische In-App- und Push-Mitteilungen. Sicherheitsmails, E-Mail-Verifizierung und Freigabe bleiben unverändert.</p>
+        {Object.entries(notificationCategories).map(([key,label])=><label className="checkbox-label" key={key}><input type="checkbox" disabled={busy}
           checked={preferences.categories.includes(notificationCategorySchema.parse(key))} onChange={event=>{
             dirty.current=true;const category=notificationCategorySchema.parse(key);setPreferences({...preferences,
               categories:event.target.checked?[...preferences.categories,category]:preferences.categories.filter(value=>value!==category)});
           }}/>{label}</label>)}
-        <label><input type="checkbox" checked={preferences.reminder_two_hours} disabled={busy} onChange={event=>{
+        <label className="checkbox-label span-2"><input type="checkbox" checked={preferences.reminder_two_hours} disabled={busy} onChange={event=>{
           dirty.current=true;setPreferences({...preferences,reminder_two_hours:event.target.checked});
         }}/>Zusätzliche Übungsdienst-Erinnerung zwei Stunden vorher</label>
         <button className="button secondary" disabled={busy}>Benachrichtigungseinstellungen speichern</button>
@@ -170,8 +177,8 @@ function AdminBody({client}:{client:SupabaseClient}){
     {error && <p className="notice error" role="alert">{error}</p>}
     <button className="button secondary" disabled={busy} onClick={()=>void reload().catch(()=>setError(notificationError()))}>Versandstatus aktualisieren</button>
     {snapshot?.global && snapshot.config && <fieldset disabled={busy}><legend>Globale organisatorische Kategorien</legend>
-      <label><input type="checkbox" checked={snapshot.config.enabled} onChange={event=>void configure(event.target.checked,snapshot.config!.categories)}/>Organisatorische Verarbeitung und Versand freigegeben</label>
-      {Object.entries(notificationCategories).map(([key,label])=><label key={key}><input type="checkbox" checked={snapshot.config!.categories.includes(notificationCategorySchema.parse(key))}
+      <label className="checkbox-label"><input type="checkbox" checked={snapshot.config.enabled} onChange={event=>void configure(event.target.checked,snapshot.config!.categories)}/>Organisatorische Verarbeitung und Versand freigegeben</label>
+      {Object.entries(notificationCategories).map(([key,label])=><label className="checkbox-label" key={key}><input type="checkbox" checked={snapshot.config!.categories.includes(notificationCategorySchema.parse(key))}
         onChange={event=>{const category=notificationCategorySchema.parse(key);void configure(snapshot.config!.enabled,event.target.checked?
           [...snapshot.config!.categories,category]:snapshot.config!.categories.filter(value=>value!==category));}}/>{label}</label>)}
       <p>Erinnerungen: {snapshot.config.reminder_hours} Stunden vor Übungsdienst, {snapshot.config.unanswered_hours} Stunden bei fehlender Antwort; optional zwei Stunden und nach Dienstende. Zeitabstände sind serverseitig vorbereitet, keine lokale Uhr als Autorität.</p></fieldset>}

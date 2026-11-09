@@ -80,7 +80,9 @@ jobs:
       - name: Type-check server-only VAPID dispatcher
         run: deno check --node-modules-dir=none supabase/functions/push-dispatch/index.ts
       - name: Verify actual VAPID encryption without contacting Push providers
-        run: deno test --node-modules-dir=none supabase/functions/push-dispatch/transport.test.mjs
+        env:
+          ECE_KEYLOG: "0"
+        run: deno test --node-modules-dir=none --allow-env=ECE_KEYLOG,DEBUG,NODE_DEBUG supabase/functions/push-dispatch/transport.test.mjs
       - name: Create isolated Auth test fixture
         if: ${{ !cancelled() }}
         env:
@@ -204,3 +206,8 @@ jobs:
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: bash supabase/tests/planning-concurrency.sh
+      - name: Verify real simultaneous Push lease ownership
+        if: ${{ !cancelled() && steps.attendance_concurrency.outcome == 'success' }}
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: bash supabase/tests/notification-concurrency.sh

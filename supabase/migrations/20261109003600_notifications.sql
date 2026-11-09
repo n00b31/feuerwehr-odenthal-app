@@ -32,7 +32,7 @@ create table public.push_subscriptions(
   created_at timestamptz not null default clock_timestamp(),
   last_success_at timestamptz,
   active boolean not null default true,
-  check(endpoint ~ '^https://(fcm\.googleapis\.com|updates\.push\.services\.mozilla\.com|web\.push\.apple\.com|[a-z0-9-]+\.notify\.windows\.com)/[^[:space:]#]{1,1900}$'),
+  check(length(endpoint)<=2048 and endpoint ~ '^https://(fcm\.googleapis\.com|updates\.push\.services\.mozilla\.com|web\.push\.apple\.com|[a-z0-9-]+\.notify\.windows\.com)/[^[:space:]#]+$'),
   check(p256dh ~ '^[A-Za-z0-9_-]{87}$' and auth_key ~ '^[A-Za-z0-9_-]{22}$')
 );
 create index push_devices_owner on public.push_subscriptions(user_id,active,id);
@@ -64,7 +64,7 @@ create index notification_event_queue on ff_private.notification_events(created_
 create table ff_private.notification_deliveries(
   id uuid primary key default gen_random_uuid(),
   notification_id uuid not null references public.vehicle_notifications(id),
-  subscription_id uuid not null references public.push_subscriptions(id),
+  subscription_id uuid references public.push_subscriptions(id),
   channel text not null default 'push' check(channel in ('push','email')),
   status text not null default 'pending' check(status in ('pending','leased','accepted','failed','cancelled')),
   attempts integer not null default 0,
@@ -74,8 +74,10 @@ create table ff_private.notification_deliveries(
   attempted_at timestamptz,
   finished_at timestamptz,
   error_code text,
-  unique(notification_id,subscription_id,channel)
+  unique(notification_id,subscription_id,channel),
+  check((channel='push')=(subscription_id is not null))
 );
+create unique index notification_email_once on ff_private.notification_deliveries(notification_id,channel) where channel='email';
 create index notification_delivery_queue on ff_private.notification_deliveries(next_attempt_at,id) where status in ('pending','leased');
 create index notification_delivery_limits on ff_private.notification_deliveries(attempted_at);
 create table ff_private.notification_delivery_attempts(
@@ -234,7 +236,7 @@ begin
         (select jsonb_build_object('total',count(*),'accepted',count(*) filter(where d.status='accepted'),
           'pending',count(*) filter(where d.status in ('pending','leased')),
           'failed',count(*) filter(where d.status='failed'),'cancelled',count(*) filter(where d.status='cancelled'))
-          from ff_private.notification_deliveries d where d.notification_id=n.id) delivery
+          from ff_private.notification_deliveries d where d.notification_id=n.id and d.channel='push') delivery
       from public.vehicle_notifications n where n.recipient_id=auth.uid()
         and (notice_id is null or n.id=notice_id)
         and ff_private.notification_visible(n.source_kind,coalesce(n.target_id,n.event_id))
@@ -303,14 +305,15 @@ end;
 $$;
 create function public.ff_push_deactivate(device_id uuid default null,endpoint text default null)
 returns void language plpgsql security definer set search_path='' as $$
+declare selected_device uuid;
 begin
   perform ff_private.require_rule(ff_private.is_active(),'Freigabe erforderlich.');
   perform ff_private.require_rule((device_id is null)<>(endpoint is null),'Ein eigenes Gerät auswählen.');
-  perform ff_private.require_rule(exists(select 1 from public.push_subscriptions s where s.user_id=auth.uid()
-    and (s.id=device_id or s.endpoint=ff_push_deactivate.endpoint)),'Eigenes Gerät nicht verfügbar.');
-  update public.push_subscriptions s set active=false where s.user_id=auth.uid()
+  select s.id into selected_device from public.push_subscriptions s where s.user_id=auth.uid()
     and (s.id=device_id or s.endpoint=ff_push_deactivate.endpoint);
-  perform ff_private.write_audit('push_device_deactivated',null,auth.uid(),null,jsonb_build_object('device_id',device_id));
+  perform ff_private.require_rule(selected_device is not null,'Eigenes Gerät nicht verfügbar.');
+  update public.push_subscriptions s set active=false where s.id=selected_device;
+  perform ff_private.write_audit('push_device_deactivated',null,auth.uid(),null,jsonb_build_object('device_id',selected_device));
 end;
 $$;
 create function public.ff_push_current(endpoint text)
@@ -378,6 +381,7 @@ begin
         where p.id=n.target_id and p.status='pending' and u.email_confirmed_at is not null)
       or not exists(select 1 from public.profiles p where p.id=n.target_id and p.status='pending'))
     order by created_at,id limit 20 for update skip locked loop
+    processed:=processed+1;
     if item.source_kind='registration' and not exists(select 1 from public.profiles p join auth.users u on u.id=p.id
       where p.id=item.target_id and p.status='pending' and u.email_confirmed_at is not null) then
       update ff_private.notification_events set processed_at=clock_timestamp() where id=item.id; continue;
@@ -411,7 +415,6 @@ begin
         on conflict(recipient_id,dedup_key) where dedup_key is not null do nothing;
     end loop;
     update ff_private.notification_events set processed_at=clock_timestamp() where id=item.id;
-    processed:=processed+1;
   end loop;
   return processed;
 end;
@@ -430,7 +433,7 @@ begin
     from ff_private.notification_deliveries d join public.push_subscriptions s on s.id=d.subscription_id
     join public.vehicle_notifications n on n.id=d.notification_id
     left join public.notification_preferences p on p.user_id=s.user_id cross join ff_private.notification_config c
-    where d.status in ('pending','leased') and d.next_attempt_at<=statement_timestamp()
+    where d.channel='push' and d.status in ('pending','leased') and d.next_attempt_at<=statement_timestamp()
       and (d.status='pending' or d.lease_until<=statement_timestamp())
       and (only_notification is null or d.notification_id=only_notification)
     order by d.next_attempt_at,d.id limit 100 for update of d skip locked loop
@@ -534,7 +537,9 @@ declare cfg ff_private.notification_config; secret_id uuid;
 begin
   perform ff_private.require_rule(public_key ~ '^[A-Za-z0-9_-]{87}$' and cron_secret ~ '^[A-Za-z0-9_-]{43}$','Invalid server setup');
   select * into cfg from ff_private.notification_config for update;
-  perform ff_private.require_rule(not cfg.ready or cfg.public_key=ff_push_bootstrap.public_key,'Explicit VAPID key rotation required');
+  perform ff_private.require_rule(cfg.public_key is null or cfg.public_key=ff_push_bootstrap.public_key,'Explicit VAPID key rotation required');
+  if cfg.ready and exists(select 1 from vault.decrypted_secrets
+    where name='ff_push_cron' and decrypted_secret=cron_secret) then return; end if;
   select id into secret_id from vault.secrets where name='ff_push_cron';
   if secret_id is null then
     perform vault.create_secret(cron_secret,'ff_push_cron','DEV notification scheduler authorization');

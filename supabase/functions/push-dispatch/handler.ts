@@ -10,6 +10,7 @@ type Options={
 };
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 export function allowedPushEndpoint(endpoint:string) {
+  if(!URL.canParse(endpoint))return false;
   const url=new URL(endpoint);
   return url.protocol==="https:" && !url.username && !url.password && !url.port && !url.hash && endpoint.length<=2048
     && /^(fcm\.googleapis\.com|updates\.push\.services\.mozilla\.com|web\.push\.apple\.com|[a-z0-9-]+\.notify\.windows\.com)$/.test(url.hostname);
@@ -49,27 +50,31 @@ export function createPushHandler(options:Options) {
   async function dispatch(only:string|null) {
     try {
       if(!only)await rpc("ff_notification_tick",{});
-      const data=await rpc("ff_push_claim",{only_notification:only});
-      if(!Array.isArray(data))throw new Error("invalid_claim_response");
-      const jobs:Job[]=data.map((value:unknown)=>{
-        if(!value || typeof value!=="object")throw new Error("invalid_claim_response");
-        const job=value as Job;
-        if(!uuid.test(job.id)||!uuid.test(job.lease_id)||!uuid.test(job.notification_id)
-          ||!job.subscription || typeof job.subscription.endpoint!=="string"
-          ||!job.subscription.keys || typeof job.subscription.keys.p256dh!=="string" ||typeof job.subscription.keys.auth!=="string")
-          throw new Error("invalid_claim_response");
-        return job;
-      });
-      if(jobs.length>10)throw new Error("claim_limit_exceeded");
-      for(let index=0;index<jobs.length;index+=4)await Promise.all(jobs.slice(index,index+4).map(async job=>{
-        let code=0;
-        try {
-          if(!allowedPushEndpoint(job.subscription.endpoint))code=400;
-          else code=await options.send(job.subscription,JSON.stringify({format:1,notification_id:job.notification_id,delivery_id:job.id}),job.id.replace(/-/g,""));
-        } catch { code=0; }
-        const completed=await rpc("ff_push_complete",{delivery_id:job.id,lease_id:job.lease_id,result_code:code});
-        if(completed!==true)options.report?.("stale_delivery_completion");
-      }));
+      const deadline=Date.now()+100_000;
+      for(let batch=0;batch<5 && (batch===0 || Date.now()+60_000<deadline);batch++){
+        const data=await rpc("ff_push_claim",{only_notification:only});
+        if(!Array.isArray(data))throw new Error("invalid_claim_response");
+        const jobs:Job[]=data.map((value:unknown)=>{
+          if(!value || typeof value!=="object")throw new Error("invalid_claim_response");
+          const job=value as Job;
+          if(!uuid.test(job.id)||!uuid.test(job.lease_id)||!uuid.test(job.notification_id)
+            ||!job.subscription || typeof job.subscription.endpoint!=="string"
+            ||!job.subscription.keys || typeof job.subscription.keys.p256dh!=="string" ||typeof job.subscription.keys.auth!=="string")
+            throw new Error("invalid_claim_response");
+          return job;
+        });
+        if(jobs.length>10)throw new Error("claim_limit_exceeded");
+        for(let index=0;index<jobs.length;index+=4)await Promise.all(jobs.slice(index,index+4).map(async job=>{
+          let code=0;
+          try {
+            if(!allowedPushEndpoint(job.subscription.endpoint))code=400;
+            else code=await options.send(job.subscription,JSON.stringify({format:1,notification_id:job.notification_id,delivery_id:job.id}),job.id.replace(/-/g,""));
+          } catch { code=0; }
+          const completed=await rpc("ff_push_complete",{delivery_id:job.id,lease_id:job.lease_id,result_code:code});
+          if(completed!==true)options.report?.("stale_delivery_completion");
+        }));
+        if(only || jobs.length<10)break;
+      }
     } catch { options.report?.("push_dispatch_failed"); }
   }
   return async(request:Request)=>{

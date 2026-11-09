@@ -1,13 +1,19 @@
 # Feuerwehr Odenthal · Supabase DEV und lokale Regression
 
-**DEV 0.6.4.1 (Feature-Branch):** [Offene Anwesenheitslisten](docs/dev-dashboard.md#dev-0641--offene-anwesenheitslisten)
-vom persönlichen Cockpit aus finden und abschließen. Dashboard-Zähler und
-Dienstfilter verwenden dieselbe serverseitige Auswahl: bereits begonnene,
-bearbeitbare Dienste ohne Abschluss, auch ohne initialisierte Liste.
-Ältester Dienst zuerst, 50 Ergebnisse je Seite; ein Abschluss aktualisiert
-Liste und Zähler ohne Seitenreload und erhält offene Details.
-Die öffentliche DEV bleibt bis zum manuellen Merge bei **DEV 0.6.4**.
+**DEV 0.7 (Feature-Branch):** [Organisatorische In-App- und Web-Push-Benachrichtigungen](docs/dev-notifications.md).
+Der bestehende Posteingang und Service Worker werden erweitert:
+freiwillige Geräteaktivierung, eigene Einstellungen, Erinnerungen, geschützter
+serverseitiger Versand und Direktnavigation nach erneuter Berechtigungsprüfung.
+Keine Alarmierung, kein Ersatz für aPager. Reale Geräteabnahme bleibt offen.
+Die öffentliche DEV bleibt bis zum manuellen Merge bei **DEV 0.6.4.1**.
 Keine automatische Veröffentlichung, kein automatischer Merge, keine Änderung der Demo.
+
+**DEV 0.6.4.1 – manuell abgenommen und gesichert:** Offene Anwesenheitslisten,
+Dashboard-Zähler, Abschlussaktualisierung und Berechtigungen wurden vom
+Projektverantwortlichen bestätigt. Annotierter Tag `v0.6.4.1-dashboard-dev`
+auf `794ba40d879182189317d7643e13385761b0a0d2`;
+alle 77 veröffentlichten Dateien stimmen mit dem Main-Pages-Artefakt überein.
+[Abnahme und Release-Nachweis](docs/dev-dashboard.md).
 
 **DEV 0.6.4 – manuell abgenommen:** MEMBER-, GLOBAL_ADMIN- und
 Fahrzeugverwalter-Cockpit, Responsive Design, Light-/Dark-Mode und
