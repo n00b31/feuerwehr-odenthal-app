@@ -90,7 +90,7 @@ export function SupabaseNotifications({client,actorId}:{client:SupabaseClient;ac
   }
   const current=snapshot?.devices.find(item=>item.id===device && item.active);
   const status=permission==="unsupported" ? "Auf diesem Gerät nicht unterstützt" : permission==="denied" ? "Vom Browser blockiert"
-    : current && preferences?.push_enabled ? "Aktiviert" : current || permission==="granted" ? "Deaktiviert" : "Noch nicht eingerichtet";
+    : current && snapshot?.preferences.push_enabled ? "Aktiviert" : current || permission==="granted" ? "Deaktiviert" : "Noch nicht eingerichtet";
   return <section className="card section-card" aria-label="Benachrichtigungen">
     <div className="event-card-top"><h2><Bell size={22}/> Benachrichtigungen</h2>
       <button className="button secondary" disabled={busy} onClick={()=>void reload().catch(()=>setError(notificationError()))}><RefreshCw size={18}/>Benachrichtigungen aktualisieren</button></div>
@@ -108,12 +108,13 @@ export function SupabaseNotifications({client,actorId}:{client:SupabaseClient;ac
         <button className="button" disabled={busy || permission==="unsupported" || permission==="denied" || !snapshot.server_ready || !snapshot.public_key || !name.trim()}
           onClick={()=>void run(()=>activatePush(client,snapshot.public_key!,name),"Push für dieses eigene Gerät aktiviert.")}>Push-Benachrichtigungen aktivieren</button>
         {current && <button className="button secondary" disabled={busy} onClick={()=>void run(()=>deactivatePush(client,current.id,true),"Push für dieses Gerät deaktiviert.")}>Push auf diesem Gerät deaktivieren</button>}
-        <button className="button secondary" disabled={busy || !current || !preferences.push_enabled || !snapshot.server_ready}
+        <button className="button secondary" disabled={busy || !current || !snapshot.preferences.push_enabled || !snapshot.server_ready}
           onClick={()=>void run(()=>testPush(client,current!.id),"DEV-Test nur an dieses eigene Gerät angefordert. Anbieterannahme ist kein Nachweis einer Geräteanzeige.")}>Test-Push senden · DEV</button></div>
       <form className="form-grid" onSubmit={event=>{event.preventDefault();void run(async()=>{
         await saveNotificationPreferences(client,preferences);dirty.current=false;
       },"Benachrichtigungseinstellungen gespeichert.");}}>
         <h3>Benachrichtigungseinstellungen</h3>
+        {JSON.stringify(preferences)!==JSON.stringify(snapshot.preferences) && <p className="notice">Diese Einstellungen sind noch nicht gespeichert. Der Push-Status zeigt weiterhin den bestätigten Serverstand.</p>}
         <label><input type="checkbox" checked={preferences.push_enabled} disabled={busy} onChange={event=>{dirty.current=true;setPreferences({...preferences,push_enabled:event.target.checked});}}/>Push global aktivieren</label>
         <p className="muted text-sm">Die Kategorien steuern neue organisatorische In-App- und Push-Mitteilungen. Sicherheitsmails, E-Mail-Verifizierung und Freigabe bleiben unverändert.</p>
         {Object.entries(notificationCategories).map(([key,label])=><label key={key}><input type="checkbox" disabled={busy}
@@ -156,7 +157,7 @@ export function NotificationAdministration({client}:{client:SupabaseClient}){
 }
 function AdminBody({client}:{client:SupabaseClient}){
   const [snapshot,setSnapshot]=useState<z.infer<typeof adminSchema>|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false);
-  const reload=useCallback(()=>client.rpc("ff_notification_admin").then(({data,error})=>{
+  const reload=useCallback(()=>Promise.resolve(client.rpc("ff_notification_admin")).then(({data,error})=>{
     if(error)throw error;setSnapshot(adminSchema.parse(data));
   }),[client]);
   useEffect(()=>{void reload().catch(()=>setError(notificationError()));},[reload]);

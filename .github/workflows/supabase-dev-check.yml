@@ -79,12 +79,16 @@ jobs:
         run: deno check supabase/functions/password-recovery/index.ts
       - name: Type-check server-only VAPID dispatcher
         run: deno check --node-modules-dir=none supabase/functions/push-dispatch/index.ts
+      - name: Verify actual VAPID encryption without contacting Push providers
+        run: deno test --node-modules-dir=none supabase/functions/push-dispatch/transport.test.mjs
       - name: Create isolated Auth test fixture
+        if: ${{ !cancelled() }}
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/auth-fixture.sql
       - name: Apply versioned migrations to disposable PostgreSQL
         id: migrations
+        if: ${{ !cancelled() }}
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         shell: bash
