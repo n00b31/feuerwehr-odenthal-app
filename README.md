@@ -1,12 +1,21 @@
 # Feuerwehr Odenthal · Supabase DEV und lokale Regression
 
-**DEV 0.6.3 (Feature-Branch):** [Terminserien und bestätigter CSV-Import](docs/dev-calendar.md#dev-063--serien-und-csv-verwalten)
-ergänzen die bestehende zentrale Dienstverwaltung. Berlin-Wiederholungen,
-Einzel-/Folge-/Gesamtänderungen, geschützte historische Instanzen und
-Excel-kompatible Vorlage; keine Speicherung bei Upload oder Vorschau.
-Grenzen: 52 Serieninstanzen, 200 CSV-Zeilen/512 KiB und fünf Jahre.
-Der öffentliche Client bleibt bis zum manuellen Merge bei der abgenommenen
-DEV 0.6.2. Keine Veröffentlichung des Feature-Branches oder Änderung der Demo.
+**DEV 0.6.4 (Feature-Branch):** [Mein Feuerwehr-Cockpit](docs/dev-dashboard.md)
+ersetzt auf Start die vollständige Terminverwaltung: persönlicher nächster
+Übungsdienst mit direkter Rückmeldung, offene Antworten, bestätigte
+Dienstbuchkennzahlen, bestehende organisatorische Informationen, eigene
+Fahrzeugvorgänge und serverseitig berechtigte Aufgaben. Kleine, zentrale
+Leseabfrage statt vollständiger Termin-/Jahreslisten; keine neue Datenhaltung.
+Die öffentliche DEV bleibt bis zum manuellen Merge bei **DEV 0.6.3**.
+Keine automatische Veröffentlichung, kein automatischer Merge, keine Änderung der Demo.
+
+**DEV 0.6.3 – manuell abgenommen und gesichert:** Terminserien, Serienverwaltung,
+CSV-Vorschau/-Import, Rollen und bestehende Module wurden vom
+Projektverantwortlichen bestätigt. Annotierter Tag `v0.6.3-series-csv-dev`
+auf `ca2e7d9a53ed1e2e1ed090dc26788a986fbf34db`; Main-CI, Pages-Artefakt
+und alle 77 veröffentlichten Dateien stimmen überein. Bestätigung dokumentiert
+am 09.11.2026; native PWA-Gerätetests weiterhin offen.
+[Abnahme und Release-Nachweis](docs/dev-calendar.md#dev-063--erfolgreiche-manuelle-abnahme).
 
 **Abgenommene DEV 0.5.1:** [Gemeinsamer Kalender, Gerätehaus-Stammdaten und berechtigte Belegung](docs/dev-calendar.md),
 gesichert mit `v0.5.1-calendar-dev`.

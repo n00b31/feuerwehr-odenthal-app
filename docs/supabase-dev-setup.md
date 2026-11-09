@@ -1,5 +1,22 @@
 # Supabase DEV – Verbindung, Authentifizierung und Freigabe
 
+## DEV 0.6.4 – Kontrollierte Installation von Migration 034
+
+Am 09.11.2026 im verifizierten DEV `orxinqhhbtjpkzwlfaxq` regulär
+`ff_034_dashboard` / `20261109125853` installiert. Nur zwei neue
+lesende Funktionen; keine neuen Tabellen, Rollen, RLS-Regeln oder
+Schreiboperationen. Bestehende Rechte und sämtliche Werte von 34
+Tabellen einschließlich Auth, Serien, Importnachweisen und historischen
+Anwesenheiten sind durch Vorher-/Nachher-Hashes geschützt und
+anschließend unabhängig unverändert geprüft.
+
+Die Cockpit-RPC ist ausschließlich für aktive authentifizierte Benutzer
+und verwendet bestehende Scope-Helfer. Keine neue Auth-Konfiguration,
+keine zusätzlichen Secrets oder Dashboard-Einstellungen erforderlich.
+Der Client folgt erst nach manuellem PR-Merge; der alte DEV-0.6.3-Client
+bleibt mit der additiven Migration kompatibel.
+[Architektur, exakte Fingerprints, Tests und offene manuelle Abnahme](dev-dashboard.md).
+
 ## DEV 0.6.3 – Kontrollierte Installation von Migration 033
 
 Am 08.11.2026 über das reguläre `apply_migration` im verbundenen, vorher
