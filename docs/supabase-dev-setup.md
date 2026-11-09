@@ -1,5 +1,22 @@
 # Supabase DEV – Verbindung, Authentifizierung und Freigabe
 
+## DEV 0.6.4.1 – Kontrollierte Installation von Migration 035
+
+Am 09.11.2026 im verifizierten DEV `orxinqhhbtjpkzwlfaxq`
+`ff_035_open_attendance` / `20261109144549` installiert.
+Die bestehende Ereignisseiten-RPC unterstützt jetzt den serverseitig
+autorisierten Anwesenheitsfilter und exakten Gesamtzähler; Cockpit und
+Filter verwenden dieselbe private Auswahl. Keine neuen Tabellen, Rollen,
+RLS-Regeln, Auth-Einstellungen oder Schreibaktionen.
+
+Transaktionsguard und unabhängige Nachprüfung bestätigen unveränderte
+Werte aller 34 Tabellen einschließlich Auth. Unveränderte Funktionen
+und RLS-/Tabellenrechte wurden geschützt, alte Helferkörper erhalten,
+öffentliche RPC-Rechte beibehalten und private Helfer für Clients gesperrt.
+Keine realen Datenänderungen oder Testmails. Der DEV-0.6.4-Client bleibt
+kompatibel; UI-Veröffentlichung erst nach manuellem PR-Merge.
+[Filter, Installationsnachweise und manuelle Abnahme](dev-dashboard.md#dev-0641--offene-anwesenheitslisten).
+
 ## DEV 0.6.4 – Kontrollierte Installation von Migration 034
 
 Am 09.11.2026 im verifizierten DEV `orxinqhhbtjpkzwlfaxq` regulär

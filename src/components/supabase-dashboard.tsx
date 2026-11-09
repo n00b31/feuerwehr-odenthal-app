@@ -119,8 +119,8 @@ export function SupabaseDashboard({ client, access }: { client: SupabaseClient; 
       </CockpitSection>
       {!!snapshot.tasks.length && <CockpitSection id="tasks" title="Meine offenen Aufgaben" className="cockpit-tasks">
         <ul className="cockpit-list">{snapshot.tasks.map(task => <li key={task.kind}>
-          <Link href={task.kind === "registrations" ? "/administration/" : task.target
-            ? dashboardEventHref(task.target, task.kind === "vehicles" ? "fahrzeuge" : "dienste", task.kind === "attendance" || task.kind === "organizer" ? task.kind : undefined)
+          <Link href={task.kind === "attendance" ? "/termine/?bereich=dienste&ansicht=open_attendance" : task.kind === "registrations" ? "/administration/" : task.target
+            ? dashboardEventHref(task.target, task.kind === "vehicles" ? "fahrzeuge" : "dienste", task.kind === "organizer" ? task.kind : undefined)
             : "/termine/"}><span><strong>{task.count} · {taskLabels[task.kind]}</strong><small>In deinem berechtigten Verantwortungsbereich</small></span><ChevronRight size={18} /></Link>
         </li>)}</ul>
       </CockpitSection>}

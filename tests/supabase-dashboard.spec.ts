@@ -70,10 +70,14 @@ async function connect(page: Page, role: Role = "MEMBER", change?: (data: Dashbo
       return respond(null);
     }
     if (path.endsWith("/ff_events_page")) return respond({ server_now: state.data.server_now, manageable_units: [],
+      can_filter_attendance:role==="GLOBAL_ADMIN",open_attendance_count:request.postDataJSON().list_view==="open_attendance" ? 3 : null,
       retained_events: [], has_more: false, next_cursor: null, events: state.data.next_service ? [{
         ...state.data.next_service, description: "Synthetic retained source", event_type: "regular", status: "scheduled",
-        unit_id: unit, series_id: null, revision: 0, can_manage: false, can_lead: false,
-        can_delegate: false, can_read_attendance: false, in_roster: true, attendance_state: "NOT_STARTED",
+        unit_id: unit, series_id: null, revision: 0, can_manage: false,
+        can_delegate: false, can_read_attendance:request.postDataJSON().list_view==="open_attendance",
+        can_lead:request.postDataJSON().list_view==="open_attendance",in_roster: true, attendance_state: "NOT_STARTED",
+        starts_at:request.postDataJSON().list_view==="open_attendance" ? "2026-11-08T18:00:00Z" : state.data.next_service.starts_at,
+        organizer_name:"Alex Synthetic",
         own_attendance: null, participants: null,
       }] : [] });
     if (path.endsWith("/units")) return respond([{ id: unit, name: "Scheuren" }]);
@@ -100,6 +104,14 @@ test("personal cockpit uses authenticated identity, small data and canonical dut
   await expect(page.locator(".cockpit-open li")).toHaveCount(3);
   await expect(page.locator(".dev-list-filters")).toHaveCount(0);
   expect(state.calls.filter(path => path.startsWith("/rest/")).every(path => /ff_my_access|ff_dashboard/.test(path))).toBe(true);
+});
+test("cockpit attendance task opens the server-scoped attendance filter rather than a single target",async({page})=>{
+  await connect(page,"GLOBAL_ADMIN");
+  await page.locator(".cockpit-tasks a").filter({hasText:"Anwesenheitslisten abschließen"}).click();
+  await expect(page).toHaveURL(/ansicht=open_attendance/);
+  await expect(page.getByRole("combobox",{name:"Terminansicht",exact:true})).toHaveValue("open_attendance");
+  await expect(page.getByText("3 offene Anwesenheitslisten",{exact:true})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Anwesenheit erfassen",exact:true})).toBeEnabled();
 });
 for (const mode of ["light", "dark"] as const) test(`direct RSVP uses existing RPC and computed status colors without altering attendance in ${mode} mode`, async ({ page }) => {
   await page.emulateMedia({ colorScheme: mode });

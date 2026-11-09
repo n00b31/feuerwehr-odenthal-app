@@ -57,7 +57,8 @@ async function connect(context: BrowserContext, state: Store, actor: string) {
     const denied = () => respond({ code: "42501", message: "Synthetische serverseitige Sperre." }, 403);
     const actorUnit = isAdmin ? unit : state.memberUnit || null;
     const name = (id: string) => id === admin ? "Synthetic Admin" : id === member ? "Synthetic Member" : `Synthetic Person ${id.slice(-1)}`;
-    const leader = (id: string) => isAdmin || state.delegates.get(id)?.user === actor;
+    const leader = (id: string) => isAdmin || (state.memberAdmin && state.events.find(e=>e.id===id)?.unit_id===actorUnit)
+      || state.delegates.get(id)?.user === actor;
     const attendance = (id: string) => {
       if (!state.attendance.has(id)) state.attendance.set(id, { state: "NOT_STARTED", initialized_at: null, initialized_by: null,
         prepared_at: null, confirmed_at: null, confirmed_by: null, corrected_at: null, rows: new Map() });
@@ -129,21 +130,34 @@ async function connect(context: BrowserContext, state: Store, actor: string) {
       state.memberSuspended = path.endsWith("ff_set_account_status");
       return respond(null);
     }
+    if(path==="/rest/v1/rpc/ff_dashboard"){
+      const open=state.events.filter(e=>e.status==="scheduled" && Date.parse(e.starts_at)<=state.now && !final(e.id) && leader(e.id));
+      return respond({actor_id:actor,server_now:new Date(state.now).toISOString(),year:2026,
+        units:[{id:unit,name:"Scheuren"}],functions:[],next_service:null,open_count:0,open_events:[],
+        statistics:{services:0,practices:0,training_services:0,eligible:0,present:0,absent:0,training_present:0,
+          training_absent:0,unknown:0,training_hours:0,service_hours:0,participant_hours:0,rate:null,
+          average_attendance:null,pending:0,excluded:0,missing_roster:0},information:[],reservations:[],
+        tasks:open.length ? [{kind:"attendance",count:open.length,target:open[0].id}] : [],vehicles_visible:false});
+    }
     if (path === "/rest/v1/rpc/ff_events_page") {
       if (state.broken) return respond({ code: "503", message: "Synthetic outage" }, 503);
       const query = request.postDataJSON(); state.queries.push(query);
+      const filterAccess=isAdmin || state.memberAdmin || [...state.delegates.values()].some(d=>d.user===actor);
+      if(query.list_view==="open_attendance" && !filterAccess)return denied();
       const eligible = state.events.filter((e) => isAdmin || e.unit_id === unit);
-      const sorted = eligible.filter((e) => (query.status_filter === "all" || e.status === query.status_filter)
+      const open=eligible.filter(e=>e.status==="scheduled" && Date.parse(e.starts_at)<=state.now && !final(e.id) && leader(e.id));
+      const sorted = (query.list_view==="open_attendance" ? open : eligible.filter((e) => (query.status_filter === "all" || e.status === query.status_filter)
         && (query.list_view === "past" ? Date.parse(e.ends_at) <= state.now : query.list_view === "month"
-          ? localInput(e.starts_at).slice(0, 7) === query.month_key : Date.parse(e.ends_at) > state.now))
+          ? localInput(e.starts_at).slice(0, 7) === query.month_key : Date.parse(e.ends_at) > state.now)))
         .sort((a, b) => (Date.parse(a.starts_at) - Date.parse(b.starts_at) || a.id.localeCompare(b.id)) * (query.list_view === "past" ? -1 : 1))
         .filter((e) => !query.after_id || Date.parse(e.starts_at) > Date.parse(query.after_start)
           || (Date.parse(e.starts_at) === Date.parse(query.after_start) && e.id > query.after_id));
-      const limit = query.list_view === "month" ? 50 : 5;
+      const limit = query.list_view === "month" || query.list_view==="open_attendance" ? 50 : 5;
       const selected = sorted.slice(0, limit);
       const retained = eligible.filter((e) => query.retained_ids.includes(e.id) && !selected.some((item) => item.id === e.id));
       const serialize = (e: StoredEvent) => ({
         ...e, series_id: null, response_deadline: null, scope_name: e.unit_id === unit ? "Scheuren" : "Andere Einheit",
+        organizer_name:name(state.delegates.get(e.id)?.user ?? admin),
         can_manage: isAdmin, can_lead: leader(e.id), can_delegate: isAdmin, can_read_attendance: leader(e.id),
         attendance_state: attendance(e.id).state, own_attendance: final(e.id) ? attendance(e.id).rows.get(actor)?.status ?? null : null,
         in_roster: e.unit_id === unit, own_response: state.answers.get(`${e.id}:${actor}`) ?? null,
@@ -154,7 +168,8 @@ async function connect(context: BrowserContext, state: Store, actor: string) {
       return respond({
         server_now: new Date(state.now).toISOString(), manageable_units: isAdmin ? [{ id: unit, name: "Scheuren" }] : [],
         events: selected.map(serialize), retained_events: retained.map(serialize), has_more: sorted.length > limit,
-        next_cursor: query.list_view === "month" && sorted.length > limit ? { id: selected.at(-1)!.id, starts_at: selected.at(-1)!.starts_at } : null,
+        can_filter_attendance:filterAccess,open_attendance_count:query.list_view==="open_attendance" ? open.length : null,
+        next_cursor: (query.list_view === "month" || query.list_view==="open_attendance") && sorted.length > limit ? { id: selected.at(-1)!.id, starts_at: selected.at(-1)!.starts_at } : null,
       });
     }
     if (path === "/rest/v1/rpc/ff_attendance_workspace") {
@@ -273,6 +288,87 @@ function attendanceEvent(state: Store, delay = -1000): StoredEvent {
     unit_id: unit, location: "Synthetic Gerätehaus", starts_at: new Date(state.now + delay).toISOString(),
     ends_at: new Date(state.now + delay + 7200000).toISOString(), status: "scheduled", revision: 0 };
 }
+
+for(const role of ["global","unit","delegate"] as const) test(`open attendance filter scopes and sorts started uninitialized lists for ${role}`,async({browser})=>{
+  const state=store(),context=await browser.newContext();
+  state.memberAdmin=role==="unit";
+  const older={...attendanceEvent(state,-172800000),id:"30000000-0000-4000-8000-000000000091",title:"Synthetic oldest open list"};
+  state.events=[attendanceEvent(state,-86400000),older,
+    {...attendanceEvent(state,86400000),id:"30000000-0000-4000-8000-000000000094",title:"Synthetic future list"},
+    {...older,id:"30000000-0000-4000-8000-000000000092",unit_id:otherUnit,title:"Synthetic foreign list"},
+    {...older,id:"30000000-0000-4000-8000-000000000093",status:"cancelled",title:"Synthetic cancelled list"}];
+  if(role==="delegate")state.delegates.set(older.id,{user:member,note:"Synthetic delegated list"});
+  await connect(context,state,role==="global" ? admin : member);
+  const page=await context.newPage();await login(page,role==="global");
+  await page.getByRole("combobox",{name:"Terminansicht",exact:true}).selectOption("open_attendance");
+  await expect(page.getByRole("heading",{name:"Offene Anwesenheitslisten",exact:true})).toBeVisible();
+  await expect(page.locator(".open-attendance-result")).toHaveCount(role==="global" ? 3 : role==="unit" ? 2 : 1);
+  await expect(page.locator(".open-attendance-result").first()).toContainText("Synthetic oldest open list");
+  await expect(page.locator(".open-attendance-result")).not.toContainText(["Synthetic cancelled list"]);
+  await expect(page.locator(".open-attendance-result").first()).toContainText("Dienstleitung:");
+  await expect(page.locator(".open-attendance-result").first().getByRole("button",{name:"Anwesenheit erfassen"})).toBeEnabled();
+  if(role!=="global")await expect(page.getByRole("heading",{name:"Synthetic foreign list"})).toHaveCount(0);
+  await context.close();
+});
+for(const theme of ["light","dark"] as const) test(`completion removes open result and preserves filter and active detail in ${theme}`,async({browser})=>{
+  const state=store(),context=await browser.newContext({colorScheme:theme});
+  state.events=[attendanceEvent(state,-86400000)];
+  await connect(context,state,admin);const page=await context.newPage();await login(page,true);
+  await page.getByRole("combobox",{name:"Terminansicht",exact:true}).selectOption("open_attendance");
+  await page.getByRole("button",{name:"Anwesenheit erfassen",exact:true}).click();
+  await expect(page.getByRole("button",{name:"Liste abschließen",exact:true})).toBeEnabled();
+  expect(state.attendance.get(eventId)?.state).toBe("IN_PROGRESS");
+  await expect(page.getByText("1 offene Anwesenheitslisten",{exact:true})).toBeVisible();
+  await page.getByLabel("Mitglied suchen").fill("Synthetic");
+  await page.locator(".dev-attendance").evaluate(e=>e.setAttribute("data-retained-panel","same"));
+  await page.getByRole("button",{name:"Liste abschließen",exact:true}).click();
+  await page.getByRole("button",{name:"Abschluss bestätigen",exact:true}).click();
+  await expect(page.locator(".open-attendance-result")).toHaveCount(0);
+  await expect(page.getByRole("combobox",{name:"Terminansicht",exact:true})).toHaveValue("open_attendance");
+  await expect(page.getByLabel("Mitglied suchen")).toHaveValue("Synthetic");
+  await expect(page.locator(".dev-attendance")).toHaveAttribute("data-retained-panel","same");
+  await expect(page.getByText("0 offene Anwesenheitslisten",{exact:true})).toBeVisible();
+  await expect(page.locator(".attendance-state")).toContainText("Verbindlich abgeschlossen");
+  expect((await new AxeBuilder({page}).analyze()).violations).toEqual([]);
+  await page.evaluate(()=>{document.documentElement.dataset.navigationProof="retained";});
+  await page.getByRole("link",{name:"Start",exact:true}).click();
+  await expect(page.getByText("Mein Feuerwehr-Cockpit",{exact:true})).toBeVisible();
+  await expect(page.locator(".cockpit-tasks a").filter({hasText:"Anwesenheitslisten abschließen"})).toHaveCount(0);
+  await expect(page.locator("html")).toHaveAttribute("data-navigation-proof","retained");
+  await context.close();
+});
+test("open attendance pagination retains all pages after completion and supports browser back",async({browser})=>{
+  const state=store(),context=await browser.newContext();
+  state.events=Array.from({length:52},(_,i)=>({...attendanceEvent(state,-(54-i)*86400000),
+    id:`30000000-0000-4000-8000-${String(i+101).padStart(12,"0")}`,title:`Synthetic pagination ${i+1}`}));
+  await connect(context,state,admin);const page=await context.newPage();await login(page,true);
+  await page.getByRole("combobox",{name:"Terminansicht",exact:true}).selectOption("open_attendance");
+  await expect(page.locator(".open-attendance-result")).toHaveCount(50);
+  await expect(page.getByText("52 offene Anwesenheitslisten",{exact:true})).toBeVisible();
+  await page.getByRole("button",{name:"Weitere Termine laden",exact:true}).click();
+  await expect(page.locator(".open-attendance-result")).toHaveCount(52);
+  await page.locator(".open-attendance-result").first().getByRole("button",{name:"Anwesenheit erfassen",exact:true}).click();
+  await page.getByRole("button",{name:"Liste abschließen",exact:true}).click();
+  await page.getByRole("button",{name:"Abschluss bestätigen",exact:true}).click();
+  await expect(page.locator(".open-attendance-result")).toHaveCount(51);
+  await expect(page.getByText("51 offene Anwesenheitslisten",{exact:true})).toBeVisible();
+  await page.getByRole("button",{name:"Standardansicht wiederherstellen",exact:true}).click();
+  await expect(page.getByRole("combobox",{name:"Terminansicht",exact:true})).toHaveValue("upcoming");
+  await page.goBack();
+  await expect(page.getByRole("combobox",{name:"Terminansicht",exact:true})).toHaveValue("open_attendance");
+  await expect(page.locator(".open-attendance-result")).toHaveCount(50);
+  await expect(page.getByText("51 offene Anwesenheitslisten",{exact:true})).toBeVisible();
+  await context.close();
+});
+test("ordinary member cannot open the administrative attendance filter by changing the URL",async({browser})=>{
+  const state=store(),context=await browser.newContext();state.events=[attendanceEvent(state)];
+  await connect(context,state,member);const page=await context.newPage();await login(page,false);
+  await expect(page.getByRole("combobox",{name:"Terminansicht",exact:true}).locator("option[value=open_attendance]")).toHaveCount(0);
+  await page.goto(publicPath("/termine/?ansicht=open_attendance"));
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("serverseitige Sperre");
+  await expect(page.locator(".open-attendance-result")).toHaveCount(0);
+  await context.close();
+});
 
 test("service response cards use the correct computed accent and background in both themes",async({browser})=>{
   const state=store();
