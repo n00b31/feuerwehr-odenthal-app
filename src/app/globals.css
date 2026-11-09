@@ -12,7 +12,7 @@
 .cockpit-next { border-inline-start: 4px solid var(--cp-response-tone); background: color-mix(in srgb,var(--cp-response-tone) 5%,var(--cp-surface)); padding-top: 28px; }
 .cockpit-next h3 { font-size: clamp(1.5rem,3vw,2rem); letter-spacing: -0.035em; margin-block: 12px 20px; }
 .cockpit-date, .cockpit-event-meta, .cockpit-event-meta span, .cockpit-response { display: flex; align-items: center; gap: 8px; }
-.cockpit-date { color: var(--cp-text-muted); font-weight: 600; }
+.cockpit-date { color: var(--cp-text); font-weight: 600; }
 .cockpit-event-meta { flex-wrap: wrap; gap: 12px 24px; margin-bottom: 12px; }
 .cockpit-response { margin-block: 24px 16px; font-weight: 600; }
 .cockpit-response svg { color: var(--cp-response-tone); }
