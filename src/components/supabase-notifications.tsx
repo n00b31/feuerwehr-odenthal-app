@@ -33,14 +33,13 @@ export function NotificationBridge({client,actorId}:{client:SupabaseClient;actor
     let active=true;
     const id=incoming;
     if(id && actorId && observed.current!==id){
-      void openNotice(client,actorId,id).then(href=>{if(active)router.push(href);})
-        .catch(()=>{if(active)setError("Diese Benachrichtigung oder der zugehörige Vorgang ist nicht mehr berechtigt verfügbar.");})
-        .finally(()=>{
-          if(!active)return;
+      const consume=()=>{
           observed.current=id;
           const url=new URL(window.location.href);
           if(url.searchParams.get("notification")===id){url.searchParams.delete("notification");window.history.replaceState(null,"",url);}
-        });
+      };
+      void openNotice(client,actorId,id).then(href=>{if(active){consume();router.push(href);}})
+        .catch(()=>{if(active){consume();setError("Diese Benachrichtigung oder der zugehörige Vorgang ist nicht mehr berechtigt verfügbar.");}});
     }
     function receive(event:MessageEvent){
       if(event.data?.type!=="FF_NOTIFICATION_OPEN")return;

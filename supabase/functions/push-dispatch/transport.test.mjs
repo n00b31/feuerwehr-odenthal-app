@@ -16,7 +16,7 @@ Deno.test("real VAPID and aes128gcm request round-trips with ephemeral synthetic
   assert.match(details.headers.Authorization,/^vapid t=/);
   assert.equal(details.headers["Content-Encoding"],"aes128gcm");
   assert.equal(details.body.includes(Buffer.from(payload)),false);
-  const plaintext=ece.decrypt(details.body,{version:"aes128gcm",privateKey:receiver.getPrivateKey(),authSecret:auth});
+  const plaintext=ece.decrypt(details.body,{version:"aes128gcm",privateKey:receiver,authSecret:auth});
   assert.equal(plaintext.toString(),payload);
   assert.equal(new Uint8Array(details.body).buffer.byteLength,details.body.byteLength);
 });
