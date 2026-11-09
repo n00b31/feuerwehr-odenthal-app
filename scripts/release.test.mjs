@@ -1,12 +1,32 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createRelease, writeRelease } from "./release.mjs";
 import { verifyPages } from "./verify-pages-release.mjs";
 
 const gitSha = "a".repeat(40);
+test("DEV export scanner rejects private Push configuration and privileged JWTs without printing values", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "ff-export-check-"));
+  const script = fileURLToPath(new URL("./check-dev-export.mjs", import.meta.url));
+  const check = () => execFileSync(process.execPath, [script], {
+    cwd: directory, env: { ...process.env, NEXT_PUBLIC_APP_MODE: "supabase-dev" }, stdio: "pipe",
+  });
+  try {
+    await mkdir(path.join(directory, "out"));
+    const target = path.join(directory, "out", "app.js");
+    const jwt = role => `${Buffer.from('{"alg":"HS256"}').toString("base64url")}.${Buffer.from(JSON.stringify({ role })).toString("base64url")}.synthetic`;
+    await writeFile(target, jwt("anon"));
+    assert.match(check().toString(), /no secret-key/);
+    for (const value of ["FF_VAPID_PRIVATE_KEY", "FF_PUSH_CRON_SECRET", "-----BEGIN PRIVATE KEY-----", jwt("service_role")]) {
+      await writeFile(target, value);
+      assert.throws(check, /Server-only Push|Privileged JWT/);
+    }
+  } finally { await rm(directory, { recursive: true }); }
+});
 test("release binds full checkout SHA to workflow and gives every build a distinct identity", () => {
   const env = { GITHUB_SHA: gitSha, GITHUB_RUN_ID: "123", GITHUB_RUN_ATTEMPT: "2", NEXT_PUBLIC_APP_MODE: "supabase-dev" };
   const release = createRelease({ gitSha }, env);

@@ -1,8 +1,18 @@
 $ErrorActionPreference = 'Stop'
+function Invoke-PrivateSupabaseCli {
+  param([string[]]$Arguments)
+  $previous = $ErrorActionPreference
+  try {
+    $ErrorActionPreference = 'Continue'
+    $output = & npx.cmd @Arguments 2>$null
+    $exitCode = $LASTEXITCODE
+  } finally { $ErrorActionPreference = $previous }
+  if ($exitCode -ne 0) { throw 'Supabase DEV command failed; no secret-bearing CLI output printed. Inspect inventory before retrying.' }
+  return $output
+}
 $project = 'orxinqhhbtjpkzwlfaxq'
 $names = @('FF_VAPID_PUBLIC_KEY','FF_VAPID_PRIVATE_KEY','FF_PUSH_CRON_SECRET')
-$existingJson = & npx.cmd --yes supabase@2.122.1 secrets list --project-ref $project --output json 2>$null
-if ($LASTEXITCODE -ne 0) { throw 'Supabase DEV secret inventory failed. Check CLI authentication; no secret values were printed.' }
+$existingJson = Invoke-PrivateSupabaseCli -Arguments @('--yes','supabase@2.122.1','secrets','list','--project-ref',$project,'--output','json')
 $existing = @($existingJson | ConvertFrom-Json | ForEach-Object { $_.name })
 $present = @($names | Where-Object { $existing -contains $_ })
 if ($present.Count -eq 3) {
@@ -34,8 +44,7 @@ writeFileSync(process.argv[1],`FF_VAPID_PUBLIC_KEY=${publicKey}\nFF_VAPID_PRIVAT
 '@
   $generated = & node -e $generator $file 2>&1
   if ($LASTEXITCODE -ne 0) { throw 'Protected ephemeral key generation failed; no key values printed.' }
-  $uploaded = & npx.cmd --yes supabase@2.122.1 secrets set --project-ref $project --env-file $file 2>&1
-  if ($LASTEXITCODE -ne 0) { throw 'DEV secret upload failed; no secret-bearing CLI output printed. Inspect inventory before retrying.' }
+  $uploaded = Invoke-PrivateSupabaseCli -Arguments @('--yes','supabase@2.122.1','secrets','set','--project-ref',$project,'--env-file',$file)
   Write-Output 'Three new server-only DEV Push secrets uploaded. No existing keys overwritten.'
 } finally {
   if (Test-Path -LiteralPath $file) { Remove-Item -LiteralPath $file -Force }

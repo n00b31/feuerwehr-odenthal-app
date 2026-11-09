@@ -9,7 +9,7 @@ const api="https://syntheticci.supabase.co",date="2026-11-09T12:00:00Z";
 const point=createECDH("prime256v1");point.generateKeys();
 const publicKey=point.getPublicKey().toString("base64url");
 type BrowserPushState={requests:number;gesture:boolean;subscribed:boolean;unsubscribed:number};
-async function connect(page:Page,options:{support?:boolean;denied?:boolean;linked?:boolean;global?:boolean}={}){
+async function connect(page:Page,options:{support?:boolean;denied?:boolean;linked?:boolean;global?:boolean;guestPush?:boolean}={}){
   const state={calls:[] as string[],revoked:false,fail:false,tests:0,snapshot:{
     actor_id:actor,unread:1,notices:[{id:notice,source_kind:"event",target_id:event,event_type:"event_created",category:"services",
       title:"Neuer Übungsdienst",message:"Synthetic notification practice",created_at:date,read_at:null,
@@ -92,6 +92,12 @@ async function connect(page:Page,options:{support?:boolean;denied?:boolean;linke
     return respond({message:`Unexpected synthetic notification request: ${path}`},400);
   });
   await page.goto(publicPath(`/profil/${options.linked?`?notification=${notice}`:""}`));
+  if(options.guestPush){
+    await expect(page.getByLabel("Feuerwehr-E-Mail")).toBeVisible();
+    await page.evaluate(id=>navigator.serviceWorker.dispatchEvent(new MessageEvent("message",{data:{type:"FF_NOTIFICATION_OPEN",notification_id:id}})),notice);
+    await expect(page.getByRole("button",{name:"Benachrichtigung öffnen",exact:true})).toBeDisabled();
+    expect(state.calls.filter(path=>path.endsWith("ff_notifications"))).toHaveLength(0);
+  }
   await page.getByLabel("Feuerwehr-E-Mail").fill(user.email);
   await page.getByLabel("Passwort",{exact:true}).fill("SyntheticOnly!123");
   await page.getByRole("button",{name:"Anmelden",exact:true}).click();
@@ -141,6 +147,13 @@ test("category edits do not change confirmed Push state until explicit save",asy
 });
 test("cold Push link survives login and resolves to authenticated existing service details",async({page})=>{
   await connect(page,{linked:true});
+  await expect(page).toHaveURL(new RegExp(`termin=${event}`));
+  await expect(page.getByRole("heading",{name:"Synthetic notification practice",exact:true})).toBeVisible();
+});
+test("warm Push received while signed out waits for approved login and deliberate navigation",async({page})=>{
+  await connect(page,{guestPush:true});
+  await expect(page.getByRole("button",{name:"Benachrichtigung öffnen",exact:true})).toBeEnabled();
+  await page.getByRole("button",{name:"Benachrichtigung öffnen",exact:true}).click();
   await expect(page).toHaveURL(new RegExp(`termin=${event}`));
   await expect(page.getByRole("heading",{name:"Synthetic notification practice",exact:true})).toBeVisible();
 });

@@ -8,6 +8,9 @@ create function pg_temp.n_event(i int) returns uuid language sql immutable as $$
 $$;
 create function pg_temp.n_ok(value boolean,label text) returns void language plpgsql as $$
 begin if value is distinct from true then raise exception 'FAIL: %',label; end if; raise notice 'PASS: %',label; end $$;
+select pg_temp.n_ok(pg_get_functiondef('public.ff_notification_configure(boolean,text[])'::regprocedure) ~ 'where c\.singleton'
+ and pg_get_functiondef('public.ff_push_bootstrap(text,text)'::regprocedure) ~ 'where c\.singleton',
+ 'hosted safeupdate remains enabled; both singleton updates have explicit predicates');
 create function pg_temp.n_deny(statement text) returns void language plpgsql as $$
 begin execute statement;raise exception 'FAIL: unauthorized notifications';
 exception when insufficient_privilege then raise notice 'PASS: notification action denied'; end $$;

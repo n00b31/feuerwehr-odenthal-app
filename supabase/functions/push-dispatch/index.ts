@@ -21,7 +21,12 @@ const bootstrap=async()=>{
   const response=await fetch(`${url}/rest/v1/rpc/ff_push_bootstrap`,{method:"POST",
     headers:{apikey:serviceKey,Authorization:`Bearer ${serviceKey}`,"Content-Type":"application/json"},
     body:JSON.stringify({public_key:vapidPublic,cron_secret:cronSecret}),redirect:"error",signal:AbortSignal.timeout(10_000)});
-  if(!response.ok)throw new Error("push_bootstrap_failed");
+  if(!response.ok){
+    const data:unknown=await response.json();
+    const code=data && typeof data==="object" && "code" in data && typeof data.code==="string"
+      && /^[A-Z0-9_]{5,32}$/.test(data.code) ? data.code : "unknown";
+    throw new Error(`push_bootstrap_failed_${response.status}_${code}`);
+  }
 };
 await bootstrap();
 

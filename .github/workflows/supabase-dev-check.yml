@@ -55,6 +55,7 @@ jobs:
           pg < supabase/tests/upgrade-064-after.sql
           pg < supabase/tests/upgrade-070-before.sql
           pg < supabase/migrations/20261109003600_notifications.sql
+          pg < supabase/migrations/20261109003700_notification_safe_updates.sql
           pg < supabase/tests/upgrade-070-after.sql
   database:
     runs-on: ubuntu-latest
