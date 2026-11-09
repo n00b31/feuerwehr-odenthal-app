@@ -168,7 +168,43 @@ Nach manuellem PR-Merge und erfolgreichem Main-Deployment:
    Fahrzeugreservierung und Gerätehausbelegung unverändert bedienen.
 6. Native iPhone-/Android-PWA und bewusst bestätigtes Versionsupdate testen.
 
-Ergebnisse sind noch nicht als reale DEV-0.6.3-Abnahme bestätigt.
+### DEV 0.6.3 – Erfolgreiche manuelle Abnahme
+
+Der Projektverantwortliche hat mit dem Auftrag vom **09.11.2026** die
+folgenden realen Browserergebnisse ausdrücklich manuell als erfolgreich
+bestätigt. Das genaue Ausführungsdatum wurde nicht separat mitgeteilt;
+09.11.2026 ist das Datum der Bestätigung und Dokumentation, keine erfundene
+Testzeit. Automatisierte Tests sind nicht die Quelle dieser Bestätigung.
+
+| Test | Ergebnis | Vom Projektverantwortlichen bestätigter Umfang |
+| --- | --- | --- |
+| A – Terminserien | Erfolgreich | Serie erstellen, Wiederholungsregel und Vorschau verwenden, einzelne Instanzen mit eigenen Teilnahmeabfragen anzeigen. |
+| B – Serienbearbeitung | Erfolgreich | Einzeltermin, zukünftige Termine und gesamte Serie bearbeiten beziehungsweise absagen; historische Anwesenheiten bleiben erhalten. |
+| C – CSV-Import | Erfolgreich | Vorlage herunterladen, in Excel bearbeiten, hochladen, Vorschau prüfen, Import bestätigen und Duplikaterkennung prüfen. |
+| D – Berechtigungen | Erfolgreich | MEMBER ohne Serienverwaltung, UNIT_ADMIN nur berechtigte Einheiten, GLOBAL_ADMIN berechtigte Bereiche. |
+| E – Regression | Erfolgreich | Einzeltermine, Teilnahmeabstimmungen, Anwesenheit, persönliches Dienstbuch und Fahrzeugreservierungen. |
+
+Abgenommen und veröffentlicht: **DEV 0.6.3**,
+Commit `ca2e7d9a53ed1e2e1ed090dc26788a986fbf34db`, manueller Merge von
+[PR #21](https://github.com/n00b31/feuerwehr-odenthal-app/pull/21)
+am 08.11.2026 um 22:33:53 UTC.
+Annotierter, gepushter Tag: `v0.6.3-series-csv-dev`;
+Tag-Objekt `54e7e336d5a5a18d08b8173271bfc9494e2a141d`.
+Der Tag bleibt unabhängig von späteren Dokumentationsänderungen unverändert.
+
+[Pages-Lauf 42530866802](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42530866802)
+und [Datenbank-Lauf 42530866836](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42530866836)
+sind erfolgreich. GitHub-Pages-Deployment `7642901683` hat Status `success`.
+Am 09.11.2026 wurden alle 77 veröffentlichten Dateien unabhängig erneut
+bytegleich mit dem tatsächlichen CI-Deployment-Artefakt verglichen.
+`release.json` identifiziert denselben sauberen Main-Commit
+(`sourceDirty: false`), Modus `supabase-dev`, korrekten Repository-BasePath
+und Version DEV 0.6.3. PWA-Service-Worker und Release verwenden beide Build-ID
+`ca2e7d9a53ed-b4518369-93c9-4428-bb6a-1645a90e2fc4`.
+
+**Weiter offen:** native installierte iPhone-/Android-PWA-Gerätetests,
+insbesondere Updateverhalten auf echten Geräten. Keine zusätzlichen
+manuellen Ergebnisse für andere Rollen oder Spezialfälle behauptet.
 
 ## DEV 0.6.2: dynamische Zuordnung und persönliche Rückmeldungen
 

@@ -12,7 +12,7 @@ type Screen =
   | { phase: "error"; error: string }
   | { phase: "blocked"; access: Access }
   | { phase: "recovery"; userId: string }
-  | { phase: "active"; access: Access; data: DevData };
+  | { phase: "active"; access: Access; data: DevData | null };
 
 let callbackExchange: Promise<string | null> | undefined;
 export function resetAuthCallback() { callbackExchange = undefined; }
@@ -29,7 +29,7 @@ function completeCallback(client: SupabaseClient) {
   return callbackExchange;
 }
 
-export function useDevAuth(client: SupabaseClient | null) {
+export function useDevAuth(client: SupabaseClient | null, needsWorkspace = true) {
   const [screen, setScreen] = useState<Screen>({ phase: "loading" });
   const [revision, setRevision] = useState(0);
   const epoch = useRef(0);
@@ -113,7 +113,7 @@ export function useDevAuth(client: SupabaseClient | null) {
           setScreen({ phase: "blocked", access });
           return;
         }
-        const protectedData = await readDevData(connection, access);
+        const protectedData = needsWorkspace ? await readDevData(connection, access) : null;
         // Recheck after the reads; a concurrent suspension must not leave the UI unlocked.
         const latest = await readAccess(connection);
         if (latest.user_id !== verified.data.user.id) throw new Error("Identität wurde während der Prüfung geändert.");
@@ -126,7 +126,7 @@ export function useDevAuth(client: SupabaseClient | null) {
     }
     void load();
     return () => { current = false; };
-  }, [client, revision]);
+  }, [client, revision, needsWorkspace]);
 
   return { screen, refresh, clear: () => { epoch.current++; identity.current = null; recovery.current = null; setScreen({ phase: "loading" }); } };
 }

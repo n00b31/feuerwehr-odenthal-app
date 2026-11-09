@@ -20,24 +20,26 @@ function errorMessage(error:unknown) {
 }
 const dayName=(day:string) => dateLabel(`${day}T12:00:00Z`,{ year:"numeric" });
 
-export function SupabaseCalendar({client,actorId,preferredUnit,initialTime,openService,openVehicle,refreshSignal=0}:{
+export function SupabaseCalendar({client,actorId,preferredUnit,initialTime,openService,openVehicle,refreshSignal=0,initialEventId=null}:{
   client:SupabaseClient; actorId:string; preferredUnit:string|null; initialTime:string; openService:(id:string,edit:boolean)=>Promise<void>;
   openVehicle:(id:string)=>void;
   refreshSignal?:number;
+  initialEventId?:string|null;
 }) {
   const [date,setDate]=useState(()=>berlinParts(initialTime).date);
   const [view,setView]=useState<CalendarView>("month");
   const [filters,setFilters]=useState<CalendarFilters>(emptyCalendarFilters);
   const [snapshot,setSnapshot]=useState<Snapshot|null>(null);
   const [editor,setEditor]=useState<Editor|null>(null);
-  const [selected,setSelected]=useState<string|null>(null);
+  const [selected,setSelected]=useState<string|null>(initialEventId);
   const [day,setDay]=useState<string|null>(null);
   const [error,setError]=useState("");
   const [message,setMessage]=useState("");
   const [busy,setBusy]=useState(false);
   const [conflicts,setConflicts]=useState<CalendarConflict[]>([]);
   const [reason,setReason]=useState("");
-  const epoch=useRef({value:0}),working=useRef(false),retained=useRef<string[]>([]);
+  const epoch=useRef({value:0}),working=useRef(false),retained=useRef<string[]>(initialEventId ? [initialEventId] : []);
+  const observedLink=useRef(initialEventId);
   const range=calendarRange(date,view);
   const reload=useCallback(async()=>{
     const version=++epoch.current.value;
@@ -54,6 +56,12 @@ export function SupabaseCalendar({client,actorId,preferredUnit,initialTime,openS
       setSnapshot(null); setSelected(null); setError(errorMessage(cause));
     }
   },[client,date,view,filters]);
+  useEffect(()=>{
+    if(initialEventId===observedLink.current)return;
+    observedLink.current=initialEventId;
+    retained.current=initialEventId ? [initialEventId] : [];setSelected(initialEventId);
+    void reload();
+  },[initialEventId,reload]);
   useEffect(()=>{
     const lifetime=epoch.current;
     void reload();

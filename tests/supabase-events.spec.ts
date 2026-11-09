@@ -274,7 +274,7 @@ function attendanceEvent(state: Store, delay = -1000): StoredEvent {
     ends_at: new Date(state.now + delay + 7200000).toISOString(), status: "scheduled", revision: 0 };
 }
 
-test("personal response cards use the correct computed accent and background on dashboard and events in both themes",async({browser})=>{
+test("service response cards use the correct computed accent and background in both themes",async({browser})=>{
   const state=store();
   const statuses=["yes","no","maybe",null] as const;
   state.events=statuses.map((response,index)=>{
@@ -287,7 +287,7 @@ test("personal response cards use the correct computed accent and background on 
   await connect(context,state,member);
   const page=await context.newPage();
   await login(page,false);
-  for(const route of ["/","/termine/"]){
+  for(const route of ["/termine/"]){
     await page.goto(publicPath(route));
     for(const theme of ["light","dark"]){
       if(await page.locator("html").getAttribute("data-theme")!==theme)

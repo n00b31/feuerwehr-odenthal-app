@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { CalendarPlus, RefreshCw } from "lucide-react";
+import { z } from "zod";
 import {
   readEventWorkspace, saveSingleEvent, cancelSingleEvent, setEventResponse, correctEventResponse,
   type DevEvent, type EventWorkspace,
@@ -40,6 +41,7 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
   const [vehiclesActivated,setVehiclesActivated]=useState(false);
   const [planning,setPlanning]=useState<PlanningAction|null>(null),[calendarRevision,setCalendarRevision]=useState(0);
   const [vehicleEvent,setVehicleEvent]=useState<{id:string;sequence:number}|null>(null);
+  const [calendarTarget,setCalendarTarget]=useState<string|null>(null);
   const activateSection=useCallback((value:"dienste"|"kalender"|"fahrzeuge")=>{
     setSection(value);
     if(value==="kalender")setCalendarActivated(true);
@@ -49,6 +51,10 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
     const readSection=()=>{
       const value=new URLSearchParams(window.location.search).get("bereich");
       activateSection(value==="fahrzeuge" || value==="kalender" ? value : "dienste");
+      const params=new URLSearchParams(window.location.search);
+      const target=z.uuid().safeParse(params.get(value==="fahrzeuge" ? "vorgang" : "termin"));
+      if(target.success && value==="fahrzeuge")setVehicleEvent(previous=>previous?.id===target.data ? previous : {id:target.data,sequence:(previous?.sequence ?? 0)+1});
+      if(target.success && value==="kalender")setCalendarTarget(target.data);
     };
     readSection();
     window.addEventListener("popstate",readSection);
@@ -101,6 +107,25 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
     setServerTime(Date.parse(snapshot.result.server_now));
     setElapsed(0); setError(""); setWorkspace(snapshot.result);
   }, []);
+  const linkedService=useRef<string|null>(null);
+  useEffect(()=>{
+    const open=()=>{
+      const params=new URLSearchParams(window.location.search),target=params.get("termin");
+      if(!target || params.get("bereich")==="kalender" || linkedService.current===target)return;
+      const parsed=z.uuid().safeParse(target);
+      if(!parsed.success){setError("Ungültiger Terminlink.");return;}
+      linkedService.current=target;retained.current=[...new Set([...retained.current,target])];
+      void reload().then(snapshot=>{
+        if(!snapshot)return;
+        if(![...snapshot.result.events,...snapshot.result.retained_events].some(item=>item.id===target))
+          throw new Error("Verlinkter Dienst nicht mehr berechtigt sichtbar.");
+        accept(snapshot);
+        requestAnimationFrame(()=>document.getElementById(`event-${target}`)?.scrollIntoView({block:"start"}));
+      }).catch(cause=>{setWorkspace(null);setError(eventErrorMessage(cause));});
+    };
+    open();window.addEventListener("popstate",open);
+    return()=>window.removeEventListener("popstate",open);
+  },[reload,accept]);
   useEffect(() => {
     if (previousQuery.current === query) return;
     previousQuery.current = query;
@@ -194,7 +219,7 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
       <button className="button secondary" aria-pressed={section==="fahrzeuge"} onClick={()=>changeSection("fahrzeuge")}>Fahrzeugkalender</button>
     </div>
     {calendarActivated && <AppDialogVisibility.Provider value={section==="kalender"}><div hidden={section!=="kalender"}><SupabaseCalendar key={actorId} client={client} actorId={actorId}
-      preferredUnit={preferredUnit} initialTime={initial.server_now} refreshSignal={calendarRevision} openService={openService} openVehicle={openVehicle}/></div></AppDialogVisibility.Provider>}
+      preferredUnit={preferredUnit} initialTime={initial.server_now} refreshSignal={calendarRevision} openService={openService} openVehicle={openVehicle} initialEventId={calendarTarget}/></div></AppDialogVisibility.Provider>}
     {vehiclesActivated && <AppDialogVisibility.Provider value={section==="fahrzeuge"}><div hidden={section!=="fahrzeuge"}><SupabaseVehicles key={actorId} client={client} actorId={actorId}
       initialTime={initial.server_now} preferredUnit={preferredUnit} initialEventId={vehicleEvent?.id} initialEventSequence={vehicleEvent?.sequence}/></div></AppDialogVisibility.Provider>}
     <AppDialogVisibility.Provider value={section==="dienste"}>
@@ -299,7 +324,13 @@ function EventCard({ client, changed, item, serverNow, busy, edit, reply, cancel
   const [target, setTarget] = useState("");
   const [answer, setAnswer] = useState<DevResponse>("yes");
   const [correction, setCorrection] = useState("");
-  const [attendanceMode, setAttendanceMode] = useState<"attendance" | "organizer" | null>(null);
+  const [attendanceMode, setAttendanceMode] = useState<"attendance" | "organizer" | null>(() => {
+    if(typeof window==="undefined")return null;
+    const params=new URLSearchParams(window.location.search);
+    if(params.get("termin")!==item.id)return null;
+    return params.get("aufgabe")==="attendance" && item.can_lead ? "attendance"
+      : params.get("aufgabe")==="organizer" && item.can_delegate ? "organizer" : null;
+  });
   const [participantsOpen, setParticipantsOpen] = useState(false);
   const open = cancelling || participantsOpen || attendanceMode !== null;
   useEffect(() => { keepOpen(item.id, open); return () => keepOpen(item.id, false); }, [keepOpen, item.id, open]);
