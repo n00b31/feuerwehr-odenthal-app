@@ -78,13 +78,24 @@ create table ff_private.notification_deliveries(
 );
 create index notification_delivery_queue on ff_private.notification_deliveries(next_attempt_at,id) where status in ('pending','leased');
 create index notification_delivery_limits on ff_private.notification_deliveries(attempted_at);
+create table ff_private.notification_delivery_attempts(
+  delivery_id uuid not null references ff_private.notification_deliveries(id),
+  attempt integer not null check(attempt between 1 and 5),
+  attempted_at timestamptz not null default clock_timestamp(),
+  finished_at timestamptz,
+  result_code integer,
+  primary key(delivery_id,attempt)
+);
+create index notification_attempt_limits on ff_private.notification_delivery_attempts(attempted_at);
 alter table public.notification_preferences enable row level security;
 alter table public.push_subscriptions enable row level security;
 alter table ff_private.notification_config enable row level security;
 alter table ff_private.notification_events enable row level security;
 alter table ff_private.notification_deliveries enable row level security;
+alter table ff_private.notification_delivery_attempts enable row level security;
 revoke all on public.notification_preferences,public.push_subscriptions,
-  ff_private.notification_config,ff_private.notification_events,ff_private.notification_deliveries from public,anon,authenticated;
+  ff_private.notification_config,ff_private.notification_events,ff_private.notification_deliveries,
+  ff_private.notification_delivery_attempts from public,anon,authenticated;
 grant select on public.notification_preferences to authenticated;
 grant select(id,user_id,device_name,created_at,last_success_at,active) on public.push_subscriptions to authenticated;
 create policy notification_preferences_own on public.notification_preferences for select to authenticated
@@ -160,6 +171,9 @@ begin
       or exists(select 1 from public.role_assignments a where a.user_id=new.recipient_id and a.revoked_at is null
         and (a.role='GLOBAL_ADMIN' or (a.role='UNIT_ADMIN' and v.unit_admin_enabled and a.unit_id=r.unit_id)))))
     then new.event_type:='vehicle_receipt'; end if;
+  if q.state in ('APPROVED','REJECTED') and new.recipient_id<>q.requester_id then
+    new.event_type:='vehicle_receipt';
+  end if;
   new.dedup_key:='vehicle:'||new.event_id||':'||q.state||':'||revision;
   if exists(select 1 from public.vehicle_notifications n
     where n.recipient_id=new.recipient_id and n.dedup_key=new.dedup_key) then return null; end if;
@@ -408,10 +422,11 @@ returns jsonb language plpgsql security definer set search_path='' as $$
 declare job record; result jsonb:='[]'; remaining integer;
 begin
   perform pg_advisory_xact_lock(hashtextextended('ff-push-send-limit',0));
-  select greatest(0,50-count(*)) into remaining from ff_private.notification_deliveries
+  select greatest(0,50-count(*)) into remaining from ff_private.notification_delivery_attempts
     where attempted_at>statement_timestamp()-interval '1 minute';
   for job in select d.*,s.endpoint,s.p256dh,s.auth_key,s.user_id,s.active,n.source_kind,n.event_type,n.category,
-      coalesce(n.target_id,n.event_id) target,p.push_enabled,p.categories,c.enabled,c.ready,c.categories global_categories
+      coalesce(n.target_id,n.event_id) target,n.dedup_key business_key,
+      p.push_enabled,p.categories,c.enabled,c.ready,c.categories global_categories
     from ff_private.notification_deliveries d join public.push_subscriptions s on s.id=d.subscription_id
     join public.vehicle_notifications n on n.id=d.notification_id
     left join public.notification_preferences p on p.user_id=s.user_id cross join ff_private.notification_config c
@@ -425,7 +440,14 @@ begin
       or (job.event_type='response_missing' and exists(select 1 from public.participation_responses r
         where r.event_id=job.target and r.user_id=job.user_id and r.invalidated_at is null))
       or (job.source_kind='attendance' and not exists(select 1 from public.events e
-        where e.id=job.target and e.status='scheduled' and e.attendance_state in ('NOT_STARTED','IN_PROGRESS')))
+        where e.id=job.target and e.status='scheduled' and e.ends_at<=statement_timestamp()
+          and e.attendance_state in ('NOT_STARTED','IN_PROGRESS')))
+      or (job.source_kind='registration' and not exists(select 1 from public.profiles p join auth.users u on u.id=p.id
+        where p.id=job.target and p.status='pending' and u.email_confirmed_at is not null))
+      or (job.source_kind='event' and exists(select 1 from ff_private.notification_events n join public.events e on e.id=n.target_id
+        where n.dedup_key=job.business_key and (n.revision is not null and n.revision<>e.revision
+          or n.event_type<>'event_cancelled' and e.status<>'scheduled'
+          or n.event_type='event_cancelled' and e.status<>'cancelled')))
       or (job.event_type in ('service_reminder','service_reminder_two','response_missing') and not exists(select 1 from public.events e
         where e.id=job.target and e.status='scheduled' and e.starts_at>statement_timestamp())) then
       update ff_private.notification_deliveries set status='cancelled',finished_at=clock_timestamp(),error_code='no_longer_eligible'
@@ -436,14 +458,16 @@ begin
       continue;
     end if;
     if remaining=0 or jsonb_array_length(result)>=10 then exit; end if;
-    if (select count(*) from ff_private.notification_deliveries d join public.push_subscriptions s on s.id=d.subscription_id
-      where s.user_id=job.user_id and d.attempted_at>statement_timestamp()-interval '1 hour')>=10 then
+    if (select count(*) from ff_private.notification_delivery_attempts a
+      join ff_private.notification_deliveries d on d.id=a.delivery_id join public.push_subscriptions s on s.id=d.subscription_id
+      where s.user_id=job.user_id and a.attempted_at>statement_timestamp()-interval '1 hour')>=10 then
       update ff_private.notification_deliveries set next_attempt_at=statement_timestamp()+interval '5 minutes' where id=job.id;
       continue;
     end if;
     update ff_private.notification_deliveries set status='leased',attempts=attempts+1,lease_id=gen_random_uuid(),
       lease_until=statement_timestamp()+interval '2 minutes',next_attempt_at=statement_timestamp()+interval '2 minutes',
       attempted_at=clock_timestamp() where id=job.id returning lease_id into job.lease_id;
+    insert into ff_private.notification_delivery_attempts(delivery_id,attempt) values(job.id,job.attempts+1);
     result:=result||jsonb_build_array(jsonb_build_object('id',job.id,'lease_id',job.lease_id,'notification_id',job.notification_id,
       'subscription',jsonb_build_object('endpoint',job.endpoint,'keys',jsonb_build_object('p256dh',job.p256dh,'auth',job.auth_key))));
     remaining:=remaining-1;
@@ -458,6 +482,8 @@ begin
   select * into job from ff_private.notification_deliveries d where d.id=delivery_id and d.lease_id=ff_push_complete.lease_id
     and d.status='leased' for update;
   if job.id is null then return false; end if;
+  update ff_private.notification_delivery_attempts set finished_at=clock_timestamp(),result_code=ff_push_complete.result_code
+    where notification_delivery_attempts.delivery_id=job.id and attempt=job.attempts;
   if result_code between 200 and 299 then
     update ff_private.notification_deliveries set status='accepted',finished_at=clock_timestamp(),error_code=null where id=job.id;
     update public.push_subscriptions set last_success_at=clock_timestamp() where id=job.subscription_id;

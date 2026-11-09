@@ -23,10 +23,13 @@ Deno.serve(createPushHandler({
     if(!response.ok)throw new Error("push_bootstrap_failed");
   },
   send:async(subscription,payload,topic)=>{
-    const details=webpush.generateRequestDetails(subscription,payload,{vapidDetails:{
-      subject:"https://n00b31.github.io/feuerwehr-odenthal-app/",publicKey:vapidPublic,privateKey:vapidPrivate,
-    },TTL:300,urgency:"normal",topic,contentEncoding:"aes128gcm"});
-    const response=await fetch(subscription.endpoint,{method:"POST",headers:details.headers,body:details.body,
+    let details:ReturnType<typeof webpush.generateRequestDetails>;
+    try {
+      details=webpush.generateRequestDetails(subscription,payload,{vapidDetails:{
+        subject:"https://n00b31.github.io/feuerwehr-odenthal-app/",publicKey:vapidPublic,privateKey:vapidPrivate,
+      },TTL:300,urgency:"normal",topic,contentEncoding:"aes128gcm"});
+    } catch { return 400; }
+    const response=await fetch(subscription.endpoint,{method:"POST",headers:details.headers,body:new Uint8Array(details.body).buffer,
       redirect:"error",signal:AbortSignal.timeout(8_000)});
     await response.body?.cancel();
     return response.status;
