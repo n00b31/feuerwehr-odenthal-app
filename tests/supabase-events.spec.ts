@@ -130,6 +130,15 @@ async function connect(context: BrowserContext, state: Store, actor: string) {
       state.memberSuspended = path.endsWith("ff_set_account_status");
       return respond(null);
     }
+    if(path==="/rest/v1/rpc/ff_dashboard"){
+      const open=state.events.filter(e=>e.status==="scheduled" && Date.parse(e.starts_at)<=state.now && !final(e.id) && leader(e.id));
+      return respond({actor_id:actor,server_now:new Date(state.now).toISOString(),year:2026,
+        units:[{id:unit,name:"Scheuren"}],functions:[],next_service:null,open_count:0,open_events:[],
+        statistics:{services:0,practices:0,training_services:0,eligible:0,present:0,absent:0,training_present:0,
+          training_absent:0,unknown:0,training_hours:0,service_hours:0,participant_hours:0,rate:null,
+          average_attendance:null,pending:0,excluded:0,missing_roster:0},information:[],reservations:[],
+        tasks:open.length ? [{kind:"attendance",count:open.length,target:open[0].id}] : [],vehicles_visible:false});
+    }
     if (path === "/rest/v1/rpc/ff_events_page") {
       if (state.broken) return respond({ code: "503", message: "Synthetic outage" }, 503);
       const query = request.postDataJSON(); state.queries.push(query);
@@ -291,7 +300,7 @@ for(const role of ["global","unit","delegate"] as const) test(`open attendance f
   if(role==="delegate")state.delegates.set(older.id,{user:member,note:"Synthetic delegated list"});
   await connect(context,state,role==="global" ? admin : member);
   const page=await context.newPage();await login(page,role==="global");
-  await page.getByLabel("Terminansicht",{exact:true}).selectOption("open_attendance");
+  await page.getByRole("combobox",{name:"Terminansicht",exact:true}).selectOption("open_attendance");
   await expect(page.getByRole("heading",{name:"Offene Anwesenheitslisten",exact:true})).toBeVisible();
   await expect(page.locator(".open-attendance-result")).toHaveCount(role==="global" ? 3 : role==="unit" ? 2 : 1);
   await expect(page.locator(".open-attendance-result").first()).toContainText("Synthetic oldest open list");
@@ -305,26 +314,56 @@ for(const theme of ["light","dark"] as const) test(`completion removes open resu
   const state=store(),context=await browser.newContext({colorScheme:theme});
   state.events=[attendanceEvent(state,-86400000)];
   await connect(context,state,admin);const page=await context.newPage();await login(page,true);
-  await page.getByLabel("Terminansicht",{exact:true}).selectOption("open_attendance");
+  await page.getByRole("combobox",{name:"Terminansicht",exact:true}).selectOption("open_attendance");
   await page.getByRole("button",{name:"Anwesenheit erfassen",exact:true}).click();
   await expect(page.getByRole("button",{name:"Liste abschließen",exact:true})).toBeEnabled();
+  expect(state.attendance.get(eventId)?.state).toBe("IN_PROGRESS");
+  await expect(page.getByText("1 offene Anwesenheitslisten",{exact:true})).toBeVisible();
   await page.getByLabel("Mitglied suchen").fill("Synthetic");
   await page.locator(".dev-attendance").evaluate(e=>e.setAttribute("data-retained-panel","same"));
   await page.getByRole("button",{name:"Liste abschließen",exact:true}).click();
   await page.getByRole("button",{name:"Abschluss bestätigen",exact:true}).click();
   await expect(page.locator(".open-attendance-result")).toHaveCount(0);
-  await expect(page.getByLabel("Terminansicht",{exact:true})).toHaveValue("open_attendance");
+  await expect(page.getByRole("combobox",{name:"Terminansicht",exact:true})).toHaveValue("open_attendance");
   await expect(page.getByLabel("Mitglied suchen")).toHaveValue("Synthetic");
   await expect(page.locator(".dev-attendance")).toHaveAttribute("data-retained-panel","same");
   await expect(page.getByText("0 offene Anwesenheitslisten",{exact:true})).toBeVisible();
-  await expect(page.locator(".attendance-state")).toContainText("Abgeschlossen");
+  await expect(page.locator(".attendance-state")).toContainText("Verbindlich abgeschlossen");
   expect((await new AxeBuilder({page}).analyze()).violations).toEqual([]);
+  await page.evaluate(()=>{document.documentElement.dataset.navigationProof="retained";});
+  await page.getByRole("link",{name:"Start",exact:true}).click();
+  await expect(page.getByText("Mein Feuerwehr-Cockpit",{exact:true})).toBeVisible();
+  await expect(page.locator(".cockpit-tasks a").filter({hasText:"Anwesenheitslisten abschließen"})).toHaveCount(0);
+  await expect(page.locator("html")).toHaveAttribute("data-navigation-proof","retained");
+  await context.close();
+});
+test("open attendance pagination retains all pages after completion and supports browser back",async({browser})=>{
+  const state=store(),context=await browser.newContext();
+  state.events=Array.from({length:52},(_,i)=>({...attendanceEvent(state,-(54-i)*86400000),
+    id:`30000000-0000-4000-8000-${String(i+101).padStart(12,"0")}`,title:`Synthetic pagination ${i+1}`}));
+  await connect(context,state,admin);const page=await context.newPage();await login(page,true);
+  await page.getByRole("combobox",{name:"Terminansicht",exact:true}).selectOption("open_attendance");
+  await expect(page.locator(".open-attendance-result")).toHaveCount(50);
+  await expect(page.getByText("52 offene Anwesenheitslisten",{exact:true})).toBeVisible();
+  await page.getByRole("button",{name:"Weitere Termine laden",exact:true}).click();
+  await expect(page.locator(".open-attendance-result")).toHaveCount(52);
+  await page.locator(".open-attendance-result").first().getByRole("button",{name:"Anwesenheit erfassen",exact:true}).click();
+  await page.getByRole("button",{name:"Liste abschließen",exact:true}).click();
+  await page.getByRole("button",{name:"Abschluss bestätigen",exact:true}).click();
+  await expect(page.locator(".open-attendance-result")).toHaveCount(51);
+  await expect(page.getByText("51 offene Anwesenheitslisten",{exact:true})).toBeVisible();
+  await page.getByRole("button",{name:"Standardansicht wiederherstellen",exact:true}).click();
+  await expect(page.getByRole("combobox",{name:"Terminansicht",exact:true})).toHaveValue("upcoming");
+  await page.goBack();
+  await expect(page.getByRole("combobox",{name:"Terminansicht",exact:true})).toHaveValue("open_attendance");
+  await expect(page.locator(".open-attendance-result")).toHaveCount(50);
+  await expect(page.getByText("51 offene Anwesenheitslisten",{exact:true})).toBeVisible();
   await context.close();
 });
 test("ordinary member cannot open the administrative attendance filter by changing the URL",async({browser})=>{
   const state=store(),context=await browser.newContext();state.events=[attendanceEvent(state)];
   await connect(context,state,member);const page=await context.newPage();await login(page,false);
-  await expect(page.getByLabel("Terminansicht",{exact:true}).locator("option[value=open_attendance]")).toHaveCount(0);
+  await expect(page.getByRole("combobox",{name:"Terminansicht",exact:true}).locator("option[value=open_attendance]")).toHaveCount(0);
   await page.goto(publicPath("/termine/?ansicht=open_attendance"));
   await expect(page.getByRole("main").getByRole("alert")).toContainText("serverseitige Sperre");
   await expect(page.locator(".open-attendance-result")).toHaveCount(0);

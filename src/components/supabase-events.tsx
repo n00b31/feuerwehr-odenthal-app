@@ -42,6 +42,8 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
   const [planning,setPlanning]=useState<PlanningAction|null>(null),[calendarRevision,setCalendarRevision]=useState(0);
   const [vehicleEvent,setVehicleEvent]=useState<{id:string;sequence:number}|null>(null);
   const [calendarTarget,setCalendarTarget]=useState<string|null>(null);
+  const [query, setQuery] = useState<EventListQuery>(defaultEventList);
+  const pages = useRef(1);
   const activateSection=useCallback((value:"dienste"|"kalender"|"fahrzeuge")=>{
     setSection(value);
     if(value==="kalender")setCalendarActivated(true);
@@ -73,11 +75,9 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
   function openVehicle(id:string){setVehicleEvent(previous=>({id,sequence:(previous?.sequence ?? 0)+1}));changeSection("fahrzeuge");}
   const [elapsed, setElapsed] = useState(0);
   const [serverTime, setServerTime] = useState(() => Date.parse(initial.server_now));
-  const [query, setQuery] = useState<EventListQuery>(defaultEventList);
   const [monthInput, setMonthInput] = useState("");
   const previousQuery = useRef(query);
   const retained = useRef<string[]>([]);
-  const pages = useRef(1);
   const anchor = useRef(0);
   const epoch = useRef({ value: 0 });
   const working = useRef(false);

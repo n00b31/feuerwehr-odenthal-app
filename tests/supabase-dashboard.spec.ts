@@ -109,7 +109,7 @@ test("cockpit attendance task opens the server-scoped attendance filter rather t
   await connect(page,"GLOBAL_ADMIN");
   await page.locator(".cockpit-tasks a").filter({hasText:"Anwesenheitslisten abschließen"}).click();
   await expect(page).toHaveURL(/ansicht=open_attendance/);
-  await expect(page.getByLabel("Terminansicht",{exact:true})).toHaveValue("open_attendance");
+  await expect(page.getByRole("combobox",{name:"Terminansicht",exact:true})).toHaveValue("open_attendance");
   await expect(page.getByText("3 offene Anwesenheitslisten",{exact:true})).toBeVisible();
   await expect(page.getByRole("button",{name:"Anwesenheit erfassen",exact:true})).toBeEnabled();
 });

@@ -1,10 +1,123 @@
 # DEV 0.6.4 – Mein Feuerwehr-Cockpit
 
-Status: Feature-Branch `feature/dev-064-dashboard`, keine automatische
-Veröffentlichung oder Zusammenführung. Öffentlich bleibt der manuell
-abgenommene Stand DEV 0.6.3, bis der Projektverantwortliche den PR manuell
-mergt und dessen Main-Deployment erfolgreich ist. Die unabhängige Demo
-wurde nicht verändert.
+DEV 0.6.4 wurde über PR #22 manuell gemergt und vom Projektverantwortlichen
+erfolgreich abgenommen. Aktuelle Ergänzung: DEV 0.6.4.1 im Branch
+`feature/dev-0641-attendance-filter`, kein automatischer Merge.
+Öffentlich bleibt DEV 0.6.4 bis zum manuellen Merge dieser Ergänzung.
+Die unabhängige Demo wurde nicht verändert.
+
+## DEV 0.6.4 – Erfolgreiche manuelle Abnahme
+
+Vom Projektverantwortlichen ausdrücklich bestätigt: MEMBER-Dashboard,
+GLOBAL_ADMIN-Dashboard, Fahrzeugverwalter-Dashboard, Responsive Design,
+Light-/Dark-Mode und Regression bestehender Funktionen.
+Bestätigung am 09.11.2026 dokumentiert; ein gesondertes tatsächliches
+Abnahmedatum wurde nicht angegeben. Zugehöriger Main-Merge von PR #22:
+`40e9d96602ede5af22fceb800cc3af449011a00d`.
+Diese Angaben sind eine manuelle Nutzerbestätigung, keine synthetischen
+Testergebnisse. Native iPhone-/Android-PWA-Gerätetests bleiben offen.
+
+## DEV 0.6.4.1 – Offene Anwesenheitslisten
+
+„Anwesenheitslisten abschließen“ unter „Meine offenen Aufgaben“ öffnet
+`/termine/?bereich=dienste&ansicht=open_attendance` statt nur eines
+einzelnen Dienstes. Der Filter ist auch in „Terminansicht“ verfügbar.
+Die bestehende Dienstverwaltung zeigt Datum, Dienstbezeichnung,
+Einheit/Funktions-Scope, primäre Dienstleitung beziehungsweise Organisator,
+Anwesenheitsstatus und die direkte Aktion „Anwesenheit erfassen“.
+
+Die additive Migration 035 ergänzt die bestehende `ff_events_page`-RPC
+um `open_attendance`, Capability und exakten Gesamtzähler. Die private,
+nicht direkt ausführbare Auswahl `open_attendance_events()` wird von
+dieser RPC und dem Cockpit verwendet. Voraussetzungen:
+
+- Geplanter normaler Dienst, kein organisatorischer Kalender-/Fahrzeugeintrag.
+- Beginn kleiner oder gleich Serverzeit; nicht die manipulierbare Browser-Uhr.
+- `NOT_STARTED` oder `IN_PROGRESS`; `COMPLETED`/`CORRECTED` ausgeschlossen.
+- Bestehende `can_lead_event` **und** `can_view_event` für den aktuellen Account.
+
+UNIT_ADMIN bleibt im eigenen Scope; FUNCTION_ADMIN behält seinen bestehenden
+Funktions-Scope; delegierte Mitglieder bearbeiten ausschließlich aktuell
+gültig zugewiesene Dienste. GLOBAL_ADMIN verwendet seine bestehenden
+organisationsweiten Rechte. MEMBER ohne Delegation und FIRE_CHIEF ohne
+zusätzliche bestehende Verwaltungsrechte werden auch bei direktem,
+manipuliertem RPC-Aufruf abgewiesen. Die Filterberechtigung hängt nicht
+davon ab, ob aktuell mindestens eine offene Liste vorhanden ist.
+
+Sortierung aufsteigend nach Dienstbeginn und UUID, Keyset-Pagination
+mit 50 Ergebnissen. Der Zähler umfasst alle berechtigten offenen Listen,
+nicht nur die aktuelle Seite. Monats-/Statusfilter sind hier bewusst
+deaktiviert. Es werden weder zusätzliche Rollen noch RLS-Regeln, Tabellen,
+Schreibfunktionen oder neue Auth-Konfiguration eingeführt.
+Bestehende RPC-Signaturen und andere Listenmodi bleiben kompatibel.
+
+Nach verbindlichem Abschluss liest die bestehende Hintergrundaktualisierung
+die aktuelle Auswahl und den Gesamtzähler erneut, auch für bereits geladene
+Folgeseiten. Der Dienst verschwindet als offenes Ergebnis. Ein bereits
+geöffnetes Detail bleibt separat als abgeschlossen und erneut berechtigt
+sichtbar, zählt aber nicht mehr zur offenen Liste. Dieselbe React-Instanz
+erhält Suchfilter und geöffnete Ansicht; kein vollständiger Seitenreload.
+Bei Rückkehr zu Start lädt das Cockpit den aktualisierten gemeinsamen
+Aufgabenzähler. Browser-Zurück aktiviert den verlinkten Filter wieder.
+
+### Automatisierte Prüfung und manuelle DEV-Abnahme
+
+Die echten PostgreSQL-Tests laufen ausschließlich in der isolierten
+`ff_dev_ci`-Datenbank: Startgrenze, nicht initialisierte/vorbereitete/finale
+Listen, UNIT_ADMIN-/Delegationsgrenzen, direkte MEMBER-/FIRE_CHIEF-Sperre,
+identische Cockpit-Zähler, Abschluss, retained Detail und 51 Ergebnisse
+über mehrere stabile Cursorseiten. Zusätzlich bestehende RLS-, Upgrade-
+und Zwei-Verbindungs-Regressionsprüfungen.
+CI: https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42635131323.
+
+Ergebnisse: 169 Domain-/Auth-/Konfigurationstests, 17 Skripttests,
+101 DEV-Browserszenarien einschließlich acht neuer Filter-/Abschlussfälle;
+Typecheck und GitHub-Pages-Static-Export erfolgreich. Light-/Dark-Mode
+einschließlich Axe-Prüfung, erhaltene DOM-Instanz/Suchfilter, 52 Ergebnisse
+über Folgeseiten und Rückkehr zum aktualisierten Cockpit ohne Dokumentreload
+geprüft. Lint ohne Fehler; die vorhandene, nicht geänderte Warnung in
+`supabase-planning.tsx:65` bleibt bestehen.
+
+Die Browserprüfungen verwenden ausschließlich synthetische Auth-/RPC-Daten
+mit dem echten Supabase-SDK. Sie ersetzen keine Anmeldung mit einem echten
+DEV-Konto. In DEV werden keine synthetischen Dienste, Anwesenheiten,
+Konten, Rollen oder Testmails angelegt.
+
+Migration `ff_035_open_attendance` am 09.11.2026 im vorher verifizierten
+DEV `orxinqhhbtjpkzwlfaxq` regulär installiert; Registry `20261109144549`.
+Ein Transaktionsguard schützt alle 34 öffentlichen/privaten Tabellen
+einschließlich `auth.users`, bestehende RLS-/Tabellenrechte, unveränderte
+Funktionen und die Originalkörper der beiden weiterverwendeten RPC-Helfer.
+Unabhängige Nachprüfung: Datenfingerprint vor/nach Installation identisch
+`c72683238f17429b74e6d72b32953cea`; private Helfer für Clients gesperrt,
+öffentliche RPCs weiterhin nur für authentifizierte Benutzer ausführbar.
+Keine fachlichen Daten, Rollen, Konten oder Passwörter verändert.
+
+SHA256 der LF-normalisierten Quelle:
+`ed0f578fa63771350623fad75e3ae5e76740171508283667582d22942743f032`.
+SHA256 des installierten Guard-Pakets:
+`5c52db53eaaf8c931ee24efa95c94a11ff45a386438f4460ab754b26724c776d`.
+Der aus der Registry extrahierte SQL-Körper stimmt mit der CI-geprüften
+Quelle überein; SHA256 nach Entfernen von äußerem BEGIN/COMMIT und
+Rand-Leerraum:
+`8d1f039e03f446111d07a2661139409b03b8d90f9e72927e4f5bd3ba935e6389`.
+Der bestehende DEV-0.6.4-Client bleibt kompatibel; die neue Filter-UI
+wird erst durch manuellen PR-Merge und dessen erfolgreiches Deployment
+veröffentlicht.
+
+Nach manuellem PR-Merge mit autorisierten vorhandenen Testkonten prüfen:
+
+1. Cockpit-Aufgabe und Filter zeigen denselben vollständigen Zähler.
+2. Nicht begonnene und abgeschlossene Dienste fehlen; begonnene Dienste
+   ohne initialisierte Anwesenheit sind direkt bearbeitbar.
+3. UNIT_ADMIN sieht nur eigene Einheiten, Delegierte nur gültige Zuweisungen;
+   MEMBER und FIRE_CHIEF erhalten keine zusätzlichen Verwaltungsrechte.
+4. Liste abschließen: Ergebnis und Zähler verschwinden beziehungsweise
+   sinken ohne Reload; Detail und dessen Suchfilter bleiben erhalten.
+5. Zu Start zurückkehren: aktualisierte Aufgaben; Kalender, Fahrzeuge,
+   Dienstbuch und bestehende Anwesenheitskorrekturen unverändert prüfen.
+6. Light-/Dark-Mode, Desktop-Sidebar und mobile Bottom-Navigation prüfen;
+   native PWA-Gerätetests gesondert durchführen.
 
 ## Ausgangslage und Entscheidung
 

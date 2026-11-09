@@ -1,13 +1,18 @@
 # Feuerwehr Odenthal · Supabase DEV und lokale Regression
 
-**DEV 0.6.4 (Feature-Branch):** [Mein Feuerwehr-Cockpit](docs/dev-dashboard.md)
-ersetzt auf Start die vollständige Terminverwaltung: persönlicher nächster
-Übungsdienst mit direkter Rückmeldung, offene Antworten, bestätigte
-Dienstbuchkennzahlen, bestehende organisatorische Informationen, eigene
-Fahrzeugvorgänge und serverseitig berechtigte Aufgaben. Kleine, zentrale
-Leseabfrage statt vollständiger Termin-/Jahreslisten; keine neue Datenhaltung.
-Die öffentliche DEV bleibt bis zum manuellen Merge bei **DEV 0.6.3**.
+**DEV 0.6.4.1 (Feature-Branch):** [Offene Anwesenheitslisten](docs/dev-dashboard.md#dev-0641--offene-anwesenheitslisten)
+vom persönlichen Cockpit aus finden und abschließen. Dashboard-Zähler und
+Dienstfilter verwenden dieselbe serverseitige Auswahl: bereits begonnene,
+bearbeitbare Dienste ohne Abschluss, auch ohne initialisierte Liste.
+Ältester Dienst zuerst, 50 Ergebnisse je Seite; ein Abschluss aktualisiert
+Liste und Zähler ohne Seitenreload und erhält offene Details.
+Die öffentliche DEV bleibt bis zum manuellen Merge bei **DEV 0.6.4**.
 Keine automatische Veröffentlichung, kein automatischer Merge, keine Änderung der Demo.
+
+**DEV 0.6.4 – manuell abgenommen:** MEMBER-, GLOBAL_ADMIN- und
+Fahrzeugverwalter-Cockpit, Responsive Design, Light-/Dark-Mode und
+bestehende Funktionen wurden vom Projektverantwortlichen bestätigt.
+[Cockpit und Abnahme](docs/dev-dashboard.md).
 
 **DEV 0.6.3 – manuell abgenommen und gesichert:** Terminserien, Serienverwaltung,
 CSV-Vorschau/-Import, Rollen und bestehende Module wurden vom
