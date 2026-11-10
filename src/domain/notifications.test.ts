@@ -56,7 +56,7 @@ test("push transport rejects arbitrary hosts, insecure schemes, credentials, por
 function fixture(status=201,endpoint="https://fcm.googleapis.com/fcm/send/ci") {
   const tasks:Promise<void>[]=[],calls:{path:string;data:Record<string,unknown>;authorization:string|null}[]=[];
   const sent:{payload:string;topic:string}[]=[],reports:string[]=[];
-  let validUser=true,denyTest=false;
+  let validUser=true,denyTest=false,ready=true,rpcCode="";
   const request:typeof fetch=async(input,init)=>{
     const path=new URL(String(input)).pathname;
     const data=JSON.parse(String(init?.body??"{}")) as Record<string,unknown>;
@@ -64,7 +64,8 @@ function fixture(status=201,endpoint="https://fcm.googleapis.com/fcm/send/ci") {
     calls.push({path,data,authorization});
     const json=(data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json"}});
     if(path==="/auth/v1/user")return json(validUser?{id}:null,validUser?200:401);
-    if(path.endsWith("ff_push_test"))return json(denyTest?{message:"forbidden"}:notice,denyTest?403:200);
+    if(path.endsWith("ff_push_test"))return json(rpcCode?{code:rpcCode,message:"SYNTHETIC_PRIVATE"}:denyTest?{message:"forbidden"}:notice,rpcCode?400:denyTest?403:200);
+    if(path.endsWith("ff_push_ready"))return json(ready);
     if(path.endsWith("ff_notification_tick"))return json(1);
     if(path.endsWith("ff_push_claim"))return json([{id:delivery,lease_id:lease,notification_id:notice,
       subscription:{endpoint,keys:{p256dh:"synthetic-point",auth:"synthetic-auth"}}}]);
@@ -77,7 +78,8 @@ function fixture(status=201,endpoint="https://fcm.googleapis.com/fcm/send/ci") {
     send:async(_subscription,payload,topic)=>{sent.push({payload,topic});return status;}});
   const invoke=(data:unknown,headers:Record<string,string>={})=>handler(new Request("https://synthetic.invalid/push-dispatch",
     {method:"POST",headers,body:JSON.stringify(data)}));
-  return {invoke,calls,sent,reports,wait:()=>Promise.all(tasks),invalidUser:()=>{validUser=false;},denyTest:()=>{denyTest=true;}};
+  return {invoke,calls,sent,reports,wait:()=>Promise.all(tasks),invalidUser:()=>{validUser=false;},denyTest:()=>{denyTest=true;},
+    cancel:()=>{ready=false;},reject:(code:string)=>{rpcCode=code;}};
 }
 test("only authenticated user action queues its own DEV test using caller bearer, not a browser-supplied role",async()=>{
   const f=fixture();
@@ -101,6 +103,18 @@ test("unauthenticated, forged or server-refused DEV tests never dispatch",async(
   const denied=fixture();denied.denyTest();
   assert.equal((await denied.invoke({action:"test",device_id:id},{Authorization:"Bearer synthetic-user"})).status,403);
   await denied.wait();assert.deepEqual(denied.sent,[]);
+});
+for(const [code,status,error] of [["PT429",429,"test_rate_limited"],["PT404",404,"device_unavailable"],
+  ["PT409",409,"device_inactive"]] as const)test(`test failure ${code} has a specific safe response`,async()=>{
+  const f=fixture();f.reject(code);
+  const response=await f.invoke({action:"test",device_id:id},{Authorization:"Bearer synthetic-user"});
+  assert.equal(response.status,status);assert.deepEqual(await response.json(),{error});
+  await f.wait();assert.deepEqual(f.sent,[]);
+});
+test("a device removed after claim is rechecked before transport and is not sent",async()=>{
+  const f=fixture();f.cancel();
+  await f.invoke({action:"test",device_id:id},{Authorization:"Bearer synthetic-user"});await f.wait();
+  assert.deepEqual(f.sent,[]);assert.ok(f.reports.includes("delivery_cancelled_before_send"));
 });
 test("cron and bootstrap require secret authentication and never accept browser authorization alone",async()=>{
   const f=fixture();

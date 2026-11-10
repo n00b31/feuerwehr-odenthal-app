@@ -119,7 +119,8 @@ update public.events set attendance_state='COMPLETED' where id=pg_temp.n_event(3
 select set_config('request.jwt.claim.sub',pg_temp.n_user(2)::text,true);
 set local role authenticated;
 select set_config('n.test',public.ff_push_test(current_setting('n.device1')::uuid)::text,true);
-select pg_temp.n_deny(format('select public.ff_push_test(%L)',current_setting('n.device1')));
+do $$ begin perform public.ff_push_test(current_setting('n.device1')::uuid);raise exception 'FAIL: test quota bypass';
+exception when sqlstate 'PT429' then raise notice 'PASS: explicit server test quota'; end $$;
 reset role;
 select pg_temp.n_ok((select count(*)=1 from ff_private.notification_deliveries where notification_id=current_setting('n.test')::uuid),
  'DEV test queues only selected own device, never every device or member');

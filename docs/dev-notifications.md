@@ -568,3 +568,216 @@ Status: **Realer Edge-/Windows-Push auf nicht verwaltetem Rechner bestätigt.
 Dienstfehler auf verwaltetem Rechner nicht als behoben nachgewiesen;
 Hotfix-Oberfläche noch nicht manuell auf dem veröffentlichten Stand geprüft.
 DEV 0.8 bleibt außerhalb dieses Auftrags.**
+
+## DEV 0.7.2 – Push Device Lifecycle
+
+### Nachgewiesene Ursachen, nicht Vermutungen
+
+PR #25 wurde auf Main-Commit `ec1c9575eb33c131b8f130e4265c61b5c64b4edd`
+gemergt. Der Projektverantwortliche bestätigt Erstregistrierung und
+tatsächlichen Empfang auf iPhone-PWA und nicht verwaltetem Windows 11/Edge.
+Die spätere vollständige Lebenszyklus-Abnahme ist damit nicht erledigt.
+
+Read-only-Diagnose des bestehenden DEV am 10.11.2026:
+
+- Im Fenster 09:30–10:00 UTC zeigen die API-Logs fünf erfolgreiche
+  Registrierungen (`ff_push_register`, HTTP 200) und fünf abgewiesene
+  Tests (`ff_push_test`, HTTP 403).
+- Die PostgreSQL-Logs ordnen genau diese fünf Ablehnungen dem bestehenden
+  Testlimit zu. Zum Diagnosezeitpunkt waren drei Testanforderungen im
+  gleitenden Stundenfenster vorhanden; aggregiert existierten vier
+  angenommene Zustellungen, drei aktive und vier inaktive Geräte.
+- Der ursprüngliche Upsert setzt einen eigenen vorhandenen Endpoint
+  bereits auf `active=true`. Ein genereller Defekt dieses Upserts ist
+  durch die Meldung „noch keine“ **nicht** nachgewiesen. Das Feld
+  bezeichnet die bisherige Anbieterannahme, nicht Registrierungsvalidität.
+- Der Dispatcher verwandelte Testquoten und andere Ablehnungen in dieselbe
+  403-Sammelantwort. Das Frontend zeigte daraufhin die allgemeine
+  Benachrichtigungsfehlermeldung. Dies ist die nachgewiesene Ursache des
+  irreführenden Testfehlers, nicht ein WNS-Problem und kein Rollenwechsel.
+- Eine echte Entfernen-RPC fehlte. Die UI bot nur Deaktivierung und lokale
+  Abmeldung. Der Delivery-Fremdschlüssel verhinderte zudem einfaches
+  Löschen historisch belieferter Geräte.
+
+Zusätzlich wurden konkrete Protokolllücken im Code nachgewiesen:
+Deaktivierung löschte unnötig das lokale Abonnement und damit die
+Zuordnung für die nächste Aktivierung. Alte geleaste Versandaufträge
+wurden bei Schlüsselwechsel/Deaktivierung nicht entwertet; ein verspätetes
+404/410 konnte eine inzwischen reaktivierte Registrierung deaktivieren.
+Der bisherige automatische Cleanup bei Registrierungsfehlern konnte ein
+inzwischen von einem anderen Tab erfolgreich verwendetes Abonnement
+löschen. Diese Zustandsübergänge werden mit synthetischen SQL-/Browser-
+und echten Datenbank-Parallelitätstests abgesichert, nicht als beobachtete
+physische Gerätefehler ausgegeben.
+
+### Umsetzung und Sicherheitsgrenzen
+
+Migration `20261110003900_push_device_lifecycle.sql` ist eine additive
+Funktionserweiterung mit gezielter Anpassung des Delivery-Fremdschlüssels;
+sie löscht oder verändert bei Installation keine vorhandenen Geräte,
+Konten, Rollen, Schlüssel, Präferenzen oder Nachrichten.
+
+- Deaktivieren markiert nur das eigene Gerät inaktiv. Die native
+  Subscription bleibt für bewusste Wiederverwendung erhalten.
+- Reaktivierung prüft das native Abonnement und die aktuelle serverseitige
+  Identität. Eine neue Subscription kann erzeugt werden. Bei geändertem
+  Endpoint wird nur der ausdrücklich ausgewählte eigene Datensatz
+  transaktional ersetzt; Konflikte mit anderen Geräten werden abgewiesen.
+  Bereits entfernte Identitäten werden nicht stillschweigend neu belebt.
+  Eine zwischenzeitlich entfernte Identität aktualisiert die Geräteliste
+  nach dem Backend-Fehler, ohne das native Abonnement zu löschen.
+  Bei einem tatsächlich abgelaufenen Abonnement führt die konkrete
+  Fehlermeldung zu Entfernen und bewusster Neuregistrierung.
+- „Gerät entfernen“ verlangt eine Bestätigung und löscht die eigene
+  Registrierung wirklich. Delivery- und Versuchsnachweise bleiben ohne
+  Subscription-Fremdschlüssel erhalten; Endpoint und Schlüssel verschwinden
+  mit dem Gerätedatensatz. Eine spätere ausdrückliche Registrierung
+  erzeugt eine neue Identität.
+- Entfernen/Deaktivieren anderer eigener Geräte ist möglich. Deren lokale
+  Browser-Subscription lässt sich aus einem anderen Browser nicht löschen.
+  Reaktivierung erfolgt auf dem betreffenden Gerät, nicht durch
+  stillschweigenden Austausch seiner Subscription am aktuellen Rechner.
+- Owner-Locks serialisieren Registrierung, Reaktivierung, Deaktivierung,
+  Entfernen, Testanforderung und Versandabschluss. Zustands-/Schlüsselwechsel
+  sowie Entfernen stornieren offene Aufträge und entwerten alte Leases.
+  Vor dem Transport prüft der Dispatcher die Lease erneut.
+  **Bereits an den Anbieter übergebene oder gerade im Netzwerk befindliche
+  Nachrichten können nicht zurückgerufen werden.** Neue Aufträge an
+  deaktivierte/entfernte Geräte und spätere Wiederholungen werden verhindert.
+- Verspätete Anbieterantworten können reaktivierte Geräte nicht nachträglich
+  deaktivieren. Löschen und Neuregistrieren umgeht weder das Testlimit
+  noch das stündliche Transportbudget: der Verlauf wird über den
+  Nachrichtenempfänger gezählt, nicht über verbleibende Gerätedatensätze.
+- Ein Backend-Fehler löst kein automatisches natives `unsubscribe()` aus.
+  Ein anderer Tab könnte dieselbe native Subscription inzwischen
+  erfolgreich gespeichert haben. Die tatsächliche Entfernung ist eine
+  bewusste, bestätigte Benutzeraktion.
+  Beim Logout ist die endpointbasierte Abmeldung auch dann idempotent,
+  wenn ein anderes eigenes Gerät den Servereintrag bereits entfernt hat.
+- Testquoten bleiben unverändert: **einmal pro Minute, dreimal pro Stunde
+  pro Konto, über alle Geräte gemeinsam**. Die UI erläutert das vor dem
+  Test. Die API liefert sichere eindeutige Gründe für Quote, Inaktivität
+  und entferntes/unverfügbares Gerät. Fehlender Zugriff verrät keine
+  fremden Geräte.
+- Der Test liefert eine eigene und serverseitig autorisierte Status-ID.
+  Kurze Statusabfragen unterscheiden angenommen, ausstehend und
+  fehlgeschlagen/abgelaufen. Eine Warteschlangenannahme wird nicht als
+  Anbieterannahme oder sichtbarer Empfang verkauft. Ohne zeitnahes
+  Endergebnis bleibt die UI bei „angefordert“ und zeigt den Posteingang.
+- Registrierung läuft/fehlgeschlagen und Aktiv/Deaktiviert werden getrennt
+  von „Letzte Anbieterannahme“ angezeigt. Testfehler ändern nicht
+  fälschlich den Registrierungsstatus.
+
+Keine Endpoints, Subscription-Schlüssel, Tokens oder rohen Serverfehler in
+UI/Diagnosen. Kein zusätzliches Recht für GLOBAL_ADMIN oder andere Rollen
+auf fremde Geräte. Keine Änderungen an der unabhängigen Demo, VAPID-
+Schlüsseln, Windows-Richtlinien oder dem separaten verwalteten Rechner.
+
+### Rollout und automatisierte Nachweise
+
+Die neue Oberfläche benötigt Migration 039 und den aktualisierten
+`push-dispatch`-Handler. Rollout-Reihenfolge: erst Migration 039 nach
+erfolgreicher isolierter SQL-/Upgrade-/Parallelitätsprüfung, dann den
+Dispatcher mit bestehenden serverseitigen Secrets aktualisieren, danach
+den Frontend-PR manuell mergen und das Pages-Deployment/PWA-Update prüfen.
+Keine Schlüsselrotation und kein automatischer echter Testversand.
+Ein vorbereiteter Migrationsstand ist kein Beleg einer Hosted-Installation.
+Die tatsächliche Installation ist separat zu protokollieren.
+
+Die vorhandene CI prüft die Migration auf disposable PostgreSQL,
+erhält bei einem Upgrade bestehende Geräte/Schlüssel/Profile und führt
+die vollständigen bisherigen RLS-/Fach-/Transporttests weiter aus.
+Neue Lifecycle-SQL-Tests prüfen Erstregistrierung, Anbieterannahme,
+wiederholte Reaktivierung, alte Leases, Löschen mit Historienerhalt,
+Neuregistrierung, mehrere Geräte, Eigentümergrenzen und unveränderte
+Quoten. Echte parallele PostgreSQL-Verbindungen testen beide Reihenfolgen
+von Entfernen/Reaktivieren und zwei gleichzeitige Registrierungen.
+Diese Datenbanktests kontaktieren keinen Push-Anbieter.
+
+Browserfälle simulieren Apple-/WNS-Subscriptions und die neuen
+Statusantworten; reale Browserprozesse einschließlich installiertem Edge
+machen diese APIs nicht zu physischen Push-Tests. Neue Fälle prüfen die
+mehrfache vollständige Sequenz, Bestätigung/Abbruch, anderes eigenes Gerät,
+Quoten und Anbieterfehler. Keine eigenständige iOS-Emulation.
+
+### Tatsächliche Prüfung und DEV-Installation vom 10.11.2026
+
+Für den Implementierungsstand `293ace94048e7f93383bb1ea0ff673209f3c0c86`
+sind beide vollständigen CI-Workflows erfolgreich:
+
+- [PostgreSQL, Upgrade, RLS, Crypto und echte Parallelität](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42797642481):
+  auch neuer Lifecycle-SQL-Test und alle drei überlappenden Gerätefälle
+  erfolgreich. Beim Upgrade bleiben bestehende Geräte, Schlüssel und
+  Profile erhalten.
+- [Domain/Auth, Demo, DEV-Browser und echter DEV-Export](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42797642531):
+  188 Domain/Auth/Konfigurations-, 24 Skript-, 19 Demo- und
+  141 synthetische DEV-Browserfälle erfolgreich; Static Export,
+  Typprüfung und Secret-Scanner erfolgreich. Keine neue Lint-Meldung;
+  vorhandene Hook-Warnung in `supabase-planning.tsx:65` unverändert.
+- Lokal zusätzlich **40/40** synthetische Notification-Fälle im
+  installierten Microsoft Edge erfolgreich, einschließlich Apple-/WNS-
+  Lebenszyklus und konkurrierender Entfernung vor Reaktivierung.
+  Diese Browserfälle verwenden keine echten Supabase- oder Push-Dienste.
+
+Die erste neue SQL-Fixture überschritt selbst das unveränderte
+Minutenlimit: Eine künstlich eingefügte alte Lease hatte ein frisches
+Test-Nachrichtendatum. Nur diese synthetischen Testzeiten wurden korrigiert;
+die produktive Quote wurde nicht abgeschwächt.
+
+Die MCP-Migrationsbestätigung wurde vom Client sofort abgebrochen, ohne
+SQL auszuführen. Anschließend hat der Projektverantwortliche die
+Installation über die bereits angemeldete Supabase-CLI ausdrücklich
+freigegeben. Ausschließlich
+`orxinqhhbtjpkzwlfaxq` wurde aktualisiert:
+
+| Nachweis | Tatsächlicher Stand |
+|---|---|
+| Migration | `ff_039_push_device_lifecycle`, Registry-Version `20261110102348` |
+| SHA-256 der normalisierten Migrationsquelle | `a042e954854c449390c671f73f9c3c8ac0c97dc2aacd27b0a6f99af33447eb7d` |
+| Funktionsabgleich | Alle neun installierten Funktionskörper stimmen exakt mit der geprüften Quelle überein |
+| Originalschutz | Geräte einschließlich Schlüssel, Profile, Rollen, Präferenzen und Auth-Kontometadaten innerhalb derselben Transaktion unverändert; andernfalls vollständiger Rollback |
+| Aggregierte Inventur danach | Sieben Geräte, davon drei aktiv; 61 Profile und elf Auth-Konten wie zuvor |
+| Edge Function | `push-dispatch`, Version 3, aktiv; `password-recovery`, Version 2, unverändert |
+| Betrieb | Dispatcher bereit; genau ein bestehender Scheduler, letzter Lauf erfolgreich |
+| Zugriff | Nicht autorisierter gültiger Test-Request: HTTP 401; anonyme Entfernung und Client-Zugriff auf Versandclaims/Readiness nicht erlaubt |
+
+Die Installation verwendete kurze Sperr-/Statement-Zeitlimits und
+temporäre Originalvergleiche ausschließlich in der Datenbank. Keine
+Originalwerte oder Secrets wurden ausgegeben. Kein neuer Scheduler,
+keine Rotation oder Änderung bestehender VAPID-/Cron-Secrets, keine
+Änderung bestehender Geräte durch die Installation. Es wurden **keine
+echten Test-Pushs oder Testmails** durch die Entwicklung versandt.
+Die neue Oberfläche bleibt bis zum manuellen PR-Merge unveröffentlicht.
+
+### Manuelle Abnahme nach Merge – ausdrücklich offen
+
+Für **iPhone-PWA** und **nicht verwaltetes Windows 11 mit Microsoft Edge**
+jeweils vollständig protokollieren:
+
+1. Sichtbare DEV-0.7.2-Version/Build-ID, Gerät und Browser-/Systemversion
+   notieren. Nur ein ausdrücklich autorisiertes freigegebenes Testkonto
+   verwenden, vorhandene andere Geräte nicht entfernen.
+2. Registrieren → einen eigenen Test auslösen → tatsächliche Anzeige
+   und korrektes Klickziel prüfen.
+3. Gerät deaktivieren → inaktive Anzeige und deaktivierten Testknopf
+   prüfen; anderes Gerät bleibt unverändert.
+4. Reaktivieren → mindestens eine volle Minute seit dem letzten Test
+   warten → eigenen Test auslösen → tatsächlichen Empfang prüfen.
+5. „Gerät entfernen“ zunächst abbrechen, anschließend bestätigen →
+   Eintrag verschwindet. Danach neu registrieren → mindestens eine volle
+   Minute warten → dritten eigenen Test senden → tatsächlichen Empfang
+   und Klickziel prüfen.
+6. Liste aktualisieren/neu öffnen: keine entfernten Einträge oder
+   doppelten aktiven Registrierungen; Anbieterhistorie und Registrierung
+   korrekt getrennt. Auch Entfernen eines anderen eigenen Geräts prüfen,
+   ohne dessen lokale Browser-Subscription als gelöscht zu behaupten.
+
+**Wichtig für beide Geräte am selben Konto:** Die drei Testsendungen
+verbrauchen das unveränderte Stundenbudget gemeinsam. Vor der Sequenz
+am zweiten Gerät eine volle Stunde nach dem letzten Test warten oder
+ein anderes bereits ausdrücklich autorisiertes Testkonto verwenden.
+Keine zusätzlichen Testmails oder Konten automatisch anlegen.
+
+Status beider vollständigen DEV-0.7.2-Sequenzen: **offen**. Die bestätigten
+Erstregistrierungen aus DEV 0.7/0.7.1 ersetzen diese Abnahme nicht.
+Kein automatischer Merge; DEV 0.8 bleibt außerhalb dieses Auftrags.

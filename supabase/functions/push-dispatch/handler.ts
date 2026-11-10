@@ -1,5 +1,8 @@
 export type PushSubscriptionData={endpoint:string;keys:{p256dh:string;auth:string}};
 type Job={id:string;lease_id:string;notification_id:string;subscription:PushSubscriptionData};
+class PushRpcError extends Error {
+  constructor(readonly code:string){super("notification_rpc_failed");}
+}
 type Options={
   url:string;publicKey:string;serviceKey:string;cronSecret:string;
   send:(subscription:PushSubscriptionData,payload:string,topic:string)=>Promise<number>;
@@ -44,7 +47,12 @@ export function createPushHandler(options:Options) {
     const result=await request(`${options.url}/rest/v1/rpc/${name}`,{method:"POST",
       headers:{apikey:key,Authorization:`Bearer ${token}`,"Content-Type":"application/json"},
       body:JSON.stringify(input),redirect:"error",signal:AbortSignal.timeout(10_000)});
-    if(!result.ok)throw new Error("notification_rpc_failed");
+    if(!result.ok){
+      let payload:unknown;
+      try { payload=await result.json(); } catch { throw new PushRpcError(""); }
+      throw new PushRpcError(payload && typeof payload==="object" && "code" in payload && typeof payload.code==="string"
+        && ["PT404","PT409","PT429"].includes(payload.code)?payload.code:"");
+    }
     return await result.json();
   }
   async function dispatch(only:string|null) {
@@ -67,6 +75,9 @@ export function createPushHandler(options:Options) {
         for(let index=0;index<jobs.length;index+=4)await Promise.all(jobs.slice(index,index+4).map(async job=>{
           let code=0;
           try {
+            if(await rpc("ff_push_ready",{delivery_id:job.id,lease_id:job.lease_id})!==true){
+              options.report?.("delivery_cancelled_before_send");return;
+            }
             if(!allowedPushEndpoint(job.subscription.endpoint))code=400;
             else code=await options.send(job.subscription,JSON.stringify({format:1,notification_id:job.notification_id,delivery_id:job.id}),job.id.replace(/-/g,""));
           } catch { code=0; }
@@ -101,8 +112,15 @@ export function createPushHandler(options:Options) {
       if(!user)return response(401,{error:"unauthorized"});
       const queued=await rpc("ff_push_test",{device_id:input.device_id},authorization.slice(7),options.publicKey);
       if(typeof queued!=="string" || !uuid.test(queued))throw new Error("invalid_test_response");
-      options.waitUntil(dispatch(queued));return response(202,{queued:true});
-    } catch { return response(403,{error:"test_not_permitted_or_limited"}); }
+      options.waitUntil(dispatch(queued));return response(202,{queued:true,notification_id:queued});
+    } catch(error) {
+      if(error instanceof PushRpcError){
+        if(error.code==="PT429")return response(429,{error:"test_rate_limited"});
+        if(error.code==="PT404")return response(404,{error:"device_unavailable"});
+        if(error.code==="PT409")return response(409,{error:"device_inactive"});
+      }
+      return response(403,{error:"test_not_permitted_or_limited"});
+    }
   };
   async function requestFetchUser(authorization:string) {
     const result=await request(`${options.url}/auth/v1/user`,{headers:{apikey:options.publicKey,Authorization:authorization},

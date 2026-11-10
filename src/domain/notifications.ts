@@ -63,6 +63,16 @@ const pushErrors = {
   subscription_timeout: "Der Push-Dienst des Browsers hat nicht rechtzeitig geantwortet. Es wurde keine Backend-Registrierung angefordert. Eine später eintreffende Browser-Subscription wird nicht automatisch gespeichert; bei einem erneuten bewussten Versuch kann sie wiederverwendet werden.",
   backend_registration_failed: "Das Browser-Abonnement konnte nicht beim Backend registriert werden. Bitte Verbindung, Anmeldung und Freigabe prüfen und erneut versuchen. Andere registrierte Geräte bleiben unverändert.",
   subscription_cleanup_failed: "Die Backend-Registrierung ist fehlgeschlagen und das neu erstellte Browser-Abonnement konnte nicht entfernt werden. Bitte erneut prüfen; andere Geräte wurden nicht verändert.",
+  device_inactive: "Dieses Gerät oder Push für dieses Konto ist deaktiviert. Bitte bewusst reaktivieren, bevor ein Test gesendet wird.",
+  deactivation_failed: "Die Deaktivierung konnte beim Backend nicht bestätigt werden. Bitte Verbindung und Anmeldung prüfen und erneut versuchen.",
+  device_unavailable: "Das eigene Gerät wurde bereits entfernt oder ist nicht mehr verfügbar. Bitte die Liste aktualisieren; eine neue Registrierung muss bewusst erfolgen.",
+  reactivation_failed: "Das Gerät konnte nicht reaktiviert werden. Bitte auf diesem Gerät die Browserberechtigung und das Abonnement prüfen und erneut versuchen.",
+  removal_failed: "Das Gerät konnte beim Backend nicht entfernt werden. Die Entfernung wurde nicht bestätigt. Bitte erneut prüfen.",
+  local_removal_failed: "Das Gerät ist serverseitig entfernt und erhält keine neuen Versandaufträge. Das lokale Browser-Abonnement konnte nicht entfernt werden; bitte die Website-Einstellungen prüfen.",
+  subscription_invalid: "Das Push-Abonnement ist ungültig oder abgelaufen. Bitte auf diesem Gerät entfernen und anschließend neu registrieren.",
+  test_rate_limited: "Testlimit erreicht: höchstens ein Test pro Minute und drei Tests pro Stunde pro Konto, gemeinsam für alle Geräte. Deaktivieren oder Reaktivieren setzt dieses Limit nicht zurück.",
+  test_failed: "Der Test-Push konnte nicht angefordert werden. Bitte Anmeldung, Freigabe und Verbindung prüfen; es wurde keine Anbieterannahme bestätigt.",
+  provider_rejected: "Der Push-Anbieter hat den Test-Push nicht angenommen. Bitte den Versandstatus prüfen und das betroffene Gerät bei abgelaufenem Abonnement neu registrieren.",
 } as const;
 export type PushErrorCode = keyof typeof pushErrors;
 export const pushStages = {
