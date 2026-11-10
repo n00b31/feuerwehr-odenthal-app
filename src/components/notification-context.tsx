@@ -11,8 +11,10 @@ const NotificationContext=createContext<Inbox|null>(null);
 export function NotificationProvider({client,actorId,paused,children}:{
   client:SupabaseClient|null;actorId:string|null;paused:boolean;children:ReactNode;
 }){
-  const [loaded,setLoaded]=useState<NotificationWorkspace|null>(null);
-  const [failure,setFailure]=useState<{actor:string;message:string}|null>(null);
+  const [state,setState]=useState<{client:SupabaseClient|null;actor:string|null;snapshot:NotificationWorkspace|null;error:string}>({
+    client,actor:actorId,snapshot:null,error:"",
+  });
+  if(state.client!==client || state.actor!==actorId)setState({client,actor:actorId,snapshot:null,error:""});
   const epoch=useRef({value:0}),working=useRef(paused);
   useEffect(()=>{working.current=paused;},[paused]);
   const reload=useCallback(async()=>{
@@ -21,9 +23,9 @@ export function NotificationProvider({client,actorId,paused,children}:{
     try{
       const next=await readNotifications(client,actorId);
       if(version!==epoch.current.value)return null;
-      setLoaded(next);setFailure(null);return next;
+      setState({client,actor:actorId,snapshot:next,error:""});return next;
     }catch(cause){
-      if(version===epoch.current.value){setLoaded(null);setFailure({actor:actorId,message:notificationError(cause)});}
+      if(version===epoch.current.value)setState({client,actor:actorId,snapshot:null,error:notificationError(cause)});
       throw cause;
     }
   },[client,actorId]);
@@ -46,8 +48,8 @@ export function NotificationProvider({client,actorId,paused,children}:{
       window.clearInterval(timer);
     };
   },[client,actorId,reload]);
-  return <NotificationContext value={{snapshot:loaded?.actor_id===actorId?loaded:null,
-    error:failure?.actor===actorId?failure.message:"",reload}}>{children}</NotificationContext>;
+  return <NotificationContext value={{snapshot:state.actor===actorId?state.snapshot:null,
+    error:state.actor===actorId?state.error:"",reload}}>{children}</NotificationContext>;
 }
 export function useNotifications(){
   const inbox=useContext(NotificationContext);

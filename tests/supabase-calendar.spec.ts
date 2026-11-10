@@ -168,6 +168,7 @@ async function connect(page:Page,role:"global"|"unit"|"member"="global",stations
   await page.getByRole("button",{name:"Anmelden",exact:true}).click();
   await page.getByRole("button",{name:"Gemeinsamer Kalender",exact:true}).click();
   await expect(page.getByRole("heading",{name:"Gemeinsamer Feuerwehrkalender"})).toBeVisible();
+  if((page.viewportSize()?.width??1440)<768)await page.getByRole("button",{name:"Monat",exact:true}).click();
   await expect(page.locator(".calendar-chip").filter({hasText:"Synthetic existing service"})).toHaveCount(1);
   return state;
 }
@@ -367,6 +368,7 @@ test("service opens existing editor and closes calendar modal without duplicate 
 });
 
 test("calendar remains accessible in mobile light and desktop dark layouts",async({page})=>{
+  await page.setViewportSize({width:390,height:844});
   await connect(page);
   await expect(page.getByRole("navigation",{name:"Mobile Navigation"})).toBeVisible();
   await expect(page.locator(".calendar-month")).toBeVisible();

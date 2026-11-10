@@ -212,8 +212,8 @@ test("home shares the compact header/navigation and preserves cockpit content; o
         window.scrollTo(0,0);
       });
     }
-    const current=await page.locator(".cockpit").screenshot({animations:"disabled",style:".bottom-nav{visibility:hidden!important}"});
-    const accepted=await old.locator(".cockpit").screenshot({animations:"disabled",style:".bottom-nav{visibility:hidden!important}"});
+    const current=await page.locator(".cockpit").screenshot({animations:"disabled",style:".topbar,.bottom-nav{visibility:hidden!important}"});
+    const accepted=await old.locator(".cockpit").screenshot({animations:"disabled",style:".topbar,.bottom-nav{visibility:hidden!important}"});
     expect(current.equals(accepted),"Cockpit pixels must match; header and navigation are intentionally refined").toBe(true);
     await baseline.close();
   }

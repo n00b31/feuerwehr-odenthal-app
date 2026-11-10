@@ -191,10 +191,10 @@ test("missing upcoming RPC is explicit and the existing month remains usable",as
     route.fulfill({status:404,contentType:"application/json",body:JSON.stringify({code:"PGRST202",message:"Synthetic missing RPC"})}));
   await login(page,true);
   await page.getByRole("button",{name:"Gemeinsamer Kalender",exact:true}).click();
-  await expect(page.getByRole("alert")).toContainText("DEV-Migration 040");
+  await expect(page.getByRole("region",{name:"Gemeinsamer Feuerwehrkalender"}).getByRole("alert")).toContainText("DEV-Migration 040");
   await page.getByRole("button",{name:"Monat",exact:true}).click();
   await expect(page.locator(".calendar-month")).toBeVisible();
-  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(page.getByRole("region",{name:"Gemeinsamer Feuerwehrkalender"}).getByRole("alert")).toHaveCount(0);
 });
 
 test("unavailable session storage explains the limitation without blocking calendar choices",async({context,page})=>{
@@ -203,10 +203,10 @@ test("unavailable session storage explains the limitation without blocking calen
   }));
   await mobileFixture(context);await login(page,true);
   await page.getByRole("button",{name:"Gemeinsamer Kalender",exact:true}).click();
-  await expect(page.getByRole("alert")).toContainText("Sitzungsspeicher");
+  await expect(page.getByRole("region",{name:"Gemeinsamer Feuerwehrkalender"}).getByRole("alert")).toContainText("Sitzungsspeicher");
   await page.getByRole("button",{name:"Monat",exact:true}).click();
   await expect(page.locator(".calendar-month")).toBeVisible();
-  await expect(page.getByRole("alert")).toContainText("nur in dieser Ansicht");
+  await expect(page.getByRole("region",{name:"Gemeinsamer Feuerwehrkalender"}).getByRole("alert")).toContainText("nur in dieser Ansicht");
 });
 
 test("journal stays only in statistics; profile settings and old journal bookmarks remain usable",async({context,page})=>{

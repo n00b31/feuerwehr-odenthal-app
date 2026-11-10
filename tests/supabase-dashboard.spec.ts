@@ -205,7 +205,7 @@ test("information deep link opens the retained calendar detail outside the displ
     organization: false, configure: false, units: state.data.units, manageable_units: [], functions: [],
     organizers: [{ id: actor, name: "Alex Synthetic" }], categories: [], resources: [],
   } }));
-  await page.context().route(`${api}/rest/v1/rpc/ff_calendar_page`, route => {
+  await page.context().route(`${api}/rest/v1/rpc/ff_calendar_{page,upcoming}`, route => {
     retainedQueries.push(route.request().postDataJSON().retained_ids);
     return route.fulfill({ json: { server_now: state.data.server_now, next_cursor: null, events: [],
       retained_events: [{ ...item, description: "Synthetic retained information", location: "Synthetic station",

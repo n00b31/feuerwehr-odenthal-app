@@ -95,7 +95,7 @@ export function SupabaseDev() {
   const access = screen.phase === "active" || screen.phase === "blocked" ? screen.access : null;
   const active = screen.phase === "active";
   const managesMembers = active && screen.access.roles.some((role) => role === "GLOBAL_ADMIN" || role === "UNIT_ADMIN");
-  return <NotificationProvider key={active?screen.access.user_id:"guest"} client={active?client:null} actorId={active?screen.access.user_id:null} paused={busy||pushBusy}>
+  return <NotificationProvider client={active?client:null} actorId={active?screen.access.user_id:null} paused={busy||pushBusy}>
     <div className={`app-shell dev-shell${active?" compact-shell":""}${active && pathname!=="/"?" mobile-workspace":""}`}>
     <a className="skip-link" href="#main">Zum Inhalt springen</a>
     {active && <aside className="sidebar"><SidebarNavigation pathname={pathname} unitName={screen.access.unit_name ?? ""}

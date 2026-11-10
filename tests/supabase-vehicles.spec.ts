@@ -132,6 +132,7 @@ test("assigned manager approves, opens canonical shared-calendar detail and canc
   await expect(page.getByRole("dialog").getByText("✓ Genehmigt",{exact:true})).toBeVisible();
   await page.getByRole("button",{name:"Dialog schließen"}).click();
   await page.getByRole("button",{name:"Gemeinsamer Kalender",exact:true}).click();
+  await page.getByRole("button",{name:"Monat",exact:true}).click();
   await page.getByRole("button",{name:"Kalender aktualisieren",exact:true}).click();
   await page.locator(".calendar > .calendar-month .calendar-chip").filter({hasText:"Synthetic approval task"}).click();
   await page.getByRole("button",{name:"Reservierungsdetails öffnen",exact:true}).click();

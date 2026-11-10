@@ -54,6 +54,9 @@ keine neue Nachrichten- oder Push-Verwaltung. Der Badge verwendet die gesamte
 serverseitige Ungelesen-Anzahl, nicht nur die fünf Vorschauzeilen.
 Bei Benutzer-/Freigabewechsel wird der Kontext neu aufgebaut; veraltete
 Antworten werden verworfen. Unbestätigte Profile erhalten keine Inbox-Abfrage.
+Dabei werden nur die Inbox-Daten verworfen, nicht die Anwendung neu gemountet:
+eine im abgemeldeten Zustand empfangene opaque Push-Nachrichten-ID bleibt bis
+zur geprüften Anmeldung und zum bewussten Öffnen erhalten.
 Ungespeicherte Präferenzen werden durch Aktualisierungen nicht überschrieben.
 Native Subscription-Abfragen bleiben im bestehenden Profil-/Geräteablauf;
 die Glocke fragt weder Push-Berechtigung noch Subscription an.
