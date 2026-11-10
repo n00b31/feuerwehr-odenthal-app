@@ -60,7 +60,8 @@ select pg_temp.l_ok(not public.ff_push_complete((current_setting('l.job')::jsonb
  (current_setting('l.job')::jsonb->>'lease_id')::uuid,410),'late expired result cannot disable the reactivated device');
 select pg_temp.l_ok((select active from public.push_subscriptions where id=current_setting('l.one')::uuid)
  and (select active from public.push_subscriptions where id=current_setting('l.two')::uuid),'both devices remain active');
-update public.vehicle_notifications set created_at=statement_timestamp()-interval '2 minutes' where id=current_setting('l.test')::uuid;
+update public.vehicle_notifications set created_at=statement_timestamp()-interval '2 minutes'
+ where recipient_id=pg_temp.l_user(2) and source_kind='test';
 set local role authenticated;
 select set_config('l.test2',public.ff_push_test(current_setting('l.one')::uuid)::text,true);
 reset role;
