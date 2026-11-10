@@ -18,6 +18,11 @@ test("push diagnostics retain only known phase and error names, never raw except
   const service=new PushRegistrationError("push_service_failed",new DOMException("private details","AbortError"));
   assert.deepEqual(notificationDiagnostic(service),{code:"push_service_failed",browserError:"AbortError"});
   assert.match(notificationError(service),/Website-Berechtigung erteilt/);
+  for(const code of ["permission_timeout","subscription_timeout"] as const){
+    const timeout=new PushRegistrationError(code,new DOMException("SYNTHETIC_PRIVATE_TIMEOUT","TimeoutError"));
+    assert.deepEqual(notificationDiagnostic(timeout),{code,browserError:"TimeoutError"});
+    assert.ok(!notificationError(timeout).includes("SYNTHETIC_PRIVATE"));
+  }
 });
 test("notification navigation uses only validated UUIDs and existing authenticated routes",()=>{
   assert.equal(notificationHref({source_kind:"event",target_id:id}),`/termine/?bereich=dienste&termin=${id}#event-${id}`);

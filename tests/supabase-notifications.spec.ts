@@ -9,7 +9,9 @@ const api="https://syntheticci.supabase.co",date="2026-11-09T12:00:00Z";
 const point=createECDH("prime256v1");point.generateKeys();
 const publicKey=point.getPublicKey().toString("base64url");
 type BrowserPushState={requests:number;gesture:boolean;subscribed:boolean;unsubscribed:number;subscriptions:number;
-  workerActive:boolean;failure:"service"|"subscribe"|"lookup"|"worker"|"permission"|"denied"|"notAllowed"|"cleanup"|null;validKey:boolean;staleKey:boolean};
+  workerActive:boolean;failure:"service"|"subscribe"|"lookup"|"worker"|"permission"|"denied"|"notAllowed"|"cleanup"
+    |"pendingPermission"|"pendingWorker"|"pendingLookup"|"pendingSubscribe"|null;validKey:boolean;staleKey:boolean;
+  finishPermission:(()=>void)|null;finishSubscription:(()=>void)|null};
 async function connect(page:Page,options:{support?:boolean;denied?:boolean;linked?:boolean;global?:boolean;guestPush?:boolean;
   provider?:"windows"|"apple";existing?:boolean;otherDevice?:boolean;invalidKey?:boolean}={}){
   const state={calls:[] as string[],revoked:false,fail:false,registerFail:false,tests:0,snapshot:{
@@ -22,7 +24,7 @@ async function connect(page:Page,options:{support?:boolean;denied?:boolean;linke
   } as NotificationWorkspace};
   await page.addInitScript(({support,denied,existing,provider,key})=>{
     const state:BrowserPushState={requests:0,gesture:false,subscribed:existing,unsubscribed:0,subscriptions:0,
-      workerActive:true,failure:null,validKey:false,staleKey:false};
+      workerActive:true,failure:null,validKey:false,staleKey:false,finishPermission:null,finishSubscription:null};
     Object.defineProperty(window,"syntheticPush",{value:state});
     let permission:NotificationPermission=denied?"denied":"default";
     class SyntheticNotification {
@@ -31,6 +33,9 @@ async function connect(page:Page,options:{support?:boolean;denied?:boolean;linke
         state.requests++;state.gesture=navigator.userActivation.isActive;
         if(state.failure==="permission")throw new DOMException("SYNTHETIC_DO_NOT_LOG","SecurityError");
         if(state.failure==="denied"){permission="denied";return Promise.resolve(permission);}
+        if(state.failure==="pendingPermission")return new Promise<NotificationPermission>(resolve=>{
+          state.finishPermission=()=>{permission="granted";resolve(permission);};
+        });
         permission="granted";return Promise.resolve(permission);
       }
     }
@@ -48,6 +53,7 @@ async function connect(page:Page,options:{support?:boolean;denied?:boolean;linke
     Object.defineProperty(registration,"active",{get:()=>state.workerActive?{state:"activated"}:null});
     Object.assign(registration,{waiting:null,installing:null,getNotifications:async()=>[],
       pushManager:{getSubscription:async()=>{
+        if(state.failure==="pendingLookup")return new Promise<never>(()=>{});
         if(state.failure==="lookup")throw new DOMException("SYNTHETIC_DO_NOT_LOG","InvalidStateError");
         return state.subscribed?subscription:null;
       },subscribe:async(options:PushSubscriptionOptionsInit)=>{
@@ -59,10 +65,14 @@ async function connect(page:Page,options:{support?:boolean;denied?:boolean;linke
         if(state.failure==="service")throw new DOMException("Registration failed - push service error SYNTHETIC_DO_NOT_LOG","AbortError");
         if(state.failure==="subscribe")throw new DOMException("SYNTHETIC_DO_NOT_LOG","NotSupportedError");
         if(state.failure==="notAllowed")throw new DOMException("SYNTHETIC_DO_NOT_LOG","NotAllowedError");
+        if(state.failure==="pendingSubscribe")return new Promise(resolve=>{
+          state.finishSubscription=()=>{state.subscribed=true;resolve(subscription);};
+        });
         state.subscribed=true;return subscription;
       }}});
     const workers=new EventTarget();
     Object.assign(workers,{register:async()=>registration,getRegistration:async()=>{
+      if(state.failure==="pendingWorker")return new Promise<never>(()=>{});
       if(state.failure==="worker")throw new DOMException("SYNTHETIC_DO_NOT_LOG","SecurityError");
       return registration;
     }});
@@ -320,4 +330,61 @@ test("own inactive browser subscription can be explicitly removed without touchi
   expect((await browserState(page)).unsubscribed).toBe(1);
   expect(state.snapshot.devices).toHaveLength(2);
   expect(state.snapshot.devices.find(row=>row.device_name==="Existing iPhone PWA")?.active).toBe(true);
+});
+test("quiet permission prompt has visible progress and a strict 30-second limit; late consent never registers automatically",async({page})=>{
+  const state=await connect(page);await page.clock.install();await page.clock.pauseAt(new Date(Date.now()+1_000));
+  await page.evaluate(()=>{Reflect.get(window,"syntheticPush").failure="pendingPermission";});
+  const activate=page.getByRole("button",{name:"Push-Benachrichtigungen aktivieren",exact:true});
+  await activate.click();
+  await expect(page.getByText(/Edge kann sie auch nur über ein Benachrichtigungssymbol/)).toBeVisible();
+  await page.clock.fastForward(29_999);await expect(activate).toBeDisabled();
+  await page.clock.fastForward(1);
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("permission_timeout");
+  await expect(activate).toBeEnabled();
+  await page.evaluate(()=>{Reflect.get(window,"syntheticPush").finishPermission();});
+  expect((await browserState(page)).subscriptions).toBe(0);
+  expect(state.calls.filter(path=>path.endsWith("ff_push_register"))).toHaveLength(0);
+  await page.evaluate(()=>{Reflect.get(window,"syntheticPush").failure=null;});
+  await activate.click();await expect(page.getByText("Push-Status: Aktiviert",{exact:true})).toBeVisible();
+  expect((await browserState(page)).requests).toBe(1);
+});
+for(const [failure,milliseconds,code] of [["pendingWorker",10_000,"worker_unavailable"],
+  ["pendingLookup",15_000,"subscription_lookup_failed"]] as const)test(`native ${failure} has a bounded wait without backend writes`,async({page})=>{
+  const state=await connect(page);await page.clock.install();await page.clock.pauseAt(new Date(Date.now()+1_000));
+  await page.evaluate(value=>{Reflect.get(window,"syntheticPush").failure=value;},failure);
+  const activate=page.getByRole("button",{name:"Push-Benachrichtigungen aktivieren",exact:true});
+  await activate.click();await page.clock.fastForward(milliseconds-1);await expect(activate).toBeDisabled();
+  await page.clock.fastForward(1);
+  await expect(page.getByRole("main").getByRole("alert")).toContainText(code);
+  await expect(activate).toBeEnabled();
+  expect(state.calls.filter(path=>path.endsWith("ff_push_register"))).toHaveLength(0);
+});
+test("late native subscription after 30 seconds never auto-registers or gets deleted; explicit retry reuses it",async({page})=>{
+  const state=await connect(page,{otherDevice:true});await page.clock.install();await page.clock.pauseAt(new Date(Date.now()+1_000));
+  await page.evaluate(()=>{Reflect.get(window,"syntheticPush").failure="pendingSubscribe";});
+  const activate=page.getByRole("button",{name:"Push-Benachrichtigungen aktivieren",exact:true});
+  await activate.click();
+  await expect(page.getByText(/Der Browser erstellt das Abonnement bei seinem Push-Dienst/)).toBeVisible();
+  await page.clock.fastForward(29_999);await expect(activate).toBeDisabled();
+  await page.clock.fastForward(1);
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("subscription_timeout");
+  await expect(activate).toBeEnabled();
+  await page.evaluate(()=>{Reflect.get(window,"syntheticPush").finishSubscription();});
+  expect(state.calls.filter(path=>path.endsWith("ff_push_register"))).toHaveLength(0);
+  expect((await browserState(page)).unsubscribed).toBe(0);
+  await page.evaluate(()=>{Reflect.get(window,"syntheticPush").failure=null;});
+  await activate.click();await expect(page.getByText("Push-Status: Aktiviert",{exact:true})).toBeVisible();
+  expect((await browserState(page)).subscriptions).toBe(1);
+  expect(state.snapshot.devices.find(row=>row.device_name==="Existing iPhone PWA")?.active).toBe(true);
+});
+test("late native subscription cannot make an authenticated backend write after logout",async({page})=>{
+  const state=await connect(page);await page.clock.install();await page.clock.pauseAt(new Date(Date.now()+1_000));
+  await page.evaluate(()=>{Reflect.get(window,"syntheticPush").failure="pendingSubscribe";});
+  await page.getByRole("button",{name:"Push-Benachrichtigungen aktivieren",exact:true}).click();
+  await page.clock.fastForward(30_000);
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("subscription_timeout");
+  await page.getByRole("button",{name:"Abmelden / Sitzung entfernen",exact:true}).click();
+  await expect(page.getByRole("button",{name:"Anmelden",exact:true})).toBeVisible();
+  await page.evaluate(()=>{Reflect.get(window,"syntheticPush").finishSubscription();});
+  expect(state.calls.filter(path=>path.endsWith("ff_push_register"))).toHaveLength(0);
 });

@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { Bell,RefreshCw } from "lucide-react";
 import { z } from "zod";
-import { notificationCategories,notificationCategorySchema,notificationError,notificationHref,pushSupport,
-  type NotificationPreferences,type NotificationWorkspace,type Notice } from "@/domain/notifications";
+import { notificationCategories,notificationCategorySchema,notificationError,notificationHref,pushSupport,pushStages,
+  type PushStage,type NotificationPreferences,type NotificationWorkspace,type Notice } from "@/domain/notifications";
 import { activatePush,currentPushDevice,deactivatePush,readNotification,readNotifications,saveNotificationPreferences,testPush } from "@/data/supabase-notifications";
 import { dateLabel } from "@/domain/time";
 
@@ -67,6 +67,7 @@ export function SupabaseNotifications({client,actorId,onPushBusy}:{client:Supaba
   const [device,setDevice]=useState<string|null>(null),[name,setName]=useState("Mein Gerät");
   const [permission,setPermission]=useState<NotificationPermission|"unsupported">("default");
   const [error,setError]=useState(""),[message,setMessage]=useState(""),[busy,setBusy]=useState(false);
+  const [pushStage,setPushStage]=useState<PushStage|null>(null);
   const working=useRef(false),dirty=useRef(false),epoch=useRef({value:0});
   const reload=useCallback(()=>{
     const version=++epoch.current.value;
@@ -93,7 +94,7 @@ export function SupabaseNotifications({client,actorId,onPushBusy}:{client:Supaba
     working.current=true;setBusy(true);onPushBusy(true);setError("");setMessage("");
     try{await operation();if(await reload())setMessage(success);}
     catch(cause){setPermission(pushSupport()?Notification.permission:"unsupported");setError(notificationError(cause));}
-    finally{working.current=false;setBusy(false);onPushBusy(false);}
+    finally{working.current=false;setBusy(false);onPushBusy(false);setPushStage(null);}
   }
   const current=snapshot?.devices.find(item=>item.id===device && item.active);
   const status=permission==="unsupported" ? "Auf diesem Gerät nicht unterstützt" : permission==="denied" ? "Vom Browser blockiert"
@@ -109,12 +110,13 @@ export function SupabaseNotifications({client,actorId,onPushBusy}:{client:Supaba
     {permission==="denied" && <p className="notice">Die Ablehnung wird respektiert. Zum späteren Freigeben die Benachrichtigungsberechtigung in den Browser- beziehungsweise Systemeinstellungen selbst ändern.</p>}
     {error && <p className="notice error" role="alert">{error}</p>}
     {message && <p className="notice" role="status">{message}</p>}
+    {busy && pushStage && <p className="notice" role="status" aria-live="polite">{pushStages[pushStage]}</p>}
     {!snapshot && !error && <p role="status">Persönliche Benachrichtigungen werden geladen …</p>}
     {snapshot && preferences && <>
       {!snapshot.server_ready && <p className="notice">Push-Versand ist serverseitig noch nicht eingerichtet oder pausiert. In-App-Nachrichten sind unabhängig von der Browserunterstützung verfügbar.</p>}
       <div className="form-grid"><label>Gerätename<input value={name} onChange={event=>setName(event.target.value)} minLength={1} maxLength={80} disabled={busy}/></label>
         <button className="button" disabled={busy || permission==="unsupported" || permission==="denied" || !snapshot.server_ready || !snapshot.public_key || !name.trim()}
-          onClick={()=>void run(()=>activatePush(client,snapshot.public_key!,name),"Push für dieses eigene Gerät aktiviert.")}>Push-Benachrichtigungen aktivieren</button>
+          onClick={()=>void run(()=>activatePush(client,snapshot.public_key!,name,setPushStage),"Push für dieses eigene Gerät aktiviert.")}>Push-Benachrichtigungen aktivieren</button>
         {current && <button className="button secondary" disabled={busy} onClick={()=>void run(()=>deactivatePush(client,current.id,true),"Push für dieses Gerät deaktiviert.")}>Push auf diesem Gerät deaktivieren</button>}
         <button className="button secondary" disabled={busy || !current || !snapshot.preferences.push_enabled || !snapshot.server_ready}
           onClick={()=>void run(()=>testPush(client,current!.id),"DEV-Test nur an dieses eigene Gerät angefordert. Anbieterannahme ist kein Nachweis einer Geräteanzeige.")}>Test-Push senden · DEV</button></div>

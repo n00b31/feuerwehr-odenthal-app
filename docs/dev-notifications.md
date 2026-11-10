@@ -383,6 +383,18 @@ normalen Edge-Profils. Der erfolgreiche normale Versuch widerlegt jedoch
 eine pauschale Unverträglichkeit der bisherigen ArrayBuffer-Konvertierung
 oder des unveränderten öffentlichen Schlüssels mit Edge.
 
+Am 10.11.2026 gelang außerdem auf dem tatsächlichen öffentlichen
+DEV-Ursprung ein nativer Versuch mit einem weiteren temporären normalen
+Edge-Profil: WNS-Subscription erstellt und unmittelbar erfolgreich
+abgemeldet, unveränderter öffentlicher DEV-Schlüssel. Supabase-Anfragen
+waren in diesem Versuch blockiert; keine Backend-Registrierung und keine
+Nachricht wurden erzeugt. Eine vorherige unbeschränkte Diagnose wurde
+beendet, nachdem sie hängen blieb; nur der instrumentierte, zeitlich
+begrenzte Wiederholungsversuch lieferte diesen Erfolgsnachweis.
+Auch dieser kontrollierte Versuch ersetzt nicht das betroffene Profil:
+Der Projektverantwortliche meldet weiterhin einen Fehler nach erteilter
+Berechtigung, auch mit einem zusätzlichen normalen Profil.
+
 ### Korrektur ohne Datenbank- oder Versandänderung
 
 - Eigene Fehlercodes für fehlende Unterstützung, blockierte/fehlende
@@ -411,6 +423,23 @@ oder des unveränderten öffentlichen Schlüssels mit Edge.
   Versuch neu erstelltes Browser-Abonnement bereinigt, niemals ein vorher
   vorhandenes oder das eines anderen Geräts. Fehler bei der Bereinigung
   sind gesondert sichtbar.
+- Während der Aktivierung werden Berechtigung, Worker-Prüfung,
+  Abonnement-Abfrage/-Erstellung und Backend-Registrierung als zugänglicher
+  Live-Status angezeigt. Die Berechtigungsanzeige erklärt auch die stille
+  Edge-Anfrage über das Symbol in der Adressleiste.
+- Native Wartezeiten werden begrenzt: Berechtigung 30 Sekunden,
+  Worker-Abfrage 10 Sekunden, Abonnement-Abfrage 15 Sekunden und Erstellung
+  30 Sekunden. Das sind einzelne Browser-Timer, kein universeller
+  Backend- oder Gesamtzeitdeckel; ein suspendierter Browser kann Timer
+  verzögert ausführen. Zeitüberschreitungen geben die Oberfläche wieder
+  frei und erhalten sichere Diagnosecodes.
+- Native Push-Aufrufe sind nicht abbrechbar. Ein nach Timeout verspätet
+  erteiltes Recht oder erstelltes Abonnement startet keine versteckte
+  Backend-Registrierung, auch nicht nach Abmeldung. Ein verspätetes
+  lokales Abonnement wird nicht automatisch gelöscht, weil ein neuer
+  bewusster Versuch es inzwischen verwenden könnte. Es kann beim nächsten
+  ausdrücklichen Aktivieren wiederverwendet werden. Ohne bestätigte
+  Backend-Registrierung behauptet die App keine Aktivierung.
 
 Keine Migration, kein RLS-/Auth-Umbau, keine Änderung der Endpoint-Allowlist,
 keine VAPID-Rotation, kein Edge-Deployment und keine Änderung bestehender
@@ -434,11 +463,48 @@ npx.cmd playwright test --config playwright.auth.config.ts supabase-notification
 
 Diese Tests sind **synthetische Protokollregressionen in einem echten
 Browserprozess**, keine echten Push-Zustelltests und keine iOS-Emulation.
-Lokal erfolgreich: 27 Notification-Fälle in Chromium und dieselben
-27 Fälle im installierten Microsoft Edge; 184 Domain/Auth/Konfigurations-
-und 24 Skripttests. Die komplette DEV-Auswahl umfasst jetzt 128 Browserfälle.
+Die Notification-Auswahl umfasst jetzt 32 Fälle, die komplette
+DEV-Auswahl 133 Browserfälle. Zusätzlich abgedeckt sind exakte
+Zeitgrenzen mit angehaltener Testuhr, sichtbarer Fortschritt, verspätete
+Berechtigung, verspätete Subscription, bewusste Wiederverwendung und
+Abmeldung während einer verspäteten Browserantwort. Die bereits
+erfolgreichen 184 Domain/Auth/Konfigurations- und 24 Skripttests bleiben
+erhalten.
 Die bestehende CI prüft weiterhin Domain/Auth, Demo, komplette DEV-
 Browserregression, Static Export, Secret-Scanner und PostgreSQL/RLS.
+
+### Unterstützte Windows-Eingrenzung durch die Administration
+
+Microsoft dokumentiert ausdrücklich Umgebungen, in denen der
+Windows-WNS-Client keine Verbindung herstellen kann, der in Edge
+integrierte Client dagegen schon:
+[ForceBuiltInPushMessagingClient](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-policies/forcebuiltinpushmessagingclient).
+Diese Richtlinie ist unter Windows ab Edge 118 verfügbar. Ohne
+Konfiguration oder bei `Disabled` verwendet Edge den Windows-Client;
+`Enabled` verwendet den integrierten WNS-Client. Die Einstellung gilt
+nicht je Profil und erfordert einen vollständigen Browser-Neustart.
+Ein zusätzliches Profil allein testet diesen Unterschied daher nicht.
+
+Dies ist eine konkrete unterstützte Eingrenzung, **kein Nachweis der
+Ursache auf dem betroffenen Laptop und keine bereits angewandte Lösung**:
+
+1. Zuständige Administration prüft unter `edge://policy` den effektiven
+   Wert dieser einen Richtlinie und dokumentiert den Ausgangswert.
+   Keine vollständigen Richtlinienexporte mit internen Daten veröffentlichen.
+2. Nur mit ausdrücklicher Freigabe und über die zuständige
+   Geräteverwaltung einen kontrollierten Vergleich mit `Enabled`
+   durchführen. Keine eigenmächtige Registry-Änderung oder Umgehung
+   verwalteter Netz-/Sicherheitsregeln. Ungespeicherte Eingaben sichern,
+   Edge vollständig schließen und wieder öffnen.
+3. Einmal bewusst aktivieren, Diagnosecode notieren. Nur bei bestätigter
+   Geräte-Registrierung einmal den eigenen DEV-Test senden und echte
+   Anzeige/Klickziel prüfen. Bestehende iPhone-Registrierung belassen.
+4. Bei unverändertem Fehler den Ausgangszustand über dieselbe
+   Verwaltung wiederherstellen und die Windows-/WNS-Netzwerkdiagnose
+   durch die Administration fortsetzen.
+
+Die Entwicklung hat weder diese Richtlinie noch Windows-Dienste,
+Firewall, Proxy, vorhandene Profile oder laufende Benutzerbrowser verändert.
 
 Nach manuellem Merge ist auf dem betroffenen Laptop weiterhin erforderlich:
 
