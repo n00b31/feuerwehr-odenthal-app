@@ -4,15 +4,38 @@
 Feuerwehralarmierung. Zustellung ist browser-, geräte- und netzabhängig.
 Die unabhängige Demo wird nicht verändert.
 
-**Aktueller Abnahmestand:** PR #24 ist gemergt; iPhone-Aktivierung und
-tatsächlicher Empfang sind durch den Projektverantwortlichen bestätigt.
-Am 10.11.2026 bestätigt er außerdem Aktivierung und tatsächliche Test-Push-
-Anzeige unter Windows mit Edge auf einem nicht verwalteten Rechner.
-Der verwaltete Rechner bleibt eine separate, durch die IT einzugrenzende
-Störung. Weitere Abnahmepunkte werden dadurch nicht automatisch bestätigt.
-Der nachfolgende DEV-0.7-Installationsbericht
-ist historisch; die aktuelle Eingrenzung und der Hotfix stehen unter
-[DEV 0.7.1](#dev-071--edge-registrierung-und-fehlerdiagnose).
+**Aktueller Abnahmestand vom 10.11.2026: DEV 0.7 einschließlich
+DEV 0.7.1 und DEV 0.7.2 ist abgeschlossen und fachlich abgenommen.**
+Der Projektverantwortliche bestätigt die vollständige Sequenz auf einem
+echten iPhone 13 und einem nicht verwalteten Windows-11-Rechner mit Edge:
+Registrieren → Push empfangen → Deaktivieren → Reaktivieren → Push empfangen
+→ Entfernen → Neu registrieren → Push empfangen. Dies sind seine bestätigten
+manuellen Tests, keine zusätzlichen durch die Entwicklung ausgeführten
+Gerätetests. Die weiter unten historisch als offen bezeichneten
+Geräteabnahmen sind damit für diese Sequenz erledigt.
+
+PRs [#24](https://github.com/n00b31/feuerwehr-odenthal-app/pull/24),
+[#25](https://github.com/n00b31/feuerwehr-odenthal-app/pull/25) und
+[#26](https://github.com/n00b31/feuerwehr-odenthal-app/pull/26) sind gemergt.
+Abgenommener Main-Commit: `fa5659603c32b15c6ea7aed1d5653830cbbe11bc`.
+Der annotierte, auf GitHub veröffentlichte Tag **`v0.7.2-push-dev`**
+zeigt genau auf diesen Commit, nicht auf den späteren DEV-0.8-Branch.
+
+[Main-Pages-CI](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42801505605)
+und [Main-Datenbank-CI](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42801505294)
+sind erfolgreich. Der Deployment-Nachweis vergleicht alle **77 Dateien**
+mit dem tatsächlichen DEV-Artefakt. Öffentlich verifiziert:
+`DEV 0.7.2`, Build `fa5659603c32-df90ce64-07bf-4b01-8261-e38eb0b6a24d`,
+sauberer Quellstand und derselbe Commit.
+
+Read-only-Betriebsprüfung: Migration 039 unter Registry-Version
+`20261110102348`, Dispatcher Version 3 und Recovery Version 2 aktiv,
+Dispatcher bereit, genau ein vorhandener Scheduler mit erfolgreichem
+letztem Lauf. Keine erneute Installation oder Änderung der Infrastruktur.
+Die WNS-/Richtlinienblockade auf dem verwalteten Unternehmensgerät bleibt
+eine separate Umgebungsrestriktion der zuständigen IT, kein offener
+DEV-0.7-Implementierungsauftrag. Keine Alarmierungs- oder Zustellgarantie.
+Nächste Phase: [DEV 0.8](roadmap.md), mit gesonderter mobiler Abnahme.
 
 ## Analyse und Implementierungsplan
 
