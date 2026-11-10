@@ -624,6 +624,8 @@ Konten, Rollen, Schlüssel, Präferenzen oder Nachrichten.
   Endpoint wird nur der ausdrücklich ausgewählte eigene Datensatz
   transaktional ersetzt; Konflikte mit anderen Geräten werden abgewiesen.
   Bereits entfernte Identitäten werden nicht stillschweigend neu belebt.
+  Eine zwischenzeitlich entfernte Identität aktualisiert die Geräteliste
+  nach dem Backend-Fehler, ohne das native Abonnement zu löschen.
   Bei einem tatsächlich abgelaufenen Abonnement führt die konkrete
   Fehlermeldung zu Entfernen und bewusster Neuregistrierung.
 - „Gerät entfernen“ verlangt eine Bestätigung und löscht die eigene
@@ -650,6 +652,8 @@ Konten, Rollen, Schlüssel, Präferenzen oder Nachrichten.
   Ein anderer Tab könnte dieselbe native Subscription inzwischen
   erfolgreich gespeichert haben. Die tatsächliche Entfernung ist eine
   bewusste, bestätigte Benutzeraktion.
+  Beim Logout ist die endpointbasierte Abmeldung auch dann idempotent,
+  wenn ein anderes eigenes Gerät den Servereintrag bereits entfernt hat.
 - Testquoten bleiben unverändert: **einmal pro Minute, dreimal pro Stunde
   pro Konto, über alle Geräte gemeinsam**. Die UI erläutert das vor dem
   Test. Die API liefert sichere eindeutige Gründe für Quote, Inaktivität
@@ -695,6 +699,55 @@ Statusantworten; reale Browserprozesse einschließlich installiertem Edge
 machen diese APIs nicht zu physischen Push-Tests. Neue Fälle prüfen die
 mehrfache vollständige Sequenz, Bestätigung/Abbruch, anderes eigenes Gerät,
 Quoten und Anbieterfehler. Keine eigenständige iOS-Emulation.
+
+### Tatsächliche Prüfung und DEV-Installation vom 10.11.2026
+
+Für den Implementierungsstand `293ace94048e7f93383bb1ea0ff673209f3c0c86`
+sind beide vollständigen CI-Workflows erfolgreich:
+
+- [PostgreSQL, Upgrade, RLS, Crypto und echte Parallelität](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42797642481):
+  auch neuer Lifecycle-SQL-Test und alle drei überlappenden Gerätefälle
+  erfolgreich. Beim Upgrade bleiben bestehende Geräte, Schlüssel und
+  Profile erhalten.
+- [Domain/Auth, Demo, DEV-Browser und echter DEV-Export](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42797642531):
+  188 Domain/Auth/Konfigurations-, 24 Skript-, 19 Demo- und
+  141 synthetische DEV-Browserfälle erfolgreich; Static Export,
+  Typprüfung und Secret-Scanner erfolgreich. Keine neue Lint-Meldung;
+  vorhandene Hook-Warnung in `supabase-planning.tsx:65` unverändert.
+- Lokal zusätzlich **40/40** synthetische Notification-Fälle im
+  installierten Microsoft Edge erfolgreich, einschließlich Apple-/WNS-
+  Lebenszyklus und konkurrierender Entfernung vor Reaktivierung.
+  Diese Browserfälle verwenden keine echten Supabase- oder Push-Dienste.
+
+Die erste neue SQL-Fixture überschritt selbst das unveränderte
+Minutenlimit: Eine künstlich eingefügte alte Lease hatte ein frisches
+Test-Nachrichtendatum. Nur diese synthetischen Testzeiten wurden korrigiert;
+die produktive Quote wurde nicht abgeschwächt.
+
+Die MCP-Migrationsbestätigung wurde vom Client sofort abgebrochen, ohne
+SQL auszuführen. Anschließend hat der Projektverantwortliche die
+Installation über die bereits angemeldete Supabase-CLI ausdrücklich
+freigegeben. Ausschließlich
+`orxinqhhbtjpkzwlfaxq` wurde aktualisiert:
+
+| Nachweis | Tatsächlicher Stand |
+|---|---|
+| Migration | `ff_039_push_device_lifecycle`, Registry-Version `20261110102348` |
+| SHA-256 der normalisierten Migrationsquelle | `a042e954854c449390c671f73f9c3c8ac0c97dc2aacd27b0a6f99af33447eb7d` |
+| Funktionsabgleich | Alle neun installierten Funktionskörper stimmen exakt mit der geprüften Quelle überein |
+| Originalschutz | Geräte einschließlich Schlüssel, Profile, Rollen, Präferenzen und Auth-Kontometadaten innerhalb derselben Transaktion unverändert; andernfalls vollständiger Rollback |
+| Aggregierte Inventur danach | Sieben Geräte, davon drei aktiv; 61 Profile und elf Auth-Konten wie zuvor |
+| Edge Function | `push-dispatch`, Version 3, aktiv; `password-recovery`, Version 2, unverändert |
+| Betrieb | Dispatcher bereit; genau ein bestehender Scheduler, letzter Lauf erfolgreich |
+| Zugriff | Nicht autorisierter gültiger Test-Request: HTTP 401; anonyme Entfernung und Client-Zugriff auf Versandclaims/Readiness nicht erlaubt |
+
+Die Installation verwendete kurze Sperr-/Statement-Zeitlimits und
+temporäre Originalvergleiche ausschließlich in der Datenbank. Keine
+Originalwerte oder Secrets wurden ausgegeben. Kein neuer Scheduler,
+keine Rotation oder Änderung bestehender VAPID-/Cron-Secrets, keine
+Änderung bestehender Geräte durch die Installation. Es wurden **keine
+echten Test-Pushs oder Testmails** durch die Entwicklung versandt.
+Die neue Oberfläche bleibt bis zum manuellen PR-Merge unveröffentlicht.
 
 ### Manuelle Abnahme nach Merge – ausdrücklich offen
 
