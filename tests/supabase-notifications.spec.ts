@@ -14,7 +14,7 @@ type BrowserPushState={requests:number;gesture:boolean;subscribed:boolean;unsubs
   finishPermission:(()=>void)|null;finishSubscription:(()=>void)|null};
 async function connect(page:Page,options:{support?:boolean;denied?:boolean;linked?:boolean;global?:boolean;guestPush?:boolean;
   provider?:"windows"|"apple";existing?:boolean;otherDevice?:boolean;invalidKey?:boolean}={}){
-  const state={calls:[] as string[],revoked:false,fail:false,registerFail:false,tests:0,testError:"",
+  const state={calls:[] as string[],revoked:false,fail:false,registerFail:false,reactivateRemoved:false,tests:0,testError:"",
     testStatus:"accepted",testReason:null as string|null,snapshot:{
     actor_id:actor,unread:1,notices:[{id:notice,source_kind:"event",target_id:event,event_type:"event_created",category:"services",
       title:"Neuer Übungsdienst",message:"Synthetic notification practice",created_at:date,read_at:null,
@@ -114,6 +114,10 @@ async function connect(page:Page,options:{support?:boolean;denied?:boolean;linke
     if(path.endsWith("ff_push_test_status"))return respond({status:state.testStatus,reason:state.testReason});
     if(path.endsWith("ff_push_register") || path.endsWith("ff_push_reactivate")){
       expect(request.postDataJSON().subscription.endpoint).toContain("synthetic-browser");
+      if(path.endsWith("ff_push_reactivate") && state.reactivateRemoved){
+        state.snapshot.devices=state.snapshot.devices.filter(row=>row.id!==device);
+        return respond({code:"PT404",message:"device_unavailable"},404);
+      }
       if(state.registerFail)return respond({code:"42501",message:"SYNTHETIC_DO_NOT_LOG https://invalid.example/private-token"},403);
       state.snapshot.preferences.push_enabled=true;state.snapshot.devices=[...state.snapshot.devices.filter(row=>row.id!==device),
         {id:device,device_name:request.postDataJSON().device_name,
@@ -453,5 +457,17 @@ test("removing another own device never unsubscribes this browser",async({page})
   await page.getByRole("article").filter({hasText:"Existing iPhone PWA"}).getByRole("button",{name:"Gerät entfernen",exact:true}).click();
   await expect(page.getByText("Eigenes Gerät dauerhaft entfernt.",{exact:true})).toBeVisible();
   expect(state.snapshot.devices).toHaveLength(1);expect(state.snapshot.devices[0].id).toBe(device);
+  expect((await browserState(page)).unsubscribed).toBe(0);
+});
+test("concurrently removed identity fails reactivation and refreshes the list without deleting the native subscription",async({page})=>{
+  const state=await connect(page);
+  await page.getByRole("button",{name:"Push-Benachrichtigungen aktivieren",exact:true}).click();
+  await expect(page.getByText("Push-Status: Aktiviert",{exact:true})).toBeVisible();
+  await page.getByRole("button",{name:"Push auf diesem Gerät deaktivieren",exact:true}).click();
+  await expect(page.getByText("Push-Status: Deaktiviert",{exact:true})).toBeVisible();
+  state.reactivateRemoved=true;
+  await page.getByRole("button",{name:"Gerät reaktivieren",exact:true}).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("device_unavailable");
+  await expect(page.getByText("Noch kein Gerät registriert.",{exact:true})).toBeVisible();
   expect((await browserState(page)).unsubscribed).toBe(0);
 });

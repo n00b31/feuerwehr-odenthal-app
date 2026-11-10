@@ -35,6 +35,8 @@ begin
   perform pg_advisory_xact_lock(hashtextextended('push-owner:'||auth.uid(),0));
   select s.id into selected_device from public.push_subscriptions s where s.user_id=auth.uid()
     and (s.id=device_id or s.endpoint=ff_push_deactivate.endpoint) for update;
+  -- Logout can encounter a subscription whose server record was removed from another device.
+  if selected_device is null and endpoint is not null then return; end if;
   perform ff_private.require_rule(selected_device is not null,'Eigenes Gerät nicht verfügbar.');
   update public.push_subscriptions set active=false where id=selected_device;
   perform ff_private.write_audit('push_device_deactivated',null,auth.uid(),null,jsonb_build_object('device_id',selected_device));

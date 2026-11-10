@@ -99,7 +99,7 @@ export function SupabaseNotifications({client,actorId,onPushBusy}:{client:Supaba
     catch(cause){
       if(stage.current)setRegistrationFailed(true);
       setPermission(pushSupport()?Notification.permission:"unsupported");
-      if(stage.current)setError(notificationError(cause));
+      if(stage.current && stage.current!=="backend")setError(notificationError(cause));
       else try { await reload();setError(notificationError(cause)); }
       catch(refreshError){setError(`${notificationError(cause)} Aktualisierung fehlgeschlagen: ${notificationError(refreshError)}`);}
     }

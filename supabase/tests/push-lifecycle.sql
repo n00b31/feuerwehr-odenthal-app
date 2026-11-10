@@ -72,6 +72,9 @@ set local role authenticated;
 select pg_temp.l_ok(public.ff_push_test_status(current_setting('l.test2')::uuid)->>'status'='accepted','test after reactivation is accepted');
 select public.ff_push_remove(current_setting('l.one')::uuid);
 select pg_temp.l_ok(not exists(select 1 from public.push_subscriptions where id=current_setting('l.one')::uuid),'permanent removal hides and deletes device');
+select public.ff_push_deactivate(null,'https://wns2-am3p.notify.windows.com/lifecycle-one');
+select pg_temp.l_ok(exists(select 1 from public.push_subscriptions where id=current_setting('l.two')::uuid and active),
+ 'logout after remote removal is idempotent and preserves the other device');
 do $$ begin perform public.ff_push_reactivate(current_setting('l.one')::uuid,pg_temp.l_subscription('lifecycle-one'),'Removed');
  raise exception 'FAIL: removed identity resurrected'; exception when sqlstate 'PT404' then raise notice 'PASS: stale reactivation denied'; end $$;
 select set_config('l.new',public.ff_push_register(pg_temp.l_subscription('lifecycle-one'),'New Edge')::text,true);
