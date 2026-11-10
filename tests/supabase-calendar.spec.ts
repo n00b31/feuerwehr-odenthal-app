@@ -1,7 +1,9 @@
 import { test,expect,type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import {emptyInbox} from "./notification-fixture";
 import { publicPath } from "../src/config/app";
 import { calendarPayloadSchema,type CalendarEvent,type CalendarContext } from "../src/domain/calendar";
+test.use({viewport:{width:1280,height:900}});
 
 const api="https://syntheticci.supabase.co";
 const actor="a0500000-0000-4000-8000-000000000001";
@@ -102,6 +104,7 @@ async function connect(page:Page,role:"global"|"unit"|"member"="global",stations
       roles:global ? ["MEMBER","GLOBAL_ADMIN"] : admin ? ["MEMBER","UNIT_ADMIN"] : ["MEMBER"]});
     if(pathname.endsWith("/units")) return respond(context.units);
     if(pathname.endsWith("/document_areas") || pathname.endsWith("/ff_pending_registrations")) return respond([]);
+    if(pathname.endsWith("/ff_notifications"))return respond(emptyInbox(actor));
     if(pathname.endsWith("/ff_calendar_context")) return respond(context);
     if(pathname.endsWith("/ff_events_page")) {
       state.serviceQueries++;
@@ -165,6 +168,7 @@ async function connect(page:Page,role:"global"|"unit"|"member"="global",stations
   await page.getByRole("button",{name:"Anmelden",exact:true}).click();
   await page.getByRole("button",{name:"Gemeinsamer Kalender",exact:true}).click();
   await expect(page.getByRole("heading",{name:"Gemeinsamer Feuerwehrkalender"})).toBeVisible();
+  if((page.viewportSize()?.width??1440)<768)await page.getByRole("button",{name:"Monat",exact:true}).click();
   await expect(page.locator(".calendar-chip").filter({hasText:"Synthetic existing service"})).toHaveCount(1);
   return state;
 }
@@ -364,6 +368,7 @@ test("service opens existing editor and closes calendar modal without duplicate 
 });
 
 test("calendar remains accessible in mobile light and desktop dark layouts",async({page})=>{
+  await page.setViewportSize({width:390,height:844});
   await connect(page);
   await expect(page.getByRole("navigation",{name:"Mobile Navigation"})).toBeVisible();
   await expect(page.locator(".calendar-month")).toBeVisible();

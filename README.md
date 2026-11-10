@@ -8,11 +8,14 @@ Main-CI und Pages-Abgleich aller 77 Dateien erfolgreich.
 [Abnahme und Betriebsnachweis](docs/dev-notifications.md).
 [Roadmap](docs/roadmap.md).
 
-**DEV 0.8 – Mobile UI & UX Redesign:** Kompakte mobile Navigation,
-Terminkarten und Detail-/Filterdialoge; Desktop und Startseite bleiben erhalten.
+**DEV 0.8.1 – Mobile UX Refinement · In Prüfung:** Gemeinsamer kompakter
+Header auch auf Start, Vorschau der bestehenden Inbox, einheitliche mobile
+Profil-/Mehr-Navigation, nächste fünf Kalendertermine und Dienstbuch nur unter
+Statistik. Die notwendige additive Lese-RPC 040 muss vor Frontend-Deployment
+nach Review im DEV installiert werden; kein automatischer Merge oder Tag.
 [Umsetzung, Grenzen und manuelle Abnahme](docs/dev-mobile-ui.md).
-Separater Review ohne automatischen Merge; die physische iPhone-13-Abnahme
-dieser UI-Version steht noch aus.
+DEV 0.8 wurde mit PR #27 gemergt und auf iPhone 13 weitgehend erfolgreich
+abgenommen. Die erneute physische Abnahme von DEV 0.8.1 steht noch aus.
 
 **DEV 0.7.2:** Vollständiger eigener Push-Geräte-Lebenszyklus
 mit bestätigtem Entfernen, gezielter Reaktivierung und sicherer Entwertung

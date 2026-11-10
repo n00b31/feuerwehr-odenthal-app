@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import {emptyInbox} from "./notification-fixture";
 import { publicPath } from "../src/config/app";
 import type { DashboardData } from "../src/domain/dashboard";
 import type { DevResponse } from "../src/domain/dev-events";
@@ -58,6 +59,8 @@ async function connect(page: Page, role: Role = "MEMBER", change?: (data: Dashbo
       unit_id: state.blocked ? null : unit, unit_name: state.blocked ? null : "Scheuren",
       roles: role === "combined" ? ["MEMBER", "UNIT_ADMIN", "FUNCTION_ADMIN", "GLOBAL_ADMIN"]
         : role === "vehicle" ? ["MEMBER"] : ["MEMBER", ...role === "MEMBER" ? [] : [role]] });
+    if(path.endsWith("/ff_notifications"))return state.blocked
+      ?respond({code:"42501",message:"Synthetic account suspended"},403):respond(emptyInbox(actor));
     if (path.endsWith("/ff_dashboard")) return state.fail
       ? respond({ code: "42501", message: "Synthetic cockpit scope denied" }, 403) : respond(state.data);
     if (path.endsWith("/ff_set_response")) {
@@ -103,7 +106,7 @@ test("personal cockpit uses authenticated identity, small data and canonical dut
   await expect(page.locator(".cockpit-open")).toContainText("7 Rückmeldungen offen");
   await expect(page.locator(".cockpit-open li")).toHaveCount(3);
   await expect(page.locator(".dev-list-filters")).toHaveCount(0);
-  expect(state.calls.filter(path => path.startsWith("/rest/")).every(path => /ff_my_access|ff_dashboard/.test(path))).toBe(true);
+  expect(state.calls.filter(path => path.startsWith("/rest/")).every(path => /ff_my_access|ff_dashboard|ff_notifications/.test(path))).toBe(true);
 });
 test("cockpit attendance task opens the server-scoped attendance filter rather than a single target",async({page})=>{
   await connect(page,"GLOBAL_ADMIN");
@@ -202,7 +205,7 @@ test("information deep link opens the retained calendar detail outside the displ
     organization: false, configure: false, units: state.data.units, manageable_units: [], functions: [],
     organizers: [{ id: actor, name: "Alex Synthetic" }], categories: [], resources: [],
   } }));
-  await page.context().route(`${api}/rest/v1/rpc/ff_calendar_page`, route => {
+  await page.context().route(`${api}/rest/v1/rpc/ff_calendar_{page,upcoming}`, route => {
     retainedQueries.push(route.request().postDataJSON().retained_ids);
     return route.fulfill({ json: { server_now: state.data.server_now, next_cursor: null, events: [],
       retained_events: [{ ...item, description: "Synthetic retained information", location: "Synthetic station",

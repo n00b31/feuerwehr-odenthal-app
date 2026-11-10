@@ -74,7 +74,7 @@ export function SupabaseDashboard({ client, access }: { client: SupabaseClient; 
     { href: "/termine/", label: "Termine", icon: CalendarDays },
     { href: "/termine/?bereich=kalender", label: "Gemeinsamer Kalender", icon: CalendarDays },
     ...(snapshot?.vehicles_visible ? [{ href: "/termine/?bereich=fahrzeuge", label: "Fahrzeugkalender", icon: Truck }] : []),
-    { href: "/profil/", label: "Mein Dienstbuch", icon: FileText },
+    { href: "/statistik/#dienstbuch", label: "Mein Dienstbuch", icon: FileText },
     { href: "/dokumente/", label: "Dokumente", icon: FileText },
   ];
   return <div className="cockpit">
@@ -136,7 +136,7 @@ export function SupabaseDashboard({ client, access }: { client: SupabaseClient; 
             <div><dt>Ausbildungsstunden</dt><dd>{reportNumber(snapshot.statistics.training_hours)}<small> h</small></dd></div>
             <div><dt>Anwesenheitsquote</dt><dd className={snapshot.statistics.rate === null ? "cockpit-rate-empty" : ""}>{reportRate(snapshot.statistics.rate)}</dd></div></dl>}
         <p className="muted text-sm">Nur abgeschlossene, bestätigte Anwesenheitslisten · zentrale Dienstbuchauswertung.</p>
-        <Link className="cockpit-inline-link" href="/profil/">Mein Dienstbuch öffnen <ArrowUpRight size={17} /></Link>
+        <Link className="cockpit-inline-link" href="/statistik/#dienstbuch">Mein Dienstbuch öffnen <ArrowUpRight size={17} /></Link>
       </CockpitSection>
       <CockpitSection id="vehicles" title="Meine Fahrzeugreservierungen" className="cockpit-vehicles">
         {snapshot.reservations.length ? <ul className="cockpit-list">{snapshot.reservations.map(item => <li key={item.id}>

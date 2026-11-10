@@ -1,5 +1,6 @@
 import {test,expect,type Page} from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import {emptyInbox} from "./notification-fixture";
 import {publicPath} from "../src/config/app";
 import {seriesDates,CSV_HEADERS,type PlanRequest,type PlannedEvent} from "../src/domain/event-planning";
 
@@ -36,6 +37,7 @@ async function connect(page:Page,role:"global"|"unit"|"member"="global"){
     if(pathname==="/auth/v1/user")return respond(user);
     if(pathname.endsWith("/ff_my_access"))return respond({user_id:actor,display_name:"Synthetic Planning",account_status:"approved",
       access_granted:true,unit_id:unit,unit_name:"Scheuren",roles:global ? ["MEMBER","GLOBAL_ADMIN"] : admin ? ["MEMBER","UNIT_ADMIN"] : ["MEMBER"]});
+    if(pathname.endsWith("/ff_notifications"))return respond(emptyInbox(actor));
     if(pathname.endsWith("/units"))return respond(units.map(({id,name})=>({id,name})));
     if(pathname.endsWith("/document_areas") || pathname.endsWith("/ff_pending_registrations"))return respond([]);
     if(pathname.endsWith("/ff_events_page"))return respond({server_now:now,manageable_units:units.filter(u=>u.manageable),

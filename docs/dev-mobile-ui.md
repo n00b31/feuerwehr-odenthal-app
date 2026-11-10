@@ -1,4 +1,149 @@
-# DEV 0.8 – Mobile UI & UX Redesign
+# Mobile UI: DEV 0.8 und DEV 0.8.1
+
+## DEV 0.8.1 – Mobile UX Refinement · In Prüfung
+
+PR #27 / DEV 0.8 wurde gemergt; der Projektverantwortliche hat die weitgehend
+erfolgreiche iPhone-13-Abnahme und die fünf folgenden Verfeinerungen bestätigt.
+DEV 0.8.1 bleibt bis zur erneuten manuellen Abnahme **In Prüfung**.
+Kein automatischer Merge, kein Release-Tag vor Abnahme und kein Beginn von DEV 0.9.
+
+1. **Gemeinsamer Header:** Die vorhandene kompakte Kopfzeile gilt nun auch auf
+   Start. Dieselbe Komponente, unveränderte Brand-Assets, Glocke und Theme;
+   mobile Abmeldung weiterhin im Profil. Die zusätzlichen `.compact-shell`-Regeln
+   betreffen auf Start nur Header, Navigation und deren Dialoge. Die
+   `.mobile-workspace`-Inhaltsregeln bleiben dort ausdrücklich deaktiviert.
+   Cockpit-Kacheln, Inhalte und fachliche Abfragen sind unverändert; lediglich
+   die beiden Dienstbuch-Linkziele führen nun zur bestehenden Statistik.
+2. **Glockenvorschau:** Maximal fünf neueste berechtigte Inbox-Nachrichten,
+   Symbol, Titel, zweizeilige Kurzbeschreibung, Berliner Datum/Uhrzeit und
+   Gelesen-Status. Smartphone: natives Bottom Sheet; Desktop: kompakter Dialog
+   nahe der Glocke. Escape, Außenklick, Schließen und Fokus-Rückgabe verwenden
+   `AppDialog`. Leere Inbox und ausschließlich gelesene Inbox sind unterscheidbar.
+   „Alle Benachrichtigungen“ und „Einstellungen“ führen zu den jeweiligen
+   Profilankern. Die vorhandene `openNotice`-Logik prüft den Eintrag erneut
+   serverseitig, markiert ihn wie bisher gelesen und öffnet ausschließlich die
+   bisherigen validierten Direktziele. Entfallene Ziele werden erklärt.
+3. **Einheitliche Navigation:** Start, Termine, Dokumente, Profil, Mehr auf
+   allen mobilen Seiten. Statistik sowie berechtigte Administration unter Mehr.
+   Diese Zuordnung war auf den DEV-0.8-Modulseiten bereits vorhanden; sie wird
+   nicht invertiert, sondern konsistent auch auf Start verwendet.
+   Routen, Browser-Zurück und Desktop-Navigation bleiben erhalten.
+4. **Kalender:** Unter 768 Pixel standardmäßig die maximal fünf nächsten
+   laufenden oder zukünftigen Einträge, sortiert nach Beginn/ID. Bereits
+   beendete Termine sind ausgeschlossen. „Weitere Termine anzeigen“ erweitert
+   um fünf. Ab 768 Pixel bleibt Monat der Standard. Bewusste Monat-/Woche-/
+   Listenwahl wird ausschließlich in `sessionStorage` getrennt nach App-Pfad,
+   Benutzer und Mobil/Desktop gespeichert, nicht global oder dauerhaft.
+   Fehlender Sitzungsspeicher wird angezeigt. Bestehende Filter, Berlin-/DST-
+   Hilfen, Terminserien und Detail-/Bearbeitungsabläufe bleiben erhalten.
+5. **Dienstbuch:** Nur noch die bestehende `SupabaseReports` unter Statistik;
+   keine Kopie mehr im Profil, keine geänderten Auswertungen oder Daten.
+   Profil, Push-Geräte, Kontoeinstellungen und persönliche Funktionen bleiben.
+   Alte Profilanker `#dienstbuch`, `#dutybook`, `#diensthistorie` führen per
+   Router-Replace zu `/statistik/#dienstbuch`; beide Cockpit-Verweise zeigen
+   ebenfalls dorthin. Ein bloßes `/profil/` bleibt das
+   Profil und wird nicht irreführend umgeleitet.
+
+### Gemeinsame Inbox und Aktualisierung
+
+`NotificationProvider` verwendet die vorhandene `ff_notifications`-RPC mit
+Identitätsprüfung. Header und vollständige Inbox teilen denselben Stand und
+genau einen vorhandenen 60-Sekunden-Aktualisierungstakt, ergänzt um Fokus,
+Tab-Sichtbarkeit und `ff-notifications-changed`. Kein zweiter Inbox-Timer,
+keine neue Nachrichten- oder Push-Verwaltung. Der Badge verwendet die gesamte
+serverseitige Ungelesen-Anzahl, nicht nur die fünf Vorschauzeilen.
+Bei Benutzer-/Freigabewechsel wird der Kontext neu aufgebaut; veraltete
+Antworten werden verworfen. Unbestätigte Profile erhalten keine Inbox-Abfrage.
+Dabei werden nur die Inbox-Daten verworfen, nicht die Anwendung neu gemountet:
+eine im abgemeldeten Zustand empfangene opaque Push-Nachrichten-ID bleibt bis
+zur geprüften Anmeldung und zum bewussten Öffnen erhalten.
+Ungespeicherte Präferenzen werden durch Aktualisierungen nicht überschrieben.
+Native Subscription-Abfragen bleiben im bestehenden Profil-/Geräteablauf;
+die Glocke fragt weder Push-Berechtigung noch Subscription an.
+
+### Erforderliche additive Lese-RPC und Rollout-Reihenfolge
+
+Die bisherigen `ff_calendar_page` / `ff_calendar_vehicle_page` sind bewusst
+auf 42 volle Berliner Tage begrenzt. Sie können die kalenderweit nächsten fünf
+Einträge bei größeren Abständen nicht mit einer einzelnen Abfrage liefern.
+Migration `20261110004000_calendar_upcoming.sql` ergänzt deshalb ausschließlich
+die lesende `ff_calendar_upcoming`: bestehende `can_view_event`- und
+`calendar_summary`-Prüfungen, aktive Freigabe, dieselben Filter und ausschließlich
+verbindliche Fahrzeugvorgänge; kein Zugriff für `anon` oder `PUBLIC`.
+Keine Tabelle, Mitgliedschaft, Rolle, Nachricht oder Termindaten werden geändert.
+Es gibt keinen stillen Ersatz durch eine unvollständige Monatsliste.
+
+**Vor einem Merge mit Frontend-Deployment:** Migration 040 nach Review im
+Supabase-DEV installieren und die mobile Liste prüfen. Dieser UI-Auftrag
+installiert nichts automatisch im gehosteten Projekt. Ohne RPC erscheint eine
+explizite Einrichtungsfehlermeldung; die bisherige Monatsansicht bleibt bewusst
+auswählbar. Kein Dispatcher-, Auth-, Service-Worker- oder Cloud-Konfigurationsrollout.
+
+Die mobile Vorschau ist auf 400 Einträge begrenzt, analog zur vorhandenen
+Kalenderseitengröße. Bei weiteren Treffern führt die deutlich benannte Aktion
+in den vollständigen navigierbaren Kalender; spätere Termine bleiben darüber
+erreichbar. Laufende mehrtägige Termine werden einmal gezeigt, nicht pro Tag
+dupliziert. Serverzeit entscheidet über „beendet“, Berlin nur über die Anzeige.
+
+### Automatisierte Prüfung und manuelle Abnahme DEV 0.8.1
+
+Die ergänzte Suite prüft 320/375/390/430/768/1440 Pixel in beiden Themes,
+Header-Gleichheit auf Start/Modulen, fünf sortierte Vorschauzeilen,
+Gelesen-Status, Dialogschließen/Fokus, Theme, Navigation und Kalenderstandard.
+Weitere Fälle prüfen echte SDK-Aufrufparameter, Nachladen über Monatsgrenzen,
+getrennte Sitzungswahl und explizite Fehler bei fehlender RPC oder gesperrtem
+Sitzungsspeicher, Inbox-/Einstellungsanker, gelesene/leere Inbox,
+entfallene Ziele, falsche Antwortidentität, Dienstbuch und alte Profilanker.
+SQL-Tests prüfen die zusätzliche RPC mit echten serverseitigen Berechtigungen
+im wegwerfbaren CI-PostgreSQL. Die übrigen Browserfälle sind abgefangene
+Protokollsimulationen, keine echte iPhone- oder Push-Zustellprüfung.
+Screenshots `081-*` werden im vorhandenen CI-Artefakt gesammelt.
+Der optionale Pixelvergleich erfasst jetzt nur das unveränderte Cockpit;
+Header und Navigation sind ausdrücklich Gegenstand der Verfeinerung.
+
+Verifizierter Prüfstand für PR #28:
+
+| Prüfung | Ergebnis |
+|---|---|
+| Domain/Auth/Config und Skripte | 189 + 24 erfolgreich |
+| DEV-Browser, einschließlich 18 neuer Refinement-Fälle | 178 erfolgreich |
+| Bestehende Demo-Browserfälle im isolierten CI-Build | 19 erfolgreich; unabhängiges Demo-Repository unverändert |
+| PostgreSQL 17 / RLS / Upgrade / geschützte Edge-Funktionen | Erfolgreich, einschließlich Migration 040 |
+| TypeScript, Lint, Static Export und DEV-Exportscanner | Erfolgreich; nur die bestehende Lint-Warnung `supabase-planning.tsx:65` |
+| Optionaler lokaler Cockpit-Pixelvergleich mit veröffentlichtem DEV 0.8 | Identisch, nach Ausschluss der absichtlich geänderten Header-/Navigationsgeometrie |
+
+Die vollständigen grünen Läufe des Implementierungsstands `e7ba5dd` sind
+[UI/Export](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42833692194)
+und [DB/Upgrade](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42833692151).
+Die aktuellen Checks und acht Light-/Dark-Bildpaare stehen in
+[PR #28](https://github.com/n00b31/feuerwehr-odenthal-app/pull/28).
+Der lokale Pixelvergleich verwendet das tatsächliche DEV-0.8-Pages-Artefakt
+von Commit `3441b31e93efba45257a084b72a33cd041e8056c`; die Cockpit-PNGs
+werden beim optionalen Lauf als Vergleichsnachweise gesichert.
+
+Auf echtem iPhone 13 / Safari und installierter PWA nach Review prüfen:
+
+1. Start und Module: gleiche Kopfzeile, Branding, Theme, Safe Areas, keine
+   verdeckten Aktionen; Cockpit-Inhalte mit DEV 0.8 vergleichen.
+2. Glocke mit leerer, gelesener und ungelesener Inbox: maximal fünf Einträge,
+   aktuelle Zahl, keine Navigation beim bloßen Öffnen; alle Schließwege.
+3. Dienst-, Anwesenheits-, Fahrzeug- und administrative Direktziele sowie einen
+   inzwischen entfallenen Vorgang mit ausdrücklich autorisierten Testdaten.
+4. Alle Benachrichtigungen, Einstellungen und unveränderte Push-Geräteverwaltung.
+   Echten Push nur bewusst mit eigenem autorisiertem Gerät auslösen.
+5. Profil direkt, Statistik unter Mehr, rollenabhängige Administration,
+   aktive Markierung, Browser-Zurück und alte Dienstbuch-Bookmarks.
+6. Mobile nächste fünf, laufender/weit entfernter Termin, weitere Einträge,
+   Filter und Details; Monatswahl nach Navigation erhalten.
+7. Tablet/Desktop: Monat als eigener Standard, unabhängige Ansichtswahl,
+   Sidebar und bestehende Kalender-/Dienstfunktionen.
+8. Dienstbuch-Daten, Teilnahme, Anwesenheitsabschluss und beide Themes prüfen.
+
+### Historische Dokumentation DEV 0.8
+
+Die folgenden Abschnitte beschreiben den ursprünglichen DEV-0.8-Umfang.
+Die oben dokumentierten DEV-0.8.1-Anpassungen ersetzen insbesondere die damalige
+Ausnahme für Header/Navigation auf Start und die doppelte Dienstbuchdarstellung.
 
 ## Ziel und Grenzen
 

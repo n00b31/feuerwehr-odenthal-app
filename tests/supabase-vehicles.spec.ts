@@ -1,5 +1,6 @@
 import {test,expect,type Page} from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import {emptyInbox} from "./notification-fixture";
 import {publicPath} from "../src/config/app";
 import {vehicleRequestSchema,vehicleInputSchema,vehicleWorkspaceSchema,type VehicleReservation,type Vehicle} from "../src/domain/vehicles";
 
@@ -41,6 +42,7 @@ async function connect(page:Page,role:"global"|"member"|"manager"|"chief"|"unit"
     if(path.endsWith("/ff_my_access"))return respond({user_id:actor,display_name:"Synthetic Vehicles",account_status:"approved",
       access_granted:true,unit_id:unit,unit_name:"Scheuren",roles:global ? ["MEMBER","GLOBAL_ADMIN"] : role==="chief" ? ["MEMBER","FIRE_CHIEF"] :
         role==="unit" ? ["MEMBER","UNIT_ADMIN"] : role==="function" ? ["MEMBER","FUNCTION_ADMIN"] : ["MEMBER"]});
+    if(path.endsWith("/ff_notifications"))return respond(emptyInbox(actor));
     if(path.endsWith("/units"))return respond(context.units);
     if(path.endsWith("/document_areas") || path.endsWith("/ff_pending_registrations"))return respond([]);
     if(path.endsWith("/ff_events_page"))return respond({server_now:now,manageable_units:context.manageable_units,events:[],retained_events:[],has_more:false,next_cursor:null});
@@ -130,6 +132,7 @@ test("assigned manager approves, opens canonical shared-calendar detail and canc
   await expect(page.getByRole("dialog").getByText("✓ Genehmigt",{exact:true})).toBeVisible();
   await page.getByRole("button",{name:"Dialog schließen"}).click();
   await page.getByRole("button",{name:"Gemeinsamer Kalender",exact:true}).click();
+  await page.getByRole("button",{name:"Monat",exact:true}).click();
   await page.getByRole("button",{name:"Kalender aktualisieren",exact:true}).click();
   await page.locator(".calendar > .calendar-month .calendar-chip").filter({hasText:"Synthetic approval task"}).click();
   await page.getByRole("button",{name:"Reservierungsdetails öffnen",exact:true}).click();

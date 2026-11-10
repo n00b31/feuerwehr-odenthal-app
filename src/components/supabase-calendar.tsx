@@ -5,11 +5,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { CalendarDays,ChevronLeft,ChevronRight,Plus,RefreshCw } from "lucide-react";
 import { readCalendar,saveCalendarEvent,changeCalendarEvent,calendarConflicts,saveCalendarResource,saveCalendarCategory } from "@/data/supabase-calendar";
 import { calendarDateSchema,calendarDraft,calendarInterval,calendarKindSchema,calendarPayload,calendarRange,calendarTime,eventsOnDay,
-  moveCalendar,weekColumns,emptyCalendarFilters,calendarBookingResources,preferredCalendarResource,type CalendarView,type CalendarDraft,type CalendarEvent,
+  moveCalendar,weekColumns,emptyCalendarFilters,calendarBookingResources,preferredCalendarResource,type CalendarDraft,type CalendarEvent,
   type CalendarContext,type CalendarFilters,type CalendarConflict } from "@/domain/calendar";
 import { berlinParts,dateLabel } from "@/domain/time";
 import { eventErrorMessage,responsePresentation } from "@/domain/dev-events";
 import { AppDialog } from "./app-dialog";
+import { useCalendarView } from "./calendar-view";
 
 type Snapshot=Awaited<ReturnType<typeof readCalendar>>;
 type Editor={event?:CalendarEvent; draft:CalendarDraft};
@@ -27,7 +28,9 @@ export function SupabaseCalendar({client,actorId,preferredUnit,initialTime,openS
   initialEventId?:string|null;
 }) {
   const [date,setDate]=useState(()=>berlinParts(initialTime).date);
-  const [view,setView]=useState<CalendarView>("month");
+  const {view,choose:setView,mobile,error:viewError}=useCalendarView(actorId);
+  const [upcomingLimit,setUpcomingLimit]=useState(5);
+  const upcoming=mobile && view==="list";
   const [filters,setFilters]=useState<CalendarFilters>(emptyCalendarFilters);
   const [snapshot,setSnapshot]=useState<Snapshot|null>(null);
   const [editor,setEditor]=useState<Editor|null>(null);
@@ -45,7 +48,7 @@ export function SupabaseCalendar({client,actorId,preferredUnit,initialTime,openS
     const version=++epoch.current.value;
     try {
       const bounds=calendarRange(date,view);
-      const result=await readCalendar(client,bounds,filters,retained.current);
+      const result=await readCalendar(client,bounds,filters,retained.current,upcoming?upcomingLimit:undefined);
       if(version!==epoch.current.value) return;
       setSnapshot(result); setError("");
       if(retained.current.length && ![...result.events,...result.retained_events].some((e)=>e.id===retained.current[0])) {
@@ -53,9 +56,10 @@ export function SupabaseCalendar({client,actorId,preferredUnit,initialTime,openS
       }
     } catch(cause) {
       if(version!==epoch.current.value) return;
-      setSnapshot(null); setSelected(null); setError(errorMessage(cause));
+      setSnapshot(null); setSelected(null); setError(upcoming && cause && typeof cause==="object" && "code" in cause && cause.code==="PGRST202"
+        ?"Die mobile Terminliste benötigt die geprüfte DEV-Migration 040. Bis zur Installation bleibt die Monatsansicht über „Monat“ erreichbar.":errorMessage(cause));
     }
-  },[client,date,view,filters]);
+  },[client,date,view,filters,upcoming,upcomingLimit]);
   useEffect(()=>{
     if(initialEventId===observedLink.current)return;
     observedLink.current=initialEventId;
@@ -117,13 +121,16 @@ export function SupabaseCalendar({client,actorId,preferredUnit,initialTime,openS
     </div>
     <p className="muted text-sm">Eine gemeinsame Terminquelle · Europe/Berlin · Dienste behalten ihre Teilnahme- und Anwesenheitsverwaltung. Belegungen warnen vor Konflikten, erteilen aber keine Genehmigung.</p>
     {error && <p className="notice error" role="alert">{error}</p>}
+    {viewError && <p className="notice error" role="alert">{viewError}</p>}
     {message && <p className="notice" role="status">{message}</p>}
     <div className="calendar-toolbar">
+      {!upcoming && <>
       <button className="icon-button" disabled={busy} aria-label="Vorheriger Zeitraum" onClick={()=>navigate(-1)}><ChevronLeft/></button>
       <label>Kalendermonat<input type="month" min="2000-01" max="2199-12" value={date.slice(0,7)}
         onChange={e=>{const parsed=calendarDateSchema.safeParse(`${e.target.value}-01`);if(parsed.success)setDate(parsed.data);else setError("Gültigen Kalendermonat wählen.");}}/></label>
       <button className="icon-button" disabled={busy} aria-label="Nächster Zeitraum" onClick={()=>navigate(1)}><ChevronRight/></button>
       <button className="button secondary" onClick={()=>setDate(berlinParts(snapshot?.server_now ?? initialTime).date)}>Heute</button>
+      </>}
       <div className="calendar-views" aria-label="Kalenderdarstellung">{(["month","week","list"] as const).map((value,i)=>
         <button key={value} className="button secondary" aria-pressed={view===value} onClick={()=>setView(value)}>{["Monat","Woche","Liste"][i]}</button>)}</div>
     </div>
@@ -137,7 +144,7 @@ export function SupabaseCalendar({client,actorId,preferredUnit,initialTime,openS
       <p>Der Termin kann gespeichert werden. Eine Genehmigung ist damit nicht verbunden.</p>
       {conflicts.map((c,i)=><p key={c.id ?? i}>{c.title} · {dayName(berlinParts(c.starts_at).date)} {calendarTime(c.starts_at)} – {calendarTime(c.ends_at)}</p>)}</section>}
     {snapshot && <>
-      <p className="muted text-sm">{dayName(range.start)} – {dayName(range.days.at(-1)!)} · {snapshot.events.length} sichtbare Termine</p>
+      <p className="muted text-sm">{upcoming?"Aktuelle und zukünftige Termine":`${dayName(range.start)} – ${dayName(range.days.at(-1)!)}`} · {snapshot.events.length} sichtbare Termine</p>
       {view==="month" ? <div className="calendar-month" aria-label="Monatskalender">
         {["Mo","Di","Mi","Do","Fr","Sa","So"].map(label=><div key={label} className="calendar-weekday">{label}</div>)}
         {range.days.map(d=>{
@@ -162,7 +169,14 @@ export function SupabaseCalendar({client,actorId,preferredUnit,initialTime,openS
               <CalendarChip event={event} choose={choose}/></div>)}
           </div></section>;
         })}
-      </div></div> : <CalendarDayList events={snapshot.events} days={range.days} choose={choose}/>}
+      </div></div> : upcoming ? <>
+        <div className="calendar-list" aria-label="Nächste Kalendertermine">{snapshot.events.map(event=><div key={event.id}>
+          <CalendarChip event={event} choose={choose} compact/></div>)}</div>
+        {snapshot.next_cursor && <button className="button secondary" onClick={()=>{
+          if(upcomingLimit<400)setUpcomingLimit(limit=>Math.min(400,limit+5));
+          else{setView("month");setMessage("Weitere Termine sind über die vollständige Monats- oder Listenansicht erreichbar.");}
+        }}>{upcomingLimit<400?"Weitere Termine anzeigen":"Vollständigen Kalender öffnen"}</button>}
+      </> : <CalendarDayList events={snapshot.events} days={range.days} choose={choose}/>}
       {snapshot.events.length===0 && <p>Keine berechtigt sichtbaren Termine in diesem Zeitraum und diesen Filtern.</p>}
       {ctx?.configure && <CalendarSettings client={client} context={ctx} busy={busy} run={run}/>}
     </>}
@@ -196,10 +210,11 @@ export function SupabaseCalendar({client,actorId,preferredUnit,initialTime,openS
     </AppDialog>}
   </section>;
 }
-function CalendarChip({event,choose}:{event:CalendarEvent;choose:(event:CalendarEvent)=>void}) {
+function CalendarChip({event,choose,compact=false}:{event:CalendarEvent;choose:(event:CalendarEvent)=>void;compact?:boolean}) {
   const response=event.entry_kind==="participation" ? responsePresentation(event.own_response ?? null) : null;
   return <button className={`calendar-chip ${event.status==="cancelled" ? "cancelled" : ""} ${response?.className ?? ""}`} onClick={()=>choose(event)}>
-    <span>{event.all_day ? "Ganztägig" : calendarTime(event.starts_at)}</span><strong>{event.title}</strong>
+    <span>{compact && `${dayName(berlinParts(event.starts_at).date)} · `}{event.all_day ? "Ganztägig" : calendarTime(event.starts_at)}</span><strong>{event.title}</strong>
+    {compact && event.location && <span>{event.location}</span>}
     {response && <span className={`personal-response-label ${response.className}`}><span className="response-symbol" aria-hidden="true">{response.symbol}</span>{response.label}</span>}
     {event.status==="cancelled" && <span>✕ Abgesagt</span>}
   </button>;

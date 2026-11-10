@@ -1,5 +1,6 @@
 import { test, expect, type BrowserContext } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import {emptyInbox} from "./notification-fixture";
 import { publicPath } from "../src/config/app";
 
 // These are intercepted protocol fixtures, not working accounts, keys or tokens.
@@ -97,6 +98,11 @@ async function fixture(context: BrowserContext) {
       expect(request.postDataJSON()).toEqual({ target_user: memberId, target_unit: unitId });
       state.approved = true;
       return respond(null);
+    }
+    if(url.pathname.endsWith("/ff_notifications")){
+      state.protectedReads.push(url.pathname);
+      return state.admin || (state.approved && !state.suspended && !state.missingUnit)
+        ?respond(emptyInbox(user().id)):respond({code:"42501",message:"Synthetic account no longer approved"},403);
     }
     if (url.pathname.startsWith("/rest/v1/")) {
       state.protectedReads.push(url.pathname);
