@@ -16,9 +16,9 @@ import { AppDialog } from "./app-dialog";
 const responseLabels = { yes: "Zusage", no: "Absage", maybe: "Vielleicht" };
 const statuses: AttendanceStatus[] = ["present", "absent", "unknown"];
 
-export function SupabaseAttendance({ client, eventId, mode, close, changed }: {
+export function SupabaseAttendance({ client, eventId, mode, close, changed, onBusyChange, headingLevel=4 }: {
   client: SupabaseClient; eventId: string; mode: "attendance" | "organizer";
-  close: () => void; changed: () => Promise<void>;
+  close: () => void; changed: () => Promise<void>;onBusyChange?:(busy:boolean)=>void;headingLevel?:3|4;
 }) {
   const [data, setData] = useState<AttendanceWorkspace | null>(null);
   const [busy, setBusy] = useState(true);
@@ -30,6 +30,8 @@ export function SupabaseAttendance({ client, eventId, mode, close, changed }: {
   const [correction, setCorrection] = useState<{ user: string; name: string; status: AttendanceStatus } | null>(null);
   const [reason, setReason] = useState("");
   const working = useRef(true);
+  useEffect(()=>{onBusyChange?.(busy);},[busy,onBusyChange]);
+  useEffect(()=>()=>onBusyChange?.(false),[onBusyChange]);
   const epoch = useRef({ value: 0 });
   const reload = useCallback(async (initialize = false) => {
     const version = ++epoch.current.value;
@@ -94,8 +96,9 @@ export function SupabaseAttendance({ client, eventId, mode, close, changed }: {
   const editable = !!data?.can_manage && started && data.event_status === "scheduled";
   const visibleMembers = data ? data.members.filter((person) => person.name.toLocaleLowerCase("de").includes(search.toLocaleLowerCase("de"))
     && (filter === "all" || (person.status ?? "unknown") === filter)) : [];
+  const Heading=headingLevel===3?"h3":"h4";
   return <section className="dev-attendance soft-panel" aria-label="Tatsächliche Anwesenheit">
-    <div className="event-card-top"><h4><ClipboardCheck size={20} /> Tatsächliche Anwesenheit</h4>
+    <div className="event-card-top"><Heading className="attendance-heading"><ClipboardCheck size={20} /> Tatsächliche Anwesenheit</Heading>
       <button className="button secondary" disabled={busy} onClick={close}>Ansicht schließen</button></div>
     <p className="muted text-sm">Keine Teilnahmeplanung. Vorbelegte Werte bleiben bis zum verbindlichen Listenabschluss vorläufig.</p>
     {busy && <p role="status">Anwesenheit wird in Supabase geladen oder gespeichert …</p>}

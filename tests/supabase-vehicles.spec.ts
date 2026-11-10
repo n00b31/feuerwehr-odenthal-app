@@ -105,7 +105,7 @@ async function connect(page:Page,role:"global"|"member"|"manager"|"chief"|"unit"
   await page.getByLabel("Feuerwehr-E-Mail").fill(user.email);
   await page.getByLabel("Passwort",{exact:true}).fill("synthetic-not-a-real-password");
   await page.getByRole("button",{name:"Anmelden",exact:true}).click();
-  await page.getByRole("button",{name:"Fahrzeugkalender",exact:true}).click();
+  await page.getByRole("button",{name:/Fahrzeugkalender/}).click();
   await expect(page.getByLabel("Fahrzeug auswählen")).toBeVisible();
   return state;
 }
@@ -233,7 +233,7 @@ test("three equal sections preserve vehicle controls, URL deep link and browser 
   await connect(page);
   const month=page.getByLabel("Fahrzeugmonat");
   await month.fill("2027-02");
-  await page.getByRole("button",{name:"Dienstverwaltung",exact:true}).click();
+  await page.getByRole("button",{name:/Dienstverwaltung/}).click();
   await expect(month).toBeHidden();
   await page.goBack();
   await expect(month).toBeVisible();
@@ -248,8 +248,8 @@ test("browser back releases the native vehicle modal without losing its draft",a
   await page.getByLabel("Zweck / Titel").fill("Preserved request draft");
   await page.goBack();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.getByRole("button",{name:"Dienstverwaltung",exact:true})).toHaveAttribute("aria-pressed","true");
-  await page.getByRole("button",{name:"Fahrzeugkalender",exact:true}).click();
+  await expect(page.getByRole("button",{name:/Dienstverwaltung/})).toHaveAttribute("aria-pressed","true");
+  await page.getByRole("button",{name:/Fahrzeugkalender/}).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.getByLabel("Zweck / Titel")).toHaveValue("Preserved request draft");
   await page.getByRole("button",{name:"Dialog schließen"}).click();

@@ -23,6 +23,7 @@ import { ForgotPasswordForm, PasswordFields, RecoveryPasswordForm } from "./auth
 import { SupabaseDashboard } from "./supabase-dashboard";
 import { NotificationAdministration,NotificationBridge,SupabaseNotifications } from "./supabase-notifications";
 import { releaseCurrentPush } from "@/data/supabase-notifications";
+import { useMobileLayout } from "./responsive-ui";
 
 export function SupabaseDev() {
   const [client, setClient] = useState<SupabaseClient | null>(null);
@@ -93,7 +94,7 @@ export function SupabaseDev() {
   const access = screen.phase === "active" || screen.phase === "blocked" ? screen.access : null;
   const active = screen.phase === "active";
   const managesMembers = active && screen.access.roles.some((role) => role === "GLOBAL_ADMIN" || role === "UNIT_ADMIN");
-  return <div className="app-shell dev-shell">
+  return <div className={`app-shell dev-shell${active && pathname!=="/"?" mobile-workspace":""}`}>
     <a className="skip-link" href="#main">Zum Inhalt springen</a>
     {active && <aside className="sidebar"><SidebarNavigation pathname={pathname} unitName={screen.access.unit_name ?? ""}
       admin={managesMembers} logo /></aside>}
@@ -103,7 +104,7 @@ export function SupabaseDev() {
       <div className="topbar-actions">
         {active && <Link className="icon-button" href="/profil/#benachrichtigungen" aria-label="Benachrichtigungen öffnen"><Bell size={20}/></Link>}
         <button className="icon-button" aria-label="Farbschema wechseln" onClick={() => setPreference(resolved === "dark" ? "light" : "dark")}>{resolved === "dark" ? <Sun size={20} /> : <Moon size={20} />}</button>
-        {client && <button className="button secondary" onClick={() => void signOut()} disabled={busy || pushBusy}><LogOut size={18} />Abmelden / Sitzung entfernen</button>}
+        {client && <button className="button secondary header-signout" onClick={() => void signOut()} disabled={busy || pushBusy}><LogOut size={18} />Abmelden / Sitzung entfernen</button>}
       </div>
     </header>
     <div className="demo-strip" role="region" aria-label="DEV-Testbetrieb"><span className="demo-tag">DEV</span><span>Supabase-Testbetrieb · nur autorisierte Testkonten · kein Demo-Profilwechsel</span></div>
@@ -123,12 +124,12 @@ export function SupabaseDev() {
           <p>Keine Termine, Dokumente, Rollenlisten oder Statistiken werden geladen. Bei E-Mail-Wechsel oder entfallener Zuordnung ist eine erneute Prüfung nötig.</p>
           <button className="button" onClick={refresh}><RefreshCw size={18} />Freigabestatus prüfen</button>
         </section>
-        : screen.phase === "active" && client ? <DevWorkspace client={client} access={screen.access} data={screen.data} pathname={pathname} refresh={refresh} eventEditor={eventEditor} setEventEditor={setEventEditor} onPushBusy={setPushBusy} />
+        : screen.phase === "active" && client ? <DevWorkspace client={client} access={screen.access} data={screen.data} pathname={pathname} refresh={refresh} eventEditor={eventEditor} setEventEditor={setEventEditor} onPushBusy={setPushBusy} signOut={()=>void signOut()} signOutDisabled={busy || pushBusy} />
         : null}
     </main>
     <footer className="footer"><span>Feuerwehr Odenthal · Supabase DEV</span><span>Keine Offline-Freigabe · Europe/Berlin</span></footer>
     </div>
-    {active && <BottomNavigation pathname={pathname} admin={managesMembers} />}
+    {active && <BottomNavigation pathname={pathname} admin={managesMembers} compact={pathname!=="/"} />}
   </div>;
 }
 
@@ -211,14 +212,15 @@ function AuthForm({ client, refresh }: { client: SupabaseClient; refresh: () => 
   </section>;
 }
 
-function DevWorkspace({ client, access, data, pathname, refresh, eventEditor, setEventEditor,onPushBusy }: { client: SupabaseClient; access: Access; data: DevData | null; pathname: string; refresh: () => void; eventEditor: EventEditorState | null; setEventEditor: (value: EventEditorState | null) => void;onPushBusy:(busy:boolean)=>void }) {
+function DevWorkspace({ client, access, data, pathname, refresh, eventEditor, setEventEditor,onPushBusy,signOut,signOutDisabled }: { client: SupabaseClient; access: Access; data: DevData | null; pathname: string; refresh: () => void; eventEditor: EventEditorState | null; setEventEditor: (value: EventEditorState | null) => void;onPushBusy:(busy:boolean)=>void;signOut:()=>void;signOutDisabled:boolean }) {
+  const mobile=useMobileLayout();
   const globalAdmin = access.roles.includes("GLOBAL_ADMIN");
   const managesMembers = globalAdmin || access.roles.includes("UNIT_ADMIN");
   if (pathname === "/") return <SupabaseDashboard key={access.user_id} client={client} access={access} />;
   if (!data) return <p role="status">Berechtigte Moduldaten werden geladen …</p>;
   return <>
     <PageHeading eyebrow="GESCHÜTZTER DEV-BEREICH" title={pathname === "/administration" ? "Administration" : `Hallo ${access.display_name}`} description={`${access.unit_name} · ${access.roles.map((role) => DEV_ROLE_LABELS[role]).join(", ")} · live durch Supabase geprüft`} action={<button className="button secondary" onClick={refresh}><RefreshCw size={18} />Aktualisieren</button>} />
-    <p className="notice">{currentRelease?.version ?? "DEV"}: Termine, Teilnahme, Anwesenheit und Mitgliederverwaltung liegen zentral in Supabase. Hintergrundprüfungen erhalten die Arbeitsansicht. Keine Übernahme lokaler Demo-Daten.</p>
+    <details className="workspace-context" open={!mobile}><summary>DEV-Hinweise und Datenhaltung</summary><p className="notice">{currentRelease?.version ?? "DEV"}: Termine, Teilnahme, Anwesenheit und Mitgliederverwaltung liegen zentral in Supabase. Hintergrundprüfungen erhalten die Arbeitsansicht. Keine Übernahme lokaler Demo-Daten.</p></details>
     {pathname === "/administration" ? managesMembers
       ? <>{globalAdmin && <section className="card section-card"><h2>Wartende Testregistrierungen</h2>{data.registrations.length === 0 && <p>Keine wartenden Registrierungen.</p>}{data.registrations.map((person) => <ApprovalRow key={person.user_id} client={client} person={person} units={data.units} refresh={refresh} />)}</section>}
         <SupabaseMembers client={client} actorId={access.user_id} refreshAccess={refresh} />
@@ -228,7 +230,7 @@ function DevWorkspace({ client, access, data, pathname, refresh, eventEditor, se
       : <p className="notice error" role="alert">Keine Berechtigung zur Mitgliederverwaltung. Direkte API-Aufrufe werden ebenfalls serverseitig geprüft.</p>
     : pathname === "/dokumente" ? <section className="card section-card"><h2>Dokumentenbereiche</h2><p>App-Sichtbarkeit ersetzt keine SharePoint-Berechtigung.</p>{data.documents.length === 0 && <p>Noch keine sichtbaren DEV-Dokumentenbereiche.</p>}{data.documents.map((item) => <article key={item.id}><h3>{item.name}</h3><p>{item.description}</p><a href={item.sharepoint_url} target="_blank" rel="noopener noreferrer">SharePoint öffnen</a></article>)}</section>
     : pathname === "/statistik" ? <SupabaseReports client={client} access={access} />
-    : pathname === "/profil" ? <><section className="card section-card"><h2>Verifiziertes DEV-Profil</h2><p>{access.display_name} · Einheit {access.unit_name}</p><p>Status: Freigegeben. Kein Identitäts- oder Rollenwechsel über lokale Demo-Profile.</p><p>Die Sitzung liegt ausschließlich unter einem projekt- und unterpfadbezogenen SDK-Speicherschlüssel in diesem Browser. Zum Entfernen „Abmelden / Sitzung entfernen“ verwenden.</p></section><div id="benachrichtigungen"><SupabaseNotifications key={access.user_id} client={client} actorId={access.user_id} onPushBusy={onPushBusy}/></div><SupabaseReports client={client} access={access} personalOnly /></>
+    : pathname === "/profil" ? <><section className="card section-card"><h2>Verifiziertes DEV-Profil</h2><p>{access.display_name} · Einheit {access.unit_name}</p><p>Status: Freigegeben. Kein Identitäts- oder Rollenwechsel über lokale Demo-Profile.</p><p>Die Sitzung liegt ausschließlich unter einem projekt- und unterpfadbezogenen SDK-Speicherschlüssel in diesem Browser. Zum Entfernen „Abmelden / Sitzung entfernen“ verwenden.</p><button className="button secondary mobile-only" onClick={signOut} disabled={signOutDisabled}><LogOut size={18}/>Abmelden / Sitzung entfernen</button></section><div id="benachrichtigungen"><SupabaseNotifications key={access.user_id} client={client} actorId={access.user_id} onPushBusy={onPushBusy}/></div><SupabaseReports client={client} access={access} personalOnly /></>
     : <SupabaseEvents client={client} initial={data} preferredUnit={access.unit_id} actorId={access.user_id} editor={eventEditor} setEditor={setEventEditor}
       canPlan={access.roles.some(role=>role==="GLOBAL_ADMIN" || role==="UNIT_ADMIN" || role==="FUNCTION_ADMIN")} />}
   </>;

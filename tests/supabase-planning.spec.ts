@@ -79,11 +79,16 @@ async function connect(page:Page,role:"global"|"unit"|"member"="global"){
   await page.getByLabel("Feuerwehr-E-Mail").fill(user.email);
   await page.getByLabel("Passwort",{exact:true}).fill("synthetic-browser-only");
   await page.getByRole("button",{name:"Anmelden",exact:true}).click();
-  await expect(page.getByRole("button",{name:"Dienstverwaltung",exact:true})).toBeVisible();
+  await expect(page.getByRole("button",{name:/Dienstverwaltung/})).toBeVisible();
   return state;
 }
+async function planningAction(page:Page,name:string){
+  if((page.viewportSize()?.width??1280)<768)
+    await page.getByRole("button",{name:name==="Terminserie erstellen"?"Termin erstellen":"Verwalten",exact:true}).click();
+  await page.getByRole("button",{name,exact:true}).click();
+}
 async function fillSeries(page:Page){
-  await page.getByRole("button",{name:"Terminserie erstellen",exact:true}).click();
+  await planningAction(page,"Terminserie erstellen");
   const dialog=page.getByRole("dialog",{name:"Terminserie erstellen"});
   await dialog.getByLabel("Titel",{exact:true}).fill("Synthetic fortnightly");
   await dialog.getByLabel("Ort",{exact:true}).fill("Synthetic CI");
@@ -115,7 +120,7 @@ test("series require explicit preview and confirmation, remain at Berlin time an
 });
 test("CSV upload never saves, reports errors and duplicates before explicit atomic confirmation",async({page})=>{
   const state=await connect(page);
-  await page.getByRole("button",{name:"Termine aus CSV importieren",exact:true}).click();
+  await planningAction(page,"Termine aus CSV importieren");
   const dialog=page.getByRole("dialog",{name:"Termine aus CSV importieren"});
   const file=dialog.getByLabel("CSV-Datei (UTF-8, Semikolon)");
   await file.setInputFiles({name:"invalid.csv",mimeType:"text/csv",buffer:Buffer.from(csv("Synthetic invalid","Unbekannt"))});
@@ -129,7 +134,7 @@ test("CSV upload never saves, reports errors and duplicates before explicit atom
   await dialog.getByRole("button",{name:"Import bestätigen"}).click();
   await expect(dialog.getByRole("status").filter({hasText:"1 Termine gespeichert"})).toBeVisible();
   await dialog.getByRole("button",{name:"Ergebnis schließen"}).click();
-  await page.getByRole("button",{name:"Termine aus CSV importieren",exact:true}).click();
+  await planningAction(page,"Termine aus CSV importieren");
   await page.getByLabel("CSV-Datei (UTF-8, Semikolon)").setInputFiles({name:"repeat.csv",mimeType:"text/csv",buffer:Buffer.from(csv())});
   await page.getByRole("dialog").getByRole("button",{name:"Vorschau prüfen"}).click();
   await expect(page.getByRole("dialog").getByRole("alert")).toContainText("Duplikate erkannt");
@@ -162,7 +167,10 @@ test("series management previews single, following and all selections and edits 
   await expect(create.getByRole("status").filter({hasText:"3 Termine gespeichert"})).toBeVisible();
   await create.getByRole("button",{name:"Ergebnis schließen"}).click();
   const ids=state.events.map(e=>e.id);
-  await page.getByRole("button",{name:"Serie verwalten",exact:true}).nth(1).click();
+  if((page.viewportSize()?.width??1280)<768){
+    await page.getByRole("button",{name:"Termindetails öffnen: Synthetic fortnightly",exact:false}).nth(1).click();
+    await page.getByRole("button",{name:"Serie verwalten",exact:true}).click();
+  }else await page.getByRole("button",{name:"Serie verwalten",exact:true}).nth(1).click();
   const dialog=page.getByRole("dialog",{name:"Terminserie verwalten"});
   for(const [selection,count] of [["single",1],["following",2],["all",3]] as const){
     await dialog.getByLabel("Änderungsbereich").selectOption(selection);
@@ -197,7 +205,7 @@ test("unit scope, mobile light/dark accessibility and UTF-8 Excel template",asyn
   }
   await page.getByRole("button",{name:"Dialog schließen",exact:true}).click();
   const downloaded=page.waitForEvent("download");
-  await page.getByRole("button",{name:"CSV-Vorlage herunterladen",exact:true}).click();
+  await planningAction(page,"CSV-Vorlage herunterladen");
   const download=await downloaded;
   expect(download.suggestedFilename()).toBe("feuerwehr-termine-vorlage.csv");
   const stream=await download.createReadStream();const chunks:Buffer[]=[];

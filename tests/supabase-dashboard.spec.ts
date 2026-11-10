@@ -109,8 +109,11 @@ test("cockpit attendance task opens the server-scoped attendance filter rather t
   await connect(page,"GLOBAL_ADMIN");
   await page.locator(".cockpit-tasks a").filter({hasText:"Anwesenheitslisten abschließen"}).click();
   await expect(page).toHaveURL(/ansicht=open_attendance/);
+  await page.getByRole("button",{name:"Filter öffnen"}).click();
   await expect(page.getByRole("combobox",{name:"Terminansicht",exact:true})).toHaveValue("open_attendance");
+  await page.getByRole("button",{name:"Filter übernehmen und schließen"}).click();
   await expect(page.getByText("3 offene Anwesenheitslisten",{exact:true})).toBeVisible();
+  await page.getByRole("button",{name:/Termindetails öffnen:/}).first().click();
   await expect(page.getByRole("button",{name:"Anwesenheit erfassen",exact:true})).toBeEnabled();
 });
 for (const mode of ["light", "dark"] as const) test(`direct RSVP uses existing RPC and computed status colors without altering attendance in ${mode} mode`, async ({ page }) => {

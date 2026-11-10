@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { CalendarPlus, RefreshCw } from "lucide-react";
+import { CalendarPlus, RefreshCw, Ellipsis, ChevronRight } from "lucide-react";
 import { z } from "zod";
 import {
   readEventWorkspace, saveSingleEvent, cancelSingleEvent, setEventResponse, correctEventResponse,
@@ -20,6 +20,7 @@ import { defaultEventList, monthLabel, monthKeySchema, type EventListQuery } fro
 import { SupabaseCalendar } from "./supabase-calendar";
 import { SupabaseVehicles } from "./supabase-vehicles";
 import { AppDialogVisibility } from "./app-dialog";
+import { MobileSheet, ResponsiveFilters, useMobileLayout } from "./responsive-ui";
 import {SupabasePlanning,type PlanningAction} from "./supabase-planning";
 
 export type EventEditorState = { id?: string; revision: number; draft: DevEventDraft };
@@ -41,6 +42,9 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
   const [vehiclesActivated,setVehiclesActivated]=useState(false);
   const [planning,setPlanning]=useState<PlanningAction|null>(null),[calendarRevision,setCalendarRevision]=useState(0);
   const [vehicleEvent,setVehicleEvent]=useState<{id:string;sequence:number}|null>(null);
+  const mobile=useMobileLayout();
+  const [detailId,setDetailId]=useState<string|null>(null);
+  const [tools,setTools]=useState<"create"|"manage"|null>(null);
   const [calendarTarget,setCalendarTarget]=useState<string|null>(null);
   const [query, setQuery] = useState<EventListQuery>(defaultEventList);
   const pages = useRef(1);
@@ -124,6 +128,7 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
         if(![...snapshot.result.events,...snapshot.result.retained_events].some(item=>item.id===target))
           throw new Error("Verlinkter Dienst nicht mehr berechtigt sichtbar.");
         accept(snapshot);
+        setDetailId(target);
         requestAnimationFrame(()=>document.getElementById(`event-${target}`)?.scrollIntoView({block:"start"}));
       }).catch(cause=>{setWorkspace(null);setError(eventErrorMessage(cause));});
     };
@@ -196,6 +201,10 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
   }
   const attendanceReady=query.view!=="open_attendance" || typeof workspace?.open_attendance_count==="number";
   const listed = workspace && attendanceReady ? [...workspace.events, ...workspace.retained_events.filter((item) => !workspace.events.some((row) => row.id === item.id))] : [];
+  function closeServiceDetails(id:string){
+    setDetailId(null);
+    setWorkspace(current=>current ? {...current,retained_events:current.retained_events.filter(item=>item.id!==id)} : current);
+  }
   function edit(item?: DevEvent) {
     setMessage(""); setError("");
     if(item?.series_id){setPlanning({eventId:item.id});return;}
@@ -218,26 +227,47 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
     retained.current=[...new Set([...retained.current,id])];
     accept({result,version:++epoch.current.value});
     if(editing) edit(item);
+    setDetailId(editing?null:id);
     changeSection("dienste");
     requestAnimationFrame(()=>document.getElementById(`event-${id}`)?.scrollIntoView({block:"start"}));
   }
+  const eventForm=editor && workspace ? <EventForm editor={editor} units={workspace.manageable_units} busy={busy} change={setEditor}
+    close={()=>setEditor(null)} submit={()=>run(async()=>{
+      await saveSingleEvent(client,eventPayload(editor.draft),editor.id?{id:editor.id,revision:editor.revision}:undefined);
+      setEditor(null);
+    },editor.id?"Termin in Supabase geändert.":"Termin in Supabase erstellt.")}/> : null;
   return <>
-    <div className="calendar-views dev-actions" aria-label="Terminbereich">
-      <button className="button secondary" aria-pressed={section==="dienste"} onClick={()=>changeSection("dienste")}>Dienstverwaltung</button>
-      <button className="button secondary" aria-pressed={section==="kalender"} onClick={()=>changeSection("kalender")}>Gemeinsamer Kalender</button>
-      <button className="button secondary" aria-pressed={section==="fahrzeuge"} onClick={()=>changeSection("fahrzeuge")}>Fahrzeugkalender</button>
+    <div className="calendar-views dev-actions service-tabs" aria-label="Terminbereich">
+      <button className="button secondary" aria-label={mobile?"Dienste – Dienstverwaltung":"Dienstverwaltung"} aria-pressed={section==="dienste"} onClick={()=>changeSection("dienste")}>{mobile?"Dienste":"Dienstverwaltung"}</button>
+      <button className="button secondary" aria-label="Gemeinsamer Kalender" aria-pressed={section==="kalender"} onClick={()=>changeSection("kalender")}>{mobile?"Kalender":"Gemeinsamer Kalender"}</button>
+      <button className="button secondary" aria-label={mobile?"Fahrzeuge – Fahrzeugkalender":"Fahrzeugkalender"} aria-pressed={section==="fahrzeuge"} onClick={()=>changeSection("fahrzeuge")}>{mobile?"Fahrzeuge":"Fahrzeugkalender"}</button>
     </div>
     {calendarActivated && <AppDialogVisibility.Provider value={section==="kalender"}><div hidden={section!=="kalender"}><SupabaseCalendar key={actorId} client={client} actorId={actorId}
       preferredUnit={preferredUnit} initialTime={initial.server_now} refreshSignal={calendarRevision} openService={openService} openVehicle={openVehicle} initialEventId={calendarTarget}/></div></AppDialogVisibility.Provider>}
     {vehiclesActivated && <AppDialogVisibility.Provider value={section==="fahrzeuge"}><div hidden={section!=="fahrzeuge"}><SupabaseVehicles key={actorId} client={client} actorId={actorId}
       initialTime={initial.server_now} preferredUnit={preferredUnit} initialEventId={vehicleEvent?.id} initialEventSequence={vehicleEvent?.sequence}/></div></AppDialogVisibility.Provider>}
     <AppDialogVisibility.Provider value={section==="dienste"}>
-    <section className="card section-card" hidden={section!=="dienste"}>
+    <section className="card section-card service-workspace" hidden={section!=="dienste"}>
     <div className="event-card-top"><h2>{query.view==="open_attendance" ? "Offene Anwesenheitslisten" : "Sichtbare DEV-Termine"}</h2><div className="dev-actions">
-      <button className="button secondary" disabled={busy} onClick={() => void refresh()}><RefreshCw size={18} />Termine aktualisieren</button>
-      {!!workspace?.manageable_units.length && !editor && <button className="button" disabled={busy} onClick={() => edit()}><CalendarPlus size={18} />Einzeltermin erstellen</button>}
+      <button className="button secondary service-refresh" aria-label="Termine aktualisieren" disabled={busy} onClick={() => void refresh()}><RefreshCw size={18} aria-hidden="true"/><span>Termine aktualisieren</span></button>
+      {!mobile && !!workspace?.manageable_units.length && !editor && <button className="button" disabled={busy} onClick={() => edit()}><CalendarPlus size={18} />Einzeltermin erstellen</button>}
     </div></div>
-    {canPlan && <div className="dev-actions">
+    {mobile && (canPlan || !!workspace?.manageable_units.length) && <div className="mobile-service-actions">
+      <button className="button" disabled={busy || !!editor} aria-haspopup="dialog" onClick={()=>setTools("create")}><CalendarPlus size={18} aria-hidden="true"/>Termin erstellen</button>
+      {canPlan && <button className="button secondary" disabled={busy} aria-haspopup="dialog" onClick={()=>setTools("manage")}><Ellipsis size={18} aria-hidden="true"/>Verwalten</button>}
+    </div>}
+    {mobile && tools && <MobileSheet title={tools==="create"?"Termin erstellen":"Termine verwalten"} close={()=>setTools(null)}>
+      <div className="mobile-menu-actions">
+        {tools==="create" ? <>
+          {!!workspace?.manageable_units.length && <button className="button" disabled={busy} onClick={()=>{setTools(null);edit();}}>Einzeltermin erstellen</button>}
+          {canPlan && <button className="button secondary" disabled={busy} onClick={()=>{setTools(null);setPlanning("series");}}>Terminserie erstellen</button>}
+        </> : canPlan && <>
+          <button className="button secondary" disabled={busy} onClick={()=>{setTools(null);setPlanning("csv");}}>Termine aus CSV importieren</button>
+          <button className="button secondary" disabled={busy} onClick={()=>{setTools(null);setPlanning("template");}}>CSV-Vorlage herunterladen</button>
+        </>}
+      </div>
+    </MobileSheet>}
+    {!mobile && canPlan && <div className="dev-actions">
       <button className="button secondary" disabled={busy} onClick={()=>setPlanning("series")}>Terminserie erstellen</button>
       <button className="button secondary" disabled={busy} onClick={()=>setPlanning("csv")}>Termine aus CSV importieren</button>
       <button className="button secondary" disabled={busy} onClick={()=>setPlanning("template")}>CSV-Vorlage herunterladen</button>
@@ -250,11 +280,11 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
     {message && <p className="notice" role="status">{message}</p>}
     {error && <p className="notice error" role="alert">{error}</p>}
     {busy && <p role="status">Supabase-Anfrage läuft …</p>}
-    {editor && workspace && <EventForm editor={editor} units={workspace.manageable_units} busy={busy} change={setEditor}
-      close={() => setEditor(null)} submit={() => run(async () => {
-        await saveSingleEvent(client, eventPayload(editor.draft), editor.id ? { id: editor.id, revision: editor.revision } : undefined);
-        setEditor(null);
-      }, editor.id ? "Termin in Supabase geändert." : "Termin in Supabase erstellt.")} />}
+    {editor && workspace && (mobile ? <MobileSheet title={editor.id?"Einzeltermin bearbeiten":"Neuer Einzeltermin"} closeDisabled={busy} close={()=>setEditor(null)}>
+      {eventForm}
+      {error && <p className="notice error" role="alert">{error}</p>}
+    </MobileSheet> : eventForm)}
+    <ResponsiveFilters error={error} summary={`${query.view==="month"?monthLabel(query.month):query.view==="past"?"Vergangene Termine":query.view==="open_attendance"?"Offene Anwesenheitslisten":"Aktuell & zukünftig"} · ${query.status==="scheduled"?"Geplant":query.status==="cancelled"?"Abgesagt":"Alle Status"}`}>
     <div className="form-grid dev-list-filters">
       <label>Terminansicht<select value={query.view} disabled={busy} onChange={(event) => changeQuery({ ...query,
         view: event.target.value === "open_attendance" ? "open_attendance" : event.target.value === "past" ? "past" : event.target.value === "month" ? "month" : "upcoming",
@@ -276,6 +306,7 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
       </select></label>
       <button className="button secondary" disabled={busy} onClick={() => changeQuery({ ...defaultEventList })}>Standardansicht wiederherstellen</button>
     </div>
+    </ResponsiveFilters>
     <p className="muted text-sm">{query.view === "open_attendance" ? "Begonnene, bearbeitbare Listen ohne Abschluss · ältester Dienst zuerst · 50 Termine pro Seite"
       : query.view === "month" ? `${monthLabel(query.month)} · chronologisch · 50 Termine pro Seite`
       : query.view === "past" ? "Vergangene Termine · neueste zuerst · maximal fünf"
@@ -285,6 +316,7 @@ export function SupabaseEvents({ client, initial, preferredUnit, editor, setEdit
     {attendanceReady && workspace.events.length === 0 && <p>{query.view==="open_attendance" ? "Keine offenen, für dich bearbeitbaren Anwesenheitslisten." : "Noch keine sichtbaren DEV-Termine. Es werden keine Demo-Daten übernommen."}</p>}
     {listed.map((item) =>
       <EventCard key={item.id} client={client} changed={async () => { accept(await reload()); }} keepOpen={keepOpen}
+        mobile={mobile} detailsOpen={detailId===item.id} openDetails={()=>setDetailId(item.id)} closeDetails={()=>closeServiceDetails(item.id)} feedback={{error,message}}
         attendanceFilter={query.view==="open_attendance"} retained={!workspace.events.some((row) => row.id === item.id)} item={item} serverNow={serverNow} busy={busy} edit={() => edit(item)}
         reply={(answer) => run(() => setEventResponse(client, item.id, answer), "Rückmeldung in Supabase gespeichert.")}
         cancel={(reason) => run(() => cancelSingleEvent(client, item, reason), "Termin in Supabase abgesagt. Rückmeldungen und Historie bleiben erhalten.")}
@@ -324,12 +356,13 @@ function EventForm({ editor, units, busy, change, close, submit }: {
   </section>;
 }
 
-function EventCard({ client, changed, item, serverNow, busy, edit, reply, cancel, correct, keepOpen, retained, attendanceFilter }: {
+function EventCard({ client, changed, item, serverNow, busy, edit, reply, cancel, correct, keepOpen, retained, attendanceFilter,mobile,detailsOpen,openDetails,closeDetails,feedback }: {
   client: SupabaseClient; changed: () => Promise<void>;
   item: DevEvent; serverNow: number; busy: boolean; edit: () => void;
   reply: (response: DevResponse) => Promise<void>; cancel: (reason: string) => Promise<void>;
   correct: (user: string, answer: DevResponse, reason: string) => Promise<void>;
   keepOpen: (id: string, open: boolean) => void; retained: boolean; attendanceFilter: boolean;
+  mobile:boolean;detailsOpen:boolean;openDetails:()=>void;closeDetails:()=>void;feedback:{error:string;message:string};
 }) {
   const [cancelling, setCancelling] = useState(false);
   const [reason, setReason] = useState("");
@@ -343,16 +376,18 @@ function EventCard({ client, changed, item, serverNow, busy, edit, reply, cancel
     return params.get("aufgabe")==="attendance" && item.can_lead ? "attendance"
       : params.get("aufgabe")==="organizer" && item.can_delegate ? "organizer" : null;
   });
+  const [attendanceBusy,setAttendanceBusy]=useState(attendanceMode!==null);
   const [participantsOpen, setParticipantsOpen] = useState(false);
-  const open = cancelling || participantsOpen || attendanceMode !== null;
+  const closeMobileDetails=()=>{setAttendanceMode(null);setParticipantsOpen(false);setCancelling(false);setReason("");closeDetails();};
+  const open = detailsOpen || cancelling || participantsOpen || attendanceMode !== null;
   useEffect(() => { keepOpen(item.id, open); return () => keepOpen(item.id, false); }, [keepOpen, item.id, open]);
   const planned = item.status === "scheduled";
   const unlocked = serverNow < Date.parse(item.starts_at) && (!item.response_deadline || serverNow < Date.parse(item.response_deadline));
   const counts = item.participants ? responseCounts(item.participants) : null;
   const responseStyle=responsePresentation(item.own_response);
-  return <article className={`dev-event ${responseStyle.className} ${attendanceFilter && !retained ? "open-attendance-result" : ""}`} aria-labelledby={`event-${item.id}`}>
+  const details=<>
     {retained && <p className="notice">{attendanceFilter ? "Geöffneter Dienst gehört nicht mehr zur offenen Ergebnisliste; abgeschlossene Listen bleiben hier zur Ansicht erhalten." : "Geöffneter Termin außerhalb der aktuellen Ergebnisliste · Berechtigung weiterhin live geprüft"}</p>}
-    <div className="event-card-top"><h3 id={`event-${item.id}`}>{item.title}</h3><span className={`badge ${planned ? "" : "muted"}`}>{planned ? "Geplant" : "Abgesagt"}</span></div>
+    <div className="event-card-top">{!mobile && <h3 id={`event-${item.id}`}>{item.title}</h3>}<span className={`badge ${planned ? "" : "muted"}`}>{planned ? "Geplant" : "Abgesagt"}</span></div>
     <p>{dateLabel(item.starts_at, { year: "numeric" })} · {timeLabel(item.starts_at)} – {dateLabel(item.ends_at)} {timeLabel(item.ends_at)} · {item.location}</p>
     <p className="muted text-sm">{item.scope_name} · {EVENT_TYPES[item.event_type]}{item.series_id && " · Serieninstanz"}{item.series_exception && " · Individuelle Ausnahme"}</p>
     {attendanceFilter && <p>Dienstleitung: <strong>{item.organizer_name ?? "Nicht verfügbar"}</strong> · {attendanceStateLabels[item.attendance_state]}</p>}
@@ -370,12 +405,12 @@ function EventCard({ client, changed, item, serverNow, busy, edit, reply, cancel
     {(item.can_read_attendance || item.can_delegate) && <>
       <div className="dev-actions">
         {item.can_read_attendance && <button className="button secondary" disabled={busy || serverNow < Date.parse(item.starts_at)}
-          onClick={() => setAttendanceMode("attendance")}>{attendanceFilter && item.can_lead ? "Anwesenheit erfassen" : "Anwesenheit öffnen"}</button>}
-        {item.can_delegate && <button className="button secondary" disabled={busy} onClick={() => setAttendanceMode("organizer")}>Organisator zuweisen</button>}
+          onClick={() => {setAttendanceMode("attendance");openDetails();}}>{attendanceFilter && item.can_lead ? "Anwesenheit erfassen" : "Anwesenheit öffnen"}</button>}
+        {item.can_delegate && <button className="button secondary" disabled={busy} onClick={() => {setAttendanceMode("organizer");openDetails();}}>Organisator zuweisen</button>}
       </div>
       {serverNow < Date.parse(item.starts_at) && <p className="lock-note">Anwesenheit erst ab Dienstbeginn {timeLabel(item.starts_at)}; vorher ist nur die Teilnahmeplanung möglich.</p>}
       {attendanceMode && <SupabaseAttendance key={`${item.id}-${attendanceMode}`} client={client} eventId={item.id} mode={attendanceMode}
-        close={() => setAttendanceMode(null)} changed={changed} />}
+        close={() => setAttendanceMode(null)} changed={changed} onBusyChange={setAttendanceBusy} headingLevel={mobile?3:4} />}
     </>}
     {counts && <details className="dev-participants" open={participantsOpen} onToggle={(event) => setParticipantsOpen(event.currentTarget.open)}>
       <summary>Teilnehmerübersicht · {counts.yes} Zusagen · {counts.no} Absagen · {counts.maybe} Vielleicht · {counts.unanswered} ohne Rückmeldung</summary>
@@ -395,9 +430,9 @@ function EventCard({ client, changed, item, serverNow, busy, edit, reply, cancel
         <button className="button span-2" disabled={busy || !target}>Korrektur speichern</button>
       </form>}
     </details>}
-    {item.series_id && item.can_manage && <button className="button secondary" disabled={busy} onClick={edit}>Serie verwalten</button>}
+    {item.series_id && item.can_manage && <button className="button secondary" disabled={busy} onClick={()=>{closeDetails();edit();}}>Serie verwalten</button>}
     {!item.series_id && item.can_manage && planned && <div className="dev-actions">
-      <button className="button secondary" disabled={busy || serverNow >= Date.parse(item.starts_at)} onClick={edit}>Termin bearbeiten</button>
+      <button className="button secondary" disabled={busy || serverNow >= Date.parse(item.starts_at)} onClick={()=>{closeDetails();edit();}}>Termin bearbeiten</button>
       <button className="button secondary danger-button" disabled={busy} onClick={() => setCancelling(!cancelling)}>Termin absagen</button>
     </div>}
     {cancelling && planned && <form className="dev-cancel soft-panel" onSubmit={(event) => { event.preventDefault(); void cancel(reason); }}>
@@ -405,5 +440,27 @@ function EventCard({ client, changed, item, serverNow, busy, edit, reply, cancel
       <button className="button danger-button" disabled={busy}>Absage bestätigen</button>
       <p className="muted text-sm">Keine Löschung. Teilnehmer, Rückmeldungen und Protokoll bleiben erhalten. Erfasste Anwesenheit verhindert eine Absage.</p>
     </form>}
+  </>;
+  return <article className={`dev-event ${responseStyle.className} ${attendanceFilter && !retained ? "open-attendance-result" : ""}`}
+    aria-labelledby={mobile?undefined:`event-${item.id}`} aria-label={mobile?item.title:undefined}>
+    {mobile ? <>
+      <button id={`event-${item.id}`} className="service-summary" aria-haspopup="dialog" onClick={openDetails}>
+        <span className="sr-only">Termindetails öffnen: </span>
+        <strong className="service-title">{item.title}</strong>
+        <span className="service-date">{dateLabel(item.starts_at)} · {timeLabel(item.starts_at)}–{timeLabel(item.ends_at)}
+          {localInput(item.starts_at).slice(0,10)!==localInput(item.ends_at).slice(0,10) && ` (${dateLabel(item.ends_at)})`}</span>
+        <span className="service-place">{item.location} · {item.scope_name}</span>
+        <span className="service-summary-status"><span className={`personal-response-label ${responseStyle.className}`}><span aria-hidden="true">{responseStyle.symbol}</span> {responseStyle.label}</span>
+          {!planned && <span className="badge muted">Termin abgesagt</span>}<ChevronRight size={18} aria-hidden="true"/></span>
+        {counts && <span className="service-counts">{counts.yes} Zusagen · {counts.maybe} Vielleicht · {counts.unanswered} offen</span>}
+        {attendanceFilter && <span className="service-counts">{item.organizer_name ?? "Dienstleitung nicht verfügbar"} · {attendanceStateLabels[item.attendance_state]}</span>}
+      </button>
+      {detailsOpen && <MobileSheet title={item.title} className="service-detail-sheet" closeDisabled={busy || attendanceBusy} close={closeMobileDetails}>
+        <div className="service-details">{details}</div>
+        {feedback.error && <p className="notice error" role="alert">{feedback.error}</p>}
+        {feedback.message && <p className="notice" role="status">{feedback.message}</p>}
+        <button className="button secondary" disabled={busy || attendanceBusy} onClick={closeMobileDetails}>Zurück zur Terminübersicht</button>
+      </MobileSheet>}
+    </> : details}
   </article>;
 }

@@ -82,6 +82,7 @@ jobs:
       - name: Verify static Auth flow against intercepted synthetic endpoints
         env:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:3100
+          MOBILE_SCREENSHOT_DIR: test-results/mobile-ui
         run: |
           set -euo pipefail
           node scripts/preview-pages.mjs > /tmp/feuerwehr-auth-preview.log 2>&1 &
