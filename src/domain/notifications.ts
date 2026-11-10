@@ -48,6 +48,44 @@ export function publicApplicationKey(key:string):ArrayBuffer {
   if(bytes.length!==65 || bytes[0]!==4)throw new Error("Öffentlicher Push-Schlüssel ungültig.");
   return bytes.buffer;
 }
-export function notificationError() {
+const pushErrors = {
+  unsupported: "Dieser Browser unterstützt Push hier nicht. Eine sichere Verbindung und ein geeigneter Browser sind erforderlich. In-App-Nachrichten bleiben verfügbar.",
+  permission_blocked: "Benachrichtigungen sind im Browser blockiert. Die Freigabe muss bewusst in den Website-Einstellungen geändert werden.",
+  permission_not_granted: "Die Benachrichtigungsberechtigung wurde nicht erteilt. In-App-Nachrichten bleiben verfügbar.",
+  permission_failed: "Die Benachrichtigungsberechtigung konnte nicht abgefragt werden. Bitte Browser- und Systemeinstellungen prüfen.",
+  permission_timeout: "Der Browser hat die Berechtigungsanfrage noch nicht beantwortet. Bitte das Benachrichtigungssymbol in der Adressleiste prüfen. Eine dort später erteilte Freigabe startet keine Registrierung automatisch; danach bewusst erneut aktivieren.",
+  worker_unavailable: "Der App-Service-Worker ist nicht verfügbar oder noch nicht aktiviert. Bitte kurz warten und die App erneut öffnen; ungespeicherte Eingaben vorher sichern.",
+  subscription_lookup_failed: "Das vorhandene Browser-Abonnement konnte nicht geprüft werden. Es wurde nicht gelöscht. In-App-Nachrichten bleiben verfügbar.",
+  subscription_key_mismatch: "Das bestehende Browser-Abonnement verwendet einen anderen öffentlichen Push-Schlüssel. Es wurde nicht ersetzt. Bitte dieses eigene Gerät bewusst deaktivieren und anschließend erneut aktivieren.",
+  public_key_invalid: "Der öffentliche Push-Schlüssel ist ungültig. Bitte die Administration informieren; vorhandene Geräte bleiben unverändert.",
+  push_service_failed: "Der Browser konnte das Abonnement bei seinem Push-Dienst nicht erstellen, obwohl die Website-Berechtigung erteilt ist. In Edge: Browser vollständig schließen und neu starten. Falls es weiter fehlschlägt, Netzwerk, Proxy/VPN und Browser-/Windows-Richtlinien prüfen lassen. Erneutes Erteilen der Website-Berechtigung allein behebt diesen Fehler nicht. In-App-Nachrichten bleiben verfügbar.",
+  subscription_create_failed: "Der Browser konnte kein Push-Abonnement erstellen. Bitte Browser- und Systemeinstellungen prüfen. Die Website-Berechtigung allein bestätigt noch keine Push-Registrierung.",
+  subscription_timeout: "Der Push-Dienst des Browsers hat nicht rechtzeitig geantwortet. Es wurde keine Backend-Registrierung angefordert. Eine später eintreffende Browser-Subscription wird nicht automatisch gespeichert; bei einem erneuten bewussten Versuch kann sie wiederverwendet werden.",
+  backend_registration_failed: "Das Browser-Abonnement konnte nicht beim Backend registriert werden. Bitte Verbindung, Anmeldung und Freigabe prüfen und erneut versuchen. Andere registrierte Geräte bleiben unverändert.",
+  subscription_cleanup_failed: "Die Backend-Registrierung ist fehlgeschlagen und das neu erstellte Browser-Abonnement konnte nicht entfernt werden. Bitte erneut prüfen; andere Geräte wurden nicht verändert.",
+} as const;
+export type PushErrorCode = keyof typeof pushErrors;
+export const pushStages = {
+  permission: "Bitte die Browseranfrage bestätigen. Edge kann sie auch nur über ein Benachrichtigungssymbol in der Adressleiste anzeigen. Wartezeit höchstens 30 Sekunden.",
+  worker: "App-Service-Worker wird geprüft …",
+  lookup: "Vorhandenes Browser-Abonnement wird geprüft …",
+  subscribe: "Der Browser erstellt das Abonnement bei seinem Push-Dienst. Wartezeit höchstens 30 Sekunden.",
+  backend: "Das eigene Gerät wird beim Backend registriert …",
+} as const;
+export type PushStage=keyof typeof pushStages;
+export class PushRegistrationError extends Error {
+  readonly browserError:string;
+  constructor(readonly code:PushErrorCode,cause?:unknown) {
+    super(pushErrors[code]);
+    this.name="PushRegistrationError";
+    const name=cause instanceof Error ? cause.name : "";
+    this.browserError=["AbortError","NotAllowedError","InvalidStateError","NotSupportedError","SecurityError","NetworkError","TimeoutError","TypeError"].includes(name) ? name : "UnknownError";
+  }
+}
+export function notificationDiagnostic(error:PushRegistrationError) {
+  return {code:error.code,browserError:error.browserError};
+}
+export function notificationError(cause?:unknown) {
+  if(cause instanceof PushRegistrationError)return `${cause.message} Diagnosecode: ${cause.code}.`;
   return "Benachrichtigungsanfrage fehlgeschlagen oder nicht mehr berechtigt. Bitte erneut prüfen. Geräte-Endpoints und Schlüssel werden nicht angezeigt.";
 }

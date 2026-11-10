@@ -4,6 +4,16 @@
 Feuerwehralarmierung. Zustellung ist browser-, geräte- und netzabhängig.
 Die unabhängige Demo wird nicht verändert.
 
+**Aktueller Abnahmestand:** PR #24 ist gemergt; iPhone-Aktivierung und
+tatsächlicher Empfang sind durch den Projektverantwortlichen bestätigt.
+Am 10.11.2026 bestätigt er außerdem Aktivierung und tatsächliche Test-Push-
+Anzeige unter Windows mit Edge auf einem nicht verwalteten Rechner.
+Der verwaltete Rechner bleibt eine separate, durch die IT einzugrenzende
+Störung. Weitere Abnahmepunkte werden dadurch nicht automatisch bestätigt.
+Der nachfolgende DEV-0.7-Installationsbericht
+ist historisch; die aktuelle Eingrenzung und der Hotfix stehen unter
+[DEV 0.7.1](#dev-071--edge-registrierung-und-fehlerdiagnose).
+
 ## Analyse und Implementierungsplan
 
 Der bestehende Service Worker `public/sw.js` wird erweitert, nicht ersetzt.
@@ -329,3 +339,232 @@ Referenzen:
 [Supabase Cron](https://supabase.com/docs/guides/functions/schedule-functions),
 [Web Push auf iOS](https://webkit.org/blog/13966/web-push-for-web-apps-on-ios-and-ipados/),
 [Push API](https://developer.mozilla.org/en-US/docs/Web/API/Push_API).
+
+## DEV 0.7.1 – Edge-Registrierung und Fehlerdiagnose
+
+### Bestätigte Abnahme und Fehlerstelle
+
+PR #24 wurde am 09.11.2026 auf Main-Commit
+`8d4167f26da39952d1f450e776842e1435062417` gemergt.
+Der Projektverantwortliche bestätigt erfolgreiche Aktivierung und
+tatsächlichen Push-Empfang auf der iPhone-PWA. Zu Beginn des Hotfixes
+blieb der Desktop-Test offen. Die spätere erfolgreiche echte
+Desktop-Teilabnahme und der verbleibende verwaltete Rechner sind unten
+getrennt dokumentiert. **Keine pauschale DEV-0.7-Gesamtabnahme und kein
+Beginn von DEV 0.8.**
+
+Die vom Projektverantwortlichen am 10.11.2026 übermittelte, schlüsselfreie
+Diagnose aus seinem **normalen Edge-Fenster** zeigt:
+
+| Schritt | Tatsächlicher Befund |
+|---|---|
+| `Notification.permission` | `granted` |
+| `getRegistration()` | Registrierung vorhanden, aktiver Worker |
+| `getSubscription()` | erfolgreich, kein bestehendes Abonnement |
+| `subscribe()` | `AbortError`, Dienst-/Netzwerkhinweis; kein Berechtigungs- oder Schlüsselhinweis |
+
+Damit scheitert der Browser **vor** einer neuen Subscription und vor
+`ff_push_register`. Der Fehler dieses Versuchs entsteht nicht durch das
+Speichern einer Subscription, die Supabase-Rollenprüfung oder RLS.
+Eine erfolgreiche Website-Berechtigung ist nicht gleichbedeutend mit einer
+erfolgreichen Anmeldung beim browserseitigen Push-Dienst.
+
+Die Anwendung verschluckte bisher die konkrete Ausnahme und ersetzte sie
+durch dieselbe Sammelmeldung wie eine fehlgeschlagene Backend-Berechtigung.
+Das ist der nachgewiesene App-Fehler, der mit DEV 0.7.1 korrigiert wird.
+**Der konkrete Netzwerk-, Dienst- oder Richtlinienauslöser auf dem
+betroffenen Laptop ist mit diesem Trace noch nicht bewiesen.**
+Es wird weder behauptet, dass ein Frontend-Patch Windows-/Proxy-Richtlinien
+reparieren könne, noch wird eine erfolgreiche Desktop-Zustellung behauptet.
+
+Ergänzende isolierte Untersuchung am 09.11.2026: Ein sichtbarer nativer
+Edge 155.0.4283.60 konnte im temporären normalen, persistenten Profil mit
+dem unveränderten öffentlichen DEV-VAPID-Schlüssel ein echtes
+WNS-Abonnement erstellen. Es wurde sofort wieder abgemeldet; kein Backend-
+Datensatz und keine Push-Nachricht wurden dafür erzeugt. Dagegen wies ein
+isolierter InPrivate-Kontext trotz künstlich gewährter Notification-
+Berechtigung `subscribe()` zurück. **InPrivate erklärt nicht den
+gemeldeten Fehler**, da der Projektverantwortliche ein normales Fenster
+bestätigt hat. Beide Untersuchungen sind keine End-to-End-Abnahme seines
+normalen Edge-Profils. Der erfolgreiche normale Versuch widerlegt jedoch
+eine pauschale Unverträglichkeit der bisherigen ArrayBuffer-Konvertierung
+oder des unveränderten öffentlichen Schlüssels mit Edge.
+
+Am 10.11.2026 gelang außerdem auf dem tatsächlichen öffentlichen
+DEV-Ursprung ein nativer Versuch mit einem weiteren temporären normalen
+Edge-Profil: WNS-Subscription erstellt und unmittelbar erfolgreich
+abgemeldet, unveränderter öffentlicher DEV-Schlüssel. Supabase-Anfragen
+waren in diesem Versuch blockiert; keine Backend-Registrierung und keine
+Nachricht wurden erzeugt. Eine vorherige unbeschränkte Diagnose wurde
+beendet, nachdem sie hängen blieb; nur der instrumentierte, zeitlich
+begrenzte Wiederholungsversuch lieferte diesen Erfolgsnachweis.
+Auch dieser kontrollierte Versuch ersetzt nicht das betroffene Profil:
+Der Projektverantwortliche meldet weiterhin einen Fehler nach erteilter
+Berechtigung, auch mit einem zusätzlichen normalen Profil.
+
+### Korrektur ohne Datenbank- oder Versandänderung
+
+- Eigene Fehlercodes für fehlende Unterstützung, blockierte/fehlende
+  Berechtigung, nicht aktivierten Worker, Subscription-Abfrage,
+  ungültigen öffentlichen Schlüssel, Dienst-/Erstellungsfehler,
+  Backend-Registrierung und fehlgeschlagene lokale Bereinigung.
+- `AbortError` bei weiterhin erteilter Berechtigung erhält
+  `push_service_failed`, eine verständliche Erklärung und Hinweise auf
+  Browser-Neustart beziehungsweise die Prüfung von Netzwerk, Proxy/VPN
+  und Browser-/Windows-Richtlinien. Kein wiederholter Berechtigungsdialog
+  und kein automatisches Wiederholen oder Abschalten von Sicherheitsregeln.
+- Die Konsole erhält nur `FF_PUSH_DIAG`, den festen Diagnosecode und einen
+  freigegebenen Exception-Namen. Kein rohes Error-Objekt, Meldungstext,
+  Subscription-JSON, vollständiger Endpoint, Schlüssel oder Token.
+- Fehler bei der lokalen Subscription-Abfrage lassen die zentral geladene
+  Inbox verfügbar. Ein erfolgreicher Hintergrundabruf verwirft nicht die
+  Diagnose einer fehlgeschlagenen Aktivierung.
+- Die Anzeige unterscheidet „Nicht aktiviert · Browserberechtigung erteilt“
+  von einer bestätigten aktiven Geräteregistrierung.
+- Passende bestehende Subscriptions werden wiederverwendet. Ein anderer
+  gespeicherter öffentlicher Schlüssel wird erkannt, ohne das bestehende
+  Abonnement stillschweigend zu ersetzen. Auch ein eigenes inaktives
+  Browser-Abonnement kann ausdrücklich entfernt werden; die historische
+  Geräteregistrierung und andere Geräte bleiben erhalten.
+- Bei einem Backend-Fehler wird ausschließlich ein gerade für diesen
+  Versuch neu erstelltes Browser-Abonnement bereinigt, niemals ein vorher
+  vorhandenes oder das eines anderen Geräts. Fehler bei der Bereinigung
+  sind gesondert sichtbar.
+- Während der Aktivierung werden Berechtigung, Worker-Prüfung,
+  Abonnement-Abfrage/-Erstellung und Backend-Registrierung als zugänglicher
+  Live-Status angezeigt. Die Berechtigungsanzeige erklärt auch die stille
+  Edge-Anfrage über das Symbol in der Adressleiste.
+- Native Wartezeiten werden begrenzt: Berechtigung 30 Sekunden,
+  Worker-Abfrage 10 Sekunden, Abonnement-Abfrage 15 Sekunden und Erstellung
+  30 Sekunden. Das sind einzelne Browser-Timer, kein universeller
+  Backend- oder Gesamtzeitdeckel; ein suspendierter Browser kann Timer
+  verzögert ausführen. Zeitüberschreitungen geben die Oberfläche wieder
+  frei und erhalten sichere Diagnosecodes.
+- Native Push-Aufrufe sind nicht abbrechbar. Ein nach Timeout verspätet
+  erteiltes Recht oder erstelltes Abonnement startet keine versteckte
+  Backend-Registrierung, auch nicht nach Abmeldung. Ein verspätetes
+  lokales Abonnement wird nicht automatisch gelöscht, weil ein neuer
+  bewusster Versuch es inzwischen verwenden könnte. Es kann beim nächsten
+  ausdrücklichen Aktivieren wiederverwendet werden. Ohne bestätigte
+  Backend-Registrierung behauptet die App keine Aktivierung.
+
+Keine Migration, kein RLS-/Auth-Umbau, keine Änderung der Endpoint-Allowlist,
+keine VAPID-Rotation, kein Edge-Deployment und keine Änderung bestehender
+Gerätedatensätze im Hosted DEV. Der bestehende Worker und sein ausdrücklich
+bestätigter Update-Ablauf bleiben unverändert.
+
+### Regression und Grenzen der automatisierten Nachweise
+
+Die Notification-Suite deckt synthetische WNS-/Apple-Subscriptions,
+wiederholte Aktivierung, Mehrgerätebetrieb, den gemeldeten AbortError,
+Blockierung, Worker-/Abfrage-/Backend-Fehler, Bereinigung und veraltete
+Schlüssel ab. Sämtliche Supabase- und Push-APIs sind in diesen Browserfällen
+abgefangen. Ausführung im installierten Microsoft Edge erfolgt mit:
+
+```powershell
+$env:PLAYWRIGHT_CHANNEL='msedge'
+$env:NEXT_PUBLIC_BASE_PATH='/feuerwehr-odenthal-app'
+$env:PLAYWRIGHT_BASE_URL='http://127.0.0.1:3181'
+npx.cmd playwright test --config playwright.auth.config.ts supabase-notifications.spec.ts
+```
+
+Diese Tests sind **synthetische Protokollregressionen in einem echten
+Browserprozess**, keine echten Push-Zustelltests und keine iOS-Emulation.
+Die Notification-Auswahl umfasst jetzt 32 Fälle, die komplette
+DEV-Auswahl 133 Browserfälle. Zusätzlich abgedeckt sind exakte
+Zeitgrenzen mit angehaltener Testuhr, sichtbarer Fortschritt, verspätete
+Berechtigung, verspätete Subscription, bewusste Wiederverwendung und
+Abmeldung während einer verspäteten Browserantwort. Die bereits
+erfolgreichen 184 Domain/Auth/Konfigurations- und 24 Skripttests bleiben
+erhalten.
+Die bestehende CI prüft weiterhin Domain/Auth, Demo, komplette DEV-
+Browserregression, Static Export, Secret-Scanner und PostgreSQL/RLS.
+
+### Unterstützte Windows-Eingrenzung durch die Administration
+
+Microsoft dokumentiert ausdrücklich Umgebungen, in denen der
+Windows-WNS-Client keine Verbindung herstellen kann, der in Edge
+integrierte Client dagegen schon:
+[ForceBuiltInPushMessagingClient](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-policies/forcebuiltinpushmessagingclient).
+Diese Richtlinie ist unter Windows ab Edge 118 verfügbar. Ohne
+Konfiguration oder bei `Disabled` verwendet Edge den Windows-Client;
+`Enabled` verwendet den integrierten WNS-Client. Die Einstellung gilt
+nicht je Profil und erfordert einen vollständigen Browser-Neustart.
+Ein zusätzliches Profil allein testet diesen Unterschied daher nicht.
+
+Dies ist eine konkrete unterstützte Eingrenzung, **kein Nachweis der
+Ursache auf dem betroffenen Laptop und keine bereits angewandte Lösung**:
+
+1. Zuständige Administration prüft unter `edge://policy` den effektiven
+   Wert dieser einen Richtlinie und dokumentiert den Ausgangswert.
+   Keine vollständigen Richtlinienexporte mit internen Daten veröffentlichen.
+2. Nur mit ausdrücklicher Freigabe und über die zuständige
+   Geräteverwaltung einen kontrollierten Vergleich mit `Enabled`
+   durchführen. Keine eigenmächtige Registry-Änderung oder Umgehung
+   verwalteter Netz-/Sicherheitsregeln. Ungespeicherte Eingaben sichern,
+   Edge vollständig schließen und wieder öffnen.
+3. Einmal bewusst aktivieren, Diagnosecode notieren. Nur bei bestätigter
+   Geräte-Registrierung einmal den eigenen DEV-Test senden und echte
+   Anzeige/Klickziel prüfen. Bestehende iPhone-Registrierung belassen.
+4. Bei unverändertem Fehler den Ausgangszustand über dieselbe
+   Verwaltung wiederherstellen und die Windows-/WNS-Netzwerkdiagnose
+   durch die Administration fortsetzen.
+
+Die Entwicklung hat weder diese Richtlinie noch Windows-Dienste,
+Firewall, Proxy, vorhandene Profile oder laufende Benutzerbrowser verändert.
+
+### Bestätigte reale Desktop-Teilabnahme vom 10.11.2026
+
+Der Projektverantwortliche hat ausdrücklich bestätigt:
+
+- Der ursprünglich betroffene Windows-Rechner ist verwaltet.
+- Auf einem nicht verwalteten Windows-Rechner lässt sich Push in
+  Microsoft Edge erfolgreich aktivieren.
+- Auch eine über „Test-Push senden · DEV“ ausgelöste Benachrichtigung
+  ist dort **tatsächlich unter Windows mit Edge erschienen**, nicht nur
+  die Aktivierung als erfolgreich angezeigt worden.
+
+Dies ist ein **vom Benutzer bestätigter realer Geräte-/Versandtest**,
+kein synthetischer Test und keine selbstständig aufgezeichnete
+End-to-End-Sitzung der Entwicklung. Browserversion und persönliche
+Build-Anzeige wurden dabei nicht gesondert übermittelt.
+
+Die öffentliche DEV-Anwendung lieferte zum Dokumentationszeitpunkt
+`DEV 0.7`, Commit
+`8d4167f26da39952d1f450e776842e1435062417`,
+Build-ID `8d4167f26da3-b2d56a59-340e-43f4-8e16-79a4d43e046b`.
+PR #25 war noch offen. Der Empfang ist daher **kein Beleg einer
+Fehlerbehebung durch den noch nicht veröffentlichten DEV-0.7.1-Patch**.
+
+Ergebnis: Edge-Desktop-Push funktioniert in der bestätigten nicht
+verwalteten Windows-Umgebung bereits mit DEV 0.7. Der verbleibende
+Fehler ist umgebungsabhängig und auf dem verwalteten Rechner weiterhin
+vor der Backend-Registrierung zu untersuchen. Dass eine bestimmte
+Unternehmensrichtlinie oder ein bestimmter Netzfilter ihn verursacht,
+ist damit noch nicht bewiesen. Diese lokale Eingrenzung liegt bei der
+zuständigen IT; Sicherheitsvorgaben werden nicht umgangen.
+
+Die Entwicklung selbst hat keine echten Pushs oder Testmails versandt.
+Die obige echte Testnachricht wurde vom Projektverantwortlichen ausgelöst.
+Weitere Geräte, Klicknavigation und sämtliche fachlichen
+Benachrichtigungsszenarien werden dadurch nicht pauschal abgenommen.
+
+Nach manuellem Merge bleibt für den Hotfix erforderlich:
+
+1. Ungespeicherte Eingaben sichern und das angebotene PWA-Update bewusst
+   bestätigen. Sichtbare Version und Build-ID festhalten.
+2. Im normalen Edge-Fenster einmal aktivieren. Bei erneutem Fehler nur
+   Diagnosecode und Exception-Namen notieren, keine Schlüssel/Endpoints.
+3. Den weiterhin betroffenen verwalteten Rechner durch die zuständige
+   Administration eingrenzen lassen. Ein weiteres Profil allein
+   unterscheidet den Windows- und integrierten WNS-Client nicht.
+   Unternehmensrichtlinien, Proxy/VPN und Push-Dienstzugriff nicht umgehen.
+4. Die neue Diagnose-/Timeout-Oberfläche und die bewusste Wiederholung
+   am veröffentlichten Hotfix prüfen; auf dem funktionierenden Desktop
+   eigene Geräte-Registrierung, echte Anzeige und Klickziel erneut prüfen.
+5. Vorhandenes iPhone parallel belassen und dessen Empfang erneut prüfen.
+
+Status: **Realer Edge-/Windows-Push auf nicht verwaltetem Rechner bestätigt.
+Dienstfehler auf verwaltetem Rechner nicht als behoben nachgewiesen;
+Hotfix-Oberfläche noch nicht manuell auf dem veröffentlichten Stand geprüft.
+DEV 0.8 bleibt außerhalb dieses Auftrags.**

@@ -9,6 +9,7 @@ export default defineConfig({
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3100",
     browserName: "chromium",
+    ...(process.env.PLAYWRIGHT_CHANNEL==="msedge" ? {channel:"msedge"} : {}),
     viewport: { width: 390, height: 844 },
     trace: "off",
     screenshot: "only-on-failure",

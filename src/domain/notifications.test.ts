@@ -1,11 +1,29 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { notificationHref,notificationPreferencesSchema,notificationWorkspaceSchema,publicApplicationKey } from "./notifications";
+import { notificationHref,notificationPreferencesSchema,notificationWorkspaceSchema,publicApplicationKey,
+  notificationError,notificationDiagnostic,PushRegistrationError } from "./notifications";
 import { allowedPushEndpoint,createPushHandler } from "../../supabase/functions/push-dispatch/handler";
 import { generateKeyPairSync } from "node:crypto";
 
 const id="a0700000-0000-4000-8000-000000000001",notice="b0700000-0000-4000-8000-000000000001";
 const delivery="c0700000-0000-4000-8000-000000000001",lease="d0700000-0000-4000-8000-000000000001";
+test("push diagnostics retain only known phase and error names, never raw exceptions",()=>{
+  const cause=new Error("SYNTHETIC_PRIVATE_TOKEN https://notify.invalid/private");
+  cause.name="SYNTHETIC_PRIVATE_NAME";
+  const failure=new PushRegistrationError("backend_registration_failed",cause);
+  assert.deepEqual(notificationDiagnostic(failure),{code:"backend_registration_failed",browserError:"UnknownError"});
+  assert.ok(!notificationError(failure).includes("SYNTHETIC_PRIVATE"));
+  assert.ok(!JSON.stringify(notificationDiagnostic(failure)).includes("https://"));
+  assert.ok(!notificationError(cause).includes("SYNTHETIC_PRIVATE"));
+  const service=new PushRegistrationError("push_service_failed",new DOMException("private details","AbortError"));
+  assert.deepEqual(notificationDiagnostic(service),{code:"push_service_failed",browserError:"AbortError"});
+  assert.match(notificationError(service),/Website-Berechtigung erteilt/);
+  for(const code of ["permission_timeout","subscription_timeout"] as const){
+    const timeout=new PushRegistrationError(code,new DOMException("SYNTHETIC_PRIVATE_TIMEOUT","TimeoutError"));
+    assert.deepEqual(notificationDiagnostic(timeout),{code,browserError:"TimeoutError"});
+    assert.ok(!notificationError(timeout).includes("SYNTHETIC_PRIVATE"));
+  }
+});
 test("notification navigation uses only validated UUIDs and existing authenticated routes",()=>{
   assert.equal(notificationHref({source_kind:"event",target_id:id}),`/termine/?bereich=dienste&termin=${id}#event-${id}`);
   assert.match(notificationHref({source_kind:"attendance",target_id:id}),/aufgabe=attendance/);

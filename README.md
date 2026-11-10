@@ -1,12 +1,21 @@
 # Feuerwehr Odenthal · Supabase DEV und lokale Regression
 
-**DEV 0.7 (Feature-Branch):** [Organisatorische In-App- und Web-Push-Benachrichtigungen](docs/dev-notifications.md).
-Der bestehende Posteingang und Service Worker werden erweitert:
-freiwillige Geräteaktivierung, eigene Einstellungen, Erinnerungen, geschützter
-serverseitiger Versand und Direktnavigation nach erneuter Berechtigungsprüfung.
-Keine Alarmierung, kein Ersatz für aPager. Reale Geräteabnahme bleibt offen.
-Die öffentliche DEV bleibt bis zum manuellen Merge bei **DEV 0.6.4.1**.
-Keine automatische Veröffentlichung, kein automatischer Merge, keine Änderung der Demo.
+**DEV 0.7.1 (Hotfix-Branch):** Gezielte Push-Registrierungsdiagnosen,
+sichtbarer Fortschritt, begrenzte native Wartezeiten, Erhalt bestehender
+Geräte und sichere Behandlung fehlgeschlagener oder verspäteter Abonnements.
+[Ursache, Grenzen und Desktop-Abnahme](docs/dev-notifications.md#dev-071--edge-registrierung-und-fehlerdiagnose).
+
+**DEV 0.7 – PR #24 gemergt, Abnahme weiterhin offen:** Zentrale Inbox,
+freiwillige Geräteaktivierung, eigene Einstellungen, Erinnerungen und
+geschützter Versand. Der Projektverantwortliche hat Aktivierung und
+tatsächlichen Push-Empfang auf der iPhone-PWA und am 10.11.2026 auch unter
+Windows mit Microsoft Edge auf einem nicht verwalteten Rechner bestätigt.
+Auf dem verwalteten Windows-Rechner scheitert der native Push-Dienst
+weiterhin vor der Backend-Registrierung; die genaue lokale Ursache muss
+die zuständige IT eingrenzen. Der erfolgreiche Desktop-Test betrifft den
+bereits veröffentlichten DEV-0.7-Stand, nicht den noch ungemergten Hotfix.
+Keine Alarmierung, kein Ersatz für aPager. Kein automatischer Merge,
+keine Änderung der unabhängigen Demo und noch kein Beginn von DEV 0.8.
 
 **DEV 0.6.4.1 – manuell abgenommen und gesichert:** Offene Anwesenheitslisten,
 Dashboard-Zähler, Abschlussaktualisierung und Berechtigungen wurden vom
