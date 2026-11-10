@@ -23,11 +23,15 @@ Kein automatischer Merge, kein Release-Tag vor Abnahme und kein Beginn von DEV 0
    Profilankern. Die vorhandene `openNotice`-Logik prüft den Eintrag erneut
    serverseitig, markiert ihn wie bisher gelesen und öffnet ausschließlich die
    bisherigen validierten Direktziele. Entfallene Ziele werden erklärt.
-3. **Einheitliche Navigation:** Start, Termine, Dokumente, Profil, Mehr auf
-   allen mobilen Seiten. Statistik sowie berechtigte Administration unter Mehr.
-   Diese Zuordnung war auf den DEV-0.8-Modulseiten bereits vorhanden; sie wird
-   nicht invertiert, sondern konsistent auch auf Start verwendet.
-   Routen, Browser-Zurück und Desktop-Navigation bleiben erhalten.
+3. **Einheitliche Navigation:** Nach der Korrektur im separaten Folge-PR:
+   Start, Termine, Dokumente, Statistik, Mehr auf allen mobilen Seiten.
+   Profil und berechtigte Administration stehen unter Mehr. PR #28 hatte
+   zunächst Profil direkt und Statistik unter Mehr platziert.
+   Mehr ist auf Profil/Administration aktiv; der aktuelle Link im Dialog wird
+   zusätzlich durch `aria-current` und Theme-Farben markiert. Der Mehr-Button
+   meldet seinen Öffnungszustand mit `aria-expanded`.
+   Routen, Browser-Zurück, Desktop-Navigation, Rollenprüfung und Cockpit bleiben
+   unverändert. Ohne `compact` bleibt auch die lokale Demo-Navigation unverändert.
 4. **Kalender:** Unter 768 Pixel standardmäßig die maximal fünf nächsten
    laufenden oder zukünftigen Einträge, sortiert nach Beginn/ID. Bereits
    beendete Termine sind ausgeschlossen. „Weitere Termine anzeigen“ erweitert
@@ -73,17 +77,105 @@ verbindliche Fahrzeugvorgänge; kein Zugriff für `anon` oder `PUBLIC`.
 Keine Tabelle, Mitgliedschaft, Rolle, Nachricht oder Termindaten werden geändert.
 Es gibt keinen stillen Ersatz durch eine unvollständige Monatsliste.
 
-**Vor einem Merge mit Frontend-Deployment:** Migration 040 nach Review im
-Supabase-DEV installieren und die mobile Liste prüfen. Dieser UI-Auftrag
-installiert nichts automatisch im gehosteten Projekt. Ohne RPC erscheint eine
-explizite Einrichtungsfehlermeldung; die bisherige Monatsansicht bleibt bewusst
-auswählbar. Kein Dispatcher-, Auth-, Service-Worker- oder Cloud-Konfigurationsrollout.
+**Rollout-Stand vom 10.11.2026:** PR #28 ist bereits gemergt und bereitgestellt.
+Die separat autorisierte Installation von 040 ist erfolgt; der unten
+dokumentierte Abgleich bestätigt den vollständigen SQL-Inhalt und den
+tatsächlichen Historieneintrag. Der Navigations-Folge-PR ist davon getrennt und
+wird nicht automatisch gemergt oder ausgerollt. Ohne RPC erscheint weiterhin
+eine explizite Einrichtungsfehlermeldung; die Monatsansicht bleibt auswählbar.
+Kein Dispatcher-, Auth-, Service-Worker- oder Cloud-Konfigurationsrollout.
 
 Die mobile Vorschau ist auf 400 Einträge begrenzt, analog zur vorhandenen
 Kalenderseitengröße. Bei weiteren Treffern führt die deutlich benannte Aktion
 in den vollständigen navigierbaren Kalender; spätere Termine bleiben darüber
 erreichbar. Laufende mehrtägige Termine werden einmal gezeigt, nicht pro Tag
 dupliziert. Serverzeit entscheidet über „beendet“, Berlin nur über die Anzeige.
+
+### Abschlussprüfung nach PR #28 und Navigationskorrektur
+
+**Freigabe bleibt In Prüfung.** Automatisierte Browserprüfungen und der unten
+beschriebene echte Konto-Test sind keine physische iPhone-13-Abnahme.
+
+Der veröffentlichte DEV-Stand wurde erneut gegen das originale Pages-Artefakt
+des [Main-Laufs 42836931680](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42836931680)
+verglichen: **alle 77 Dateien identisch**, Commit
+`d146b6bdc975420d550376b75297f261b6b66410`, Build
+`d146b6bdc975-637233c9-6e7d-4a76-ab63-100e2e760a33`, Modus `supabase-dev`.
+Das bestätigt PR #28, nicht die noch separat zu mergende Navigationskorrektur.
+
+#### Migration 040: vollständiger Ist-Abgleich, keine erneute Installation
+
+Ziel ausschließlich `orxinqhhbtjpkzwlfaxq`, kein Demo-/Produktionsprojekt:
+
+| Prüfpunkt | Tatsächlich bestätigter DEV-Zustand |
+|---|---|
+| Vollständige lokale Datei | `supabase/migrations/20261110004000_calendar_upcoming.sql`; eine Funktion, REVOKE/GRANT und Transaktionsrahmen, keine DML-/Tabellenänderungen |
+| Funktionsdefinition | Einzige Überladung; neun typisierte Argumente und alle neun Defaults identisch; `jsonb`, `STABLE`, `SECURITY DEFINER`, leerer `search_path`, `page_size=5` |
+| Vollständiger Funktionskörper | Identisch mit Datei; MD5 nach LF-Normalisierung `fd856de22bdf256c6b01c7b54a2e26b3` |
+| Gesamtes gespeichertes Migrations-SQL | Identisch mit vollständiger Datei einschließlich Grants, nach LF-Normalisierung und Entfernen äußerer Leerzeichen; MD5 `b57ab527856c0b7d5fcee535955bc938` |
+| Öffentliche Ausführung | `authenticated`: erlaubt; `anon` und `PUBLIC`: nicht erlaubt |
+| Privilegierte technische Rollen | Eigentümer `postgres` und bestehende `service_role`-Berechtigung bleiben erhalten; kein neuer Client-Zugriff |
+| Tatsächliche Historie | Version `20261110170632`, Name `dev081_040_calendar_upcoming`; ein gespeicherter SQL-Block mit dem vollständigen Migrationsinhalt |
+
+`040` ist die fachliche laufende Nummer im Dateinamen, nicht die gespeicherte
+Supabase-Version. Das beim separat autorisierten Anwenden benutzte
+`apply_migration` hat den Ausführungszeitstempel `20261110170632` vergeben,
+nicht den lokalen Dateipräfix `20261110004000`. Eine Suche nur nach `040` oder
+diesem lokalen Präfix kann deshalb leer sein. Der tatsächliche Datensatz und
+sein vollständiges SQL wurden gelesen, nicht aus der bloßen Existenz der RPC
+abgeleitet. Zur gezielten Kontrolle:
+
+```sql
+select version, name, cardinality(statements) as sql_blocks
+from supabase_migrations.schema_migrations
+where name = 'dev081_040_calendar_upcoming'
+   or version in ('20261110170632', '20261110004000');
+```
+
+Es fehlt keine Änderung aus der Datei. **Keine erneute DDL-Ausführung, kein
+zweiter Erfolgseintrag, kein manuelles Umschreiben der Historie und kein
+`db push` als Reparatur.** Die dokumentierte Zuordnung gleicht die irreführende
+Versionssuche mit dem nachgewiesenen Ist-Zustand ab. Bei einem zukünftigen
+Wechsel auf CLI-gesteuertes Deployment muss zunächst die gesamte Historie
+abgeglichen werden; nicht nur 040 blind als angewendet markieren.
+
+#### Echter angemeldeter MEMBER-Test gegen gehostetes DEV
+
+Der Verantwortliche hat sich im Browser selbst mit einem autorisierten
+normalen Testkonto angemeldet. `ff_my_access` bestätigte ausschließlich
+`MEMBER`. Die folgenden **echten** read-only PostgREST-Aufrufe benutzten diese
+normale Sitzung, weder einen Service-Key noch einen künstlich erzeugten Login:
+
+| Prüfung | Ergebnis |
+|---|---|
+| `ff_calendar_upcoming({})` | HTTP 200, genau fünf Einträge |
+| `page_size=400` | HTTP 200, 17 erlaubte Einträge; Beginn/ID sortiert, keine Duplikate oder bereits beendeten Einträge |
+| Standardseite gegen erweiterte Liste | Genau die ersten fünf derselben Reihenfolge |
+| Vollständige Ergebnismenge | Identisch mit separater read-only DB-Gegenprüfung der bestehenden Sichtbarkeitsregeln für diesen Testnutzer |
+| Tatsächlich geschützter Termin als manipulierte `retained_ids` | Weder in `events` noch `retained_events` sichtbar |
+| Fremde Einheit als Filter einschließlich geschützter ID | HTTP 200, keine Termine und keine retained-Daten |
+| `page_size=0`, `page_size=401`, unbekannter Scope | Je HTTP 403 / `42501` |
+| Administrative `ff_members_workspace` als MEMBER | HTTP 403 / `42501` |
+| Aufruf derselben Lese-RPC ohne Authorization | HTTP 401 / `42501`, kein anonymes Lesen |
+
+Die DB-Gegenprüfung setzte nur transaktionslokal die Testnutzer-ID für die
+Auswertung vorhandener Regeln; sie ersetzt nicht die separat ausgeführten
+realen Browser-/JWT-Aufrufe. Keine Konto-, Rollen-, Passwort-, Teilnahme-,
+Anwesenheits- oder Termindaten wurden geändert. Keine echten Pushs/Testmails.
+Keine Passwörter oder Tokens wurden in Dateien, Berichte oder Konsolenausgaben
+übernommen. Die zusätzliche temporäre Browserdiagnose wird anschließend entfernt.
+
+Für den Folge-PR sind acht neue Mobil-Navigationsfälle ergänzt:
+GLOBAL_ADMIN, UNIT_ADMIN, MEMBER und delegierter Organisator jeweils in
+Light/Dark bei 320 Pixeln. Sie prüfen genaue Reihenfolge, alle Ziele,
+aktive Markierung, Mehr-Öffnungszustand, Browser-Zurück, Fokus,
+rollenabhängige Administration einschließlich direkter unerlaubter Route,
+Overflow und Accessibility. Zusammen mit den bisherigen Mobil-/Refinement-Fällen
+wurden lokal **45 Fälle erfolgreich** ausgeführt, ebenso TypeScript, Lint,
+189 Domain/Auth/Config- und 24 Skripttests sowie der statische DEV-Export.
+Lint enthält ausschließlich die bereits bestehende Warnung
+`supabase-planning.tsx:65`. Vollständige DEV-/Demo-, SQL/RLS-/Upgrade- und
+Export-Ergebnisse sind in den aktuellen Checks des separaten Folge-PR belegt.
 
 ### Automatisierte Prüfung und manuelle Abnahme DEV 0.8.1
 
@@ -131,13 +223,28 @@ Auf echtem iPhone 13 / Safari und installierter PWA nach Review prüfen:
    inzwischen entfallenen Vorgang mit ausdrücklich autorisierten Testdaten.
 4. Alle Benachrichtigungen, Einstellungen und unveränderte Push-Geräteverwaltung.
    Echten Push nur bewusst mit eigenem autorisiertem Gerät auslösen.
-5. Profil direkt, Statistik unter Mehr, rollenabhängige Administration,
-   aktive Markierung, Browser-Zurück und alte Dienstbuch-Bookmarks.
+5. Untere Navigation exakt Start, Termine, Dokumente, Statistik, Mehr.
+   Profil und rollenabhängige Administration unter Mehr; aktive Markierung,
+   Browser-Zurück und alte Dienstbuch-Bookmarks.
 6. Mobile nächste fünf, laufender/weit entfernter Termin, weitere Einträge,
    Filter und Details; Monatswahl nach Navigation erhalten.
 7. Tablet/Desktop: Monat als eigener Standard, unabhängige Ansichtswahl,
    Sidebar und bestehende Kalender-/Dienstfunktionen.
 8. Dienstbuch-Daten, Teilnahme, Anwesenheitsabschluss und beide Themes prüfen.
+
+**Kurze physische iPhone-13-Freigabe nach Merge des Folge-PR:** Safari und
+installierte PWA im Hochformat öffnen, bei angebotener neuer Version bewusst
+aktualisieren und den tatsächlich angezeigten Commit notieren. Als MEMBER die
+fünf Navigationsziele sowie Profil unter Mehr prüfen; als berechtigter Admin
+zusätzlich Administration und aktive Markierungen. Auf Start und Modulseiten
+gleichen Header, Glocke mit maximal fünf aktuellen Nachrichten und unverdeckte
+Bedienflächen bis zur unteren Safe Area kontrollieren. Kalenderliste: fünf
+kommende/laufende Einträge, Reihenfolge, Detailaufruf, Nachladen; Monat/Woche/
+Liste wechseln und nach Hin-/Zurücknavigation erhaltene Ansicht prüfen.
+Dienstbuch nur unter Statistik, kein Dienstbuch im Profil. Alles in Light und
+Dark wiederholen, einschließlich geöffnetem Mehr-Dialog und Glockenvorschau.
+Erst nach ausdrücklicher Bestätigung mit Gerät, iOS-Version, geprüftem Commit
+und Ergebnis als bestanden dokumentieren. Bis dahin **offen**, kein Release-Tag.
 
 ### Historische Dokumentation DEV 0.8
 

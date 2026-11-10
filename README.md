@@ -10,9 +10,11 @@ Main-CI und Pages-Abgleich aller 77 Dateien erfolgreich.
 
 **DEV 0.8.1 – Mobile UX Refinement · In Prüfung:** Gemeinsamer kompakter
 Header auch auf Start, Vorschau der bestehenden Inbox, einheitliche mobile
-Profil-/Mehr-Navigation, nächste fünf Kalendertermine und Dienstbuch nur unter
-Statistik. Die notwendige additive Lese-RPC 040 muss vor Frontend-Deployment
-nach Review im DEV installiert werden; kein automatischer Merge oder Tag.
+Navigation Start, Termine, Dokumente, Statistik, Mehr; Profil und berechtigte
+Administration unter Mehr. Nächste fünf Kalendertermine und Dienstbuch nur unter
+Statistik. PR #28 ist in DEV bereitgestellt; die Navigationskorrektur folgt in
+einem separaten PR. Lese-RPC 040 und tatsächlicher Migrationsverlauf sind im DEV
+geprüft, einschließlich echter MEMBER-Anmeldung; kein automatischer Merge oder Tag.
 [Umsetzung, Grenzen und manuelle Abnahme](docs/dev-mobile-ui.md).
 DEV 0.8 wurde mit PR #27 gemergt und auf iPhone 13 weitgehend erfolgreich
 abgenommen. Die erneute physische Abnahme von DEV 0.8.1 steht noch aus.

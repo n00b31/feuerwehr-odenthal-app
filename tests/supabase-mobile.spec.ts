@@ -121,7 +121,7 @@ for(const role of ["global","unit","member","delegate"] as const)test(`mobile to
   await page.getByRole("button",{name:"Mehr Bereiche"}).click();
   const more=page.getByRole("dialog",{name:"Weitere Bereiche"});
   await expect(more.getByRole("link",{name:"Administration",exact:true})).toHaveCount(plans?1:0);
-  await expect(more.getByRole("link",{name:"Statistik",exact:true})).toBeVisible();
+  await expect(more.getByRole("link",{name:"Profil",exact:true})).toBeVisible();
   await context.close();
 });
 
@@ -174,15 +174,15 @@ test("mobile secondary routes, calendars and logout stay reachable without write
   const nav=page.getByRole("navigation",{name:"Mobile Navigation",exact:true});
   await nav.getByRole("link",{name:"Dokumente",exact:true}).click();
   await expect(page.getByRole("heading",{name:"Dokumentenbereiche"})).toBeVisible();await noOverflow(page);
-  await page.getByRole("button",{name:"Mehr Bereiche"}).click();
-  await page.getByRole("dialog").getByRole("link",{name:"Statistik",exact:true}).click();
+  await nav.getByRole("link",{name:"Statistik",exact:true}).click();
   await expect(page.getByRole("heading",{name:"Mein Dienstbuch",exact:true})).toBeVisible();
   await expect(page.getByRole("heading",{name:"Meine Diensthistorie",exact:true})).toBeVisible();await noOverflow(page);
   await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
   await page.getByRole("button",{name:"Mehr Bereiche"}).click();
   await page.getByRole("dialog").getByRole("link",{name:"Administration",exact:true}).click();
   await expect(page.getByRole("heading",{name:"Mitgliederverwaltung",exact:true})).toBeVisible();await noOverflow(page);
-  await nav.getByRole("link",{name:"Profil",exact:true}).click();
+  await page.getByRole("button",{name:"Mehr Bereiche"}).click();
+  await page.getByRole("dialog",{name:"Weitere Bereiche"}).getByRole("link",{name:"Profil",exact:true}).click();
   await expect(page.getByRole("heading",{name:"Verifiziertes DEV-Profil"})).toBeVisible();
   await expect(page.getByRole("heading",{name:"Posteingang · 0 ungelesen"})).toBeVisible();await noOverflow(page);
   await page.getByRole("button",{name:"Abmelden / Sitzung entfernen",exact:true}).click();
