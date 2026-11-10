@@ -101,6 +101,26 @@ Screenshots `081-*` werden im vorhandenen CI-Artefakt gesammelt.
 Der optionale Pixelvergleich erfasst jetzt nur das unveränderte Cockpit;
 Header und Navigation sind ausdrücklich Gegenstand der Verfeinerung.
 
+Verifizierter Prüfstand für PR #28:
+
+| Prüfung | Ergebnis |
+|---|---|
+| Domain/Auth/Config und Skripte | 189 + 24 erfolgreich |
+| DEV-Browser, einschließlich 18 neuer Refinement-Fälle | 178 erfolgreich |
+| Bestehende Demo-Browserfälle im isolierten CI-Build | 19 erfolgreich; unabhängiges Demo-Repository unverändert |
+| PostgreSQL 17 / RLS / Upgrade / geschützte Edge-Funktionen | Erfolgreich, einschließlich Migration 040 |
+| TypeScript, Lint, Static Export und DEV-Exportscanner | Erfolgreich; nur die bestehende Lint-Warnung `supabase-planning.tsx:65` |
+| Optionaler lokaler Cockpit-Pixelvergleich mit veröffentlichtem DEV 0.8 | Identisch, nach Ausschluss der absichtlich geänderten Header-/Navigationsgeometrie |
+
+Die vollständigen grünen Läufe des Implementierungsstands `e7ba5dd` sind
+[UI/Export](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42833692194)
+und [DB/Upgrade](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42833692151).
+Die aktuellen Checks und acht Light-/Dark-Bildpaare stehen in
+[PR #28](https://github.com/n00b31/feuerwehr-odenthal-app/pull/28).
+Der lokale Pixelvergleich verwendet das tatsächliche DEV-0.8-Pages-Artefakt
+von Commit `3441b31e93efba45257a084b72a33cd041e8056c`; die Cockpit-PNGs
+werden beim optionalen Lauf als Vergleichsnachweise gesichert.
+
 Auf echtem iPhone 13 / Safari und installierter PWA nach Review prüfen:
 
 1. Start und Module: gleiche Kopfzeile, Branding, Theme, Safe Areas, keine
