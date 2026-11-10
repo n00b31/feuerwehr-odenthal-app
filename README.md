@@ -6,7 +6,13 @@ auf iPhone 13 und nicht verwaltetem Windows 11/Edge. Annotierter Tag
 `v0.7.2-push-dev` auf `fa5659603c32b15c6ea7aed1d5653830cbbe11bc`;
 Main-CI und Pages-Abgleich aller 77 Dateien erfolgreich.
 [Abnahme und Betriebsnachweis](docs/dev-notifications.md).
-[Roadmap](docs/roadmap.md): DEV 0.8 ist die nächste Entwicklungsphase.
+[Roadmap](docs/roadmap.md).
+
+**DEV 0.8 – Mobile UI & UX Redesign:** Kompakte mobile Navigation,
+Terminkarten und Detail-/Filterdialoge; Desktop und Startseite bleiben erhalten.
+[Umsetzung, Grenzen und manuelle Abnahme](docs/dev-mobile-ui.md).
+Separater Review ohne automatischen Merge; die physische iPhone-13-Abnahme
+dieser UI-Version steht noch aus.
 
 **DEV 0.7.2:** Vollständiger eigener Push-Geräte-Lebenszyklus
 mit bestätigtem Entfernen, gezielter Reaktivierung und sicherer Entwertung

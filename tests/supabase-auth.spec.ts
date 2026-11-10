@@ -166,6 +166,7 @@ test("full DEV registration, PKCE confirmation, pending approval, admin release 
   state.admin = true;
   await login(page, "synthetic.admin@feuerwehr-odenthal.de");
   await expect(page.getByRole("heading", { name: "Hallo Synthetic Admin" })).toBeVisible();
+  await page.setViewportSize({width:1280,height:900});
   await page.getByRole("link", { name: "Administration", exact: true }).click();
   await expect(page.getByRole("button", { name: "Synthetic Mitglied freigeben" })).toBeDisabled();
   await page.getByLabel("Einheit für Synthetic Mitglied").selectOption(unitId);
@@ -178,7 +179,8 @@ test("full DEV registration, PKCE confirmation, pending approval, admin release 
   await login(page);
   await expect(page.getByRole("heading", { name: "Hallo Synthetic Mitglied" })).toBeVisible();
   await page.getByRole("link", { name: "Termine", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Synthetic DEV Dienst" })).toBeVisible();
+  await page.setViewportSize({width:390,height:844});
+  await expect(page.getByRole("button", { name: /Termindetails öffnen: Synthetic DEV Dienst/ })).toBeVisible();
   await expect(page.getByRole("link", { name: "Administration" })).toHaveCount(0);
   await expect(page.getByText(/Demo-Profil wechseln/)).toHaveCount(0);
   expect(await page.evaluate(() => Object.keys(localStorage).some((key) => key.startsWith("ff-odenthal-demo-v1")))).toBe(false);

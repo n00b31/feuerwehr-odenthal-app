@@ -29,7 +29,7 @@ test("browser back releases a native calendar dialog while retaining the selecte
   await expect(page.getByRole("dialog",{name:"Synthetic public information"})).toBeVisible();
   await page.goBack();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.getByRole("button",{name:"Dienstverwaltung",exact:true})).toHaveAttribute("aria-pressed","true");
+  await expect(page.getByRole("button",{name:/Dienstverwaltung/})).toHaveAttribute("aria-pressed","true");
   await page.getByRole("button",{name:"Gemeinsamer Kalender",exact:true}).click();
   await expect(page.getByRole("dialog",{name:"Synthetic public information"})).toBeVisible();
   await page.getByRole("button",{name:"Dialog schließen"}).click();
