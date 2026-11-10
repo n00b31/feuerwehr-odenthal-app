@@ -1,6 +1,7 @@
 import {expect,type BrowserContext,type Page} from "@playwright/test";
 import {publicPath} from "../src/config/app";
 import {localInput} from "../src/domain/time";
+import {emptyInbox} from "./notification-fixture";
 
 export const api = "https://syntheticci.supabase.co";
 export const unit = "20000000-0000-4000-8000-000000000001";
@@ -262,6 +263,7 @@ export async function connect(context: BrowserContext, state: Store, actor: stri
       report_year: new Date(e.starts_at).getFullYear(), training_hours: 2,
     })));
     if (path === "/rest/v1/document_areas" || path === "/rest/v1/rpc/ff_pending_registrations") return respond([]);
+    if(path.endsWith("/ff_notifications"))return respond(emptyInbox(actor));
     throw new Error(`Unexpected synthetic endpoint: ${path}`);
   });
   await context.route(/https:\/\/[^/]+\.supabase\.co\/.*/, route=>

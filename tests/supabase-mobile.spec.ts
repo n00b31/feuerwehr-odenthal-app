@@ -190,15 +190,15 @@ test("mobile secondary routes, calendars and logout stay reachable without write
   expect(state.audit).toHaveLength(0);expect(state.events.every(e=>e.unit_id===unit)).toBe(true);
 });
 
-test("home keeps its accepted layout and navigation; optional pixel comparison with accepted release",async({browser})=>{
+test("home shares the compact header/navigation and preserves cockpit content; optional cockpit pixel comparison",async({browser})=>{
   const context=await browser.newContext({viewport:{width:390,height:844},colorScheme:"light"});
   await mobileFixture(context);const page=await context.newPage();await login(page,true);
   await page.getByRole("navigation",{name:"Mobile Navigation",exact:true}).getByRole("link",{name:"Start",exact:true}).click();
   await expect(page.getByText("Mein Feuerwehr-Cockpit",{exact:true})).toBeVisible();
   await expect(page.locator(".mobile-workspace")).toHaveCount(0);
-  await expect(page.locator(".topbar .header-signout")).toBeVisible();
-  await expect(page.getByRole("navigation",{name:"Mobile Navigation",exact:true}).getByRole("link")).toHaveCount(6);
-  await expect(page.getByRole("button",{name:"Mehr Bereiche"})).toHaveCount(0);
+  await expect(page.locator(".topbar .header-signout")).toBeHidden();
+  await expect(page.getByRole("navigation",{name:"Mobile Navigation",exact:true}).getByRole("link")).toHaveCount(4);
+  await expect(page.getByRole("button",{name:"Mehr Bereiche"})).toHaveCount(1);
   if(process.env.MOBILE_BASELINE_URL){
     const baseline=await browser.newContext({viewport:{width:390,height:844},colorScheme:"light",baseURL:process.env.MOBILE_BASELINE_URL});
     await mobileFixture(baseline,"global",true);const old=await baseline.newPage();await login(old,true);
@@ -212,9 +212,9 @@ test("home keeps its accepted layout and navigation; optional pixel comparison w
         window.scrollTo(0,0);
       });
     }
-    const current=await page.screenshot({fullPage:true,animations:"disabled"});
-    const accepted=await old.screenshot({fullPage:true,animations:"disabled"});
-    expect(current.equals(accepted),"Home pixels must match the accepted release; only dynamic release identity is normalized").toBe(true);
+    const current=await page.locator(".cockpit").screenshot({animations:"disabled",style:".bottom-nav{visibility:hidden!important}"});
+    const accepted=await old.locator(".cockpit").screenshot({animations:"disabled",style:".bottom-nav{visibility:hidden!important}"});
+    expect(current.equals(accepted),"Cockpit pixels must match; header and navigation are intentionally refined").toBe(true);
     await baseline.close();
   }
   await expect(page).toHaveURL(new RegExp(`${publicPath("/")}$`));

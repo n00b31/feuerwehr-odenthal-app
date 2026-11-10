@@ -5,9 +5,17 @@ import { calendarContextSchema, calendarPageSchema, calendarCursorSchema, calend
   calendarSaveSchema, conflictSchema, type CalendarFilters } from "@/domain/calendar";
 
 export async function readCalendar(client: SupabaseClient, range: { lower_bound: string; upper_bound: string },
-  filters: CalendarFilters, retained: string[] = []) {
+  filters: CalendarFilters, retained: string[] = [], upcomingLimit?:number) {
   const legacyContext = calendarContextSchema.parse(checked(await client.rpc("ff_calendar_context")));
   const context=legacyContext.vehicle_calendar ? calendarContextSchema.parse(checked(await client.rpc("ff_calendar_vehicle_context"))) : legacyContext;
+  if(upcomingLimit!==undefined){
+    const result=calendarPageSchema.parse(checked(await client.rpc("ff_calendar_upcoming",{
+      scopes:filters.scopes,wanted_units:filters.units,wanted_types:filters.types,wanted_kinds:filters.kinds,
+      wanted_categories:filters.categories,wanted_resources:filters.resources,show_cancelled:filters.cancelled,
+      page_size:z.number().int().min(1).max(400).parse(upcomingLimit),retained_ids:retained,
+    })));
+    return {...result,context};
+  }
   let cursor: z.infer<typeof calendarCursorSchema> | null = null;
   const events = new Map<string,z.infer<typeof calendarPageSchema>["events"][number]>();
   let result: z.infer<typeof calendarPageSchema>;

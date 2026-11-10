@@ -99,6 +99,28 @@ test("building choices respect the selected unit and exclude inactive resources 
   assert.equal(calendarBookingResources({...context,configure:true},scope).length,3);
   assert.equal(calendarBookingResources({...context,organization:true},{scope_kind:"organization",unit_id:""}).length,3);
 });
+test("upcoming calendar uses one bounded RPC with existing filters, never a browser clock or actor",async()=>{
+  const requests:Record<string,unknown>[]=[];
+  const client=createClient("https://syntheticci.supabase.co","synthetic-public-key",{
+    auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},
+    global:{fetch:async(input,init)=>{
+      const url=new URL(typeof input==="string" || input instanceof URL?input:input.url);
+      if(url.pathname.endsWith("/ff_calendar_context"))return Response.json({
+        organization:false,configure:false,units:[],manageable_units:[],functions:[],resources:[],categories:[],organizers:[],
+      });
+      assert.equal(url.pathname,"/rest/v1/rpc/ff_calendar_upcoming");
+      const body:Record<string,unknown>=JSON.parse(String(init?.body));requests.push(body);
+      assert.deepEqual(Object.keys(body).sort(),["scopes","wanted_units","wanted_types","wanted_kinds","wanted_categories",
+        "wanted_resources","show_cancelled","page_size","retained_ids"].sort());
+      assert.equal(body.page_size,5);assert.deepEqual(body.retained_ids,[fixture.id]);
+      return Response.json({server_now:"2026-11-10T10:00:00Z",events:[],retained_events:[],next_cursor:null});
+    }},
+  });
+  await readCalendar(client,calendarRange("2026-11-10","list"),emptyCalendarFilters,[fixture.id],5);
+  assert.equal(requests.length,1);
+  await assert.rejects(readCalendar(client,calendarRange("2026-11-10","list"),emptyCalendarFilters,[],401));
+  assert.equal(requests.length,1);
+});
 test("own building is preferred over list order; empty authorized choices do not invent a resource",()=>{
   const resources=[1,2,3].map(i=>({id:`21000000-0000-4000-8000-00000000000${i}`,name:`Gerätehaus ${i}`,
     resource_type:"building" as const,unit_id:`11000000-0000-4000-8000-00000000000${i}`,active:true,revision:0}));

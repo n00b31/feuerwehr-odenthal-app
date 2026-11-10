@@ -60,6 +60,7 @@ jobs:
           pg < supabase/tests/upgrade-072-before.sql
           pg < supabase/migrations/20261110003900_push_device_lifecycle.sql
           pg < supabase/tests/upgrade-072-after.sql
+          pg < supabase/migrations/20261110004000_calendar_upcoming.sql
   database:
     runs-on: ubuntu-latest
     timeout-minutes: 10

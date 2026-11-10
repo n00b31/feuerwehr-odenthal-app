@@ -1,14 +1,18 @@
 "use client";
 
-import { useCallback,useEffect,useRef,useState } from "react";
+import Link from "next/link";
+import { useCallback,useEffect,useRef,useState,type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { Bell,RefreshCw } from "lucide-react";
+import { Bell,RefreshCw,CalendarDays,Clock3,Truck,ShieldCheck,Info } from "lucide-react";
 import { z } from "zod";
 import { notificationCategories,notificationCategorySchema,notificationError,notificationHref,pushSupport,pushStages,
-  type PushStage,type NotificationPreferences,type NotificationWorkspace,type Notice } from "@/domain/notifications";
+  type PushStage,type NotificationPreferences,type Notice } from "@/domain/notifications";
 import { activatePush,currentPushDevice,deactivatePush,removePush,readNotification,readNotifications,saveNotificationPreferences,testPush } from "@/data/supabase-notifications";
 import { dateLabel } from "@/domain/time";
+import { AppDialog } from "./app-dialog";
+import { useMobileLayout } from "./responsive-ui";
+import { useNotifications } from "./notification-context";
 
 function changed(){window.dispatchEvent(new Event("ff-notifications-changed"));}
 async function openNotice(client:SupabaseClient,actor:string,id:string){
@@ -61,9 +65,52 @@ function deliveryLabel(notice:Notice){
   if(!d.total)return "In-App verfügbar · kein Push-Auftrag";
   return `Push: ${d.accepted} vom Dienst angenommen · ${d.pending} ausstehend · ${d.failed} fehlgeschlagen · ${d.cancelled} nicht mehr zulässig`;
 }
+const noticeIcons={services:CalendarDays,changes:RefreshCw,reminders:Clock3,vehicles:Truck,administration:ShieldCheck,information:Info};
+export function NotificationPreview({client,actorId}:{client:SupabaseClient;actorId:string}){
+  const {snapshot,error,reload}=useNotifications(),mobile=useMobileLayout(),router=useRouter();
+  const [opened,setOpened]=useState(false),[busy,setBusy]=useState(false),[openError,setOpenError]=useState("");
+  const [position,setPosition]=useState<CSSProperties>({});
+  const notices=[...(snapshot?.notices??[])].sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at)||a.id.localeCompare(b.id)).slice(0,5);
+  async function select(id:string){
+    setBusy(true);setOpenError("");
+    try{const href=await openNotice(client,actorId,id);setOpened(false);router.push(href);}
+    catch{setOpenError("Diese Benachrichtigung oder der zugehörige Vorgang ist nicht mehr berechtigt verfügbar.");}
+    finally{setBusy(false);}
+  }
+  return <><button className="icon-button notification-bell" aria-label="Benachrichtigungen öffnen"
+    aria-haspopup="dialog" aria-expanded={opened} title={error||`${snapshot?.unread??0} ungelesene Benachrichtigungen`}
+    onClick={event=>{
+      const rect=event.currentTarget.getBoundingClientRect();
+      setPosition({top:rect.bottom+8,right:Math.max(12,Math.min(window.innerWidth-rect.right,window.innerWidth-Math.min(420,window.innerWidth-24)-12))});
+      setOpenError("");setOpened(true);
+      void reload().catch(()=>{/* The shared inbox displays the error in the preview. */});
+    }}><Bell size={20}/>{(error || !!snapshot?.unread) && <span className="notification-badge">{error?"!":snapshot!.unread>99?"99+":snapshot!.unread}</span>}</button>
+    {opened && <AppDialog title="Aktuelle Benachrichtigungen" className={`notification-preview${mobile?" mobile-sheet":""}`}
+      style={mobile?undefined:position} lockScroll closeDisabled={busy} close={()=>setOpened(false)}>
+      {(error || openError) && <p className="notice error" role="alert">{openError||error}</p>}
+      {!snapshot && !error && <p role="status">Benachrichtigungen werden geladen …</p>}
+      {snapshot && <>
+        {!notices.length?<p>Keine neuen Benachrichtigungen. <span>Dein Posteingang ist leer.</span></p>
+          :!snapshot.unread && <p>Keine ungelesenen Benachrichtigungen. Deine letzten gelesenen Nachrichten:</p>}
+        <div className="notification-preview-list">{notices.map(notice=>{
+          const Icon=noticeIcons[notice.category];
+          return <button key={notice.id} className="notification-preview-item" disabled={busy} onClick={()=>void select(notice.id)}>
+            <Icon size={20} aria-hidden="true"/><span><strong>{notice.title}</strong><span className="notification-excerpt">{notice.message}</span>
+              <small><time dateTime={notice.created_at}>{dateLabel(notice.created_at,{year:"numeric",hour:"2-digit",minute:"2-digit"})}</time> · {notice.read_at?"Gelesen":"Ungelesen"}</small></span>
+          </button>;
+        })}</div>
+      </>}
+      <nav className="dev-actions" aria-label="Benachrichtigungsaktionen">
+        <Link className="button secondary" href="/profil/#posteingang" onClick={()=>setOpened(false)}>Alle Benachrichtigungen</Link>
+        <Link className="button secondary" href="/profil/#benachrichtigungseinstellungen" onClick={()=>setOpened(false)}>Einstellungen</Link>
+      </nav>
+    </AppDialog>}
+  </>;
+}
 export function SupabaseNotifications({client,actorId,onPushBusy}:{client:SupabaseClient;actorId:string;onPushBusy:(busy:boolean)=>void}){
   const router=useRouter();
-  const [snapshot,setSnapshot]=useState<NotificationWorkspace|null>(null),[preferences,setPreferences]=useState<NotificationPreferences|null>(null);
+  const {snapshot,error:inboxError,reload:reloadInbox}=useNotifications();
+  const [preferences,setPreferences]=useState<NotificationPreferences|null>(null);
   const [device,setDevice]=useState<string|null>(null),[name,setName]=useState("Mein Gerät");
   const [permission,setPermission]=useState<NotificationPermission|"unsupported">("default");
   const [error,setError]=useState(""),[message,setMessage]=useState(""),[busy,setBusy]=useState(false);
@@ -74,24 +121,28 @@ export function SupabaseNotifications({client,actorId,onPushBusy}:{client:Supaba
   const working=useRef(false),dirty=useRef(false),epoch=useRef({value:0});
   const reload=useCallback(()=>{
     const version=++epoch.current.value;
-    return readNotifications(client,actorId).then(async data=>{
+    return reloadInbox().then(async data=>{
+      if(!data)return false;
       let id:string|null=null,deviceError="";
       try { if(pushSupport())id=await currentPushDevice(client); }
       catch(cause) { deviceError=notificationError(cause); }
       if(version!==epoch.current.value)return false;
-      setSnapshot(data);if(!dirty.current)setPreferences(data.preferences);setDevice(id);
+      if(!dirty.current)setPreferences(data.preferences);setDevice(id);
       setPermission(pushSupport()?Notification.permission:"unsupported");if(deviceError)setError(deviceError);
       return !deviceError;
     });
-  },[client,actorId]);
+  },[client,reloadInbox]);
+  useEffect(()=>{const lifetime=epoch.current;return()=>{lifetime.value++;};},[]);
   useEffect(()=>{
-    const lifetime=epoch.current;
-    const refresh=()=>{if(!document.hidden && !working.current)void reload().catch(cause=>setError(notificationError(cause)));};
-    refresh();
-    window.addEventListener("focus",refresh);window.addEventListener("ff-notifications-changed",refresh);
-    const timer=window.setInterval(refresh,60_000);
-    return()=>{lifetime.value++;window.removeEventListener("focus",refresh);window.removeEventListener("ff-notifications-changed",refresh);window.clearInterval(timer);};
-  },[reload]);
+    let current=true;
+    if(snapshot && !working.current)void (async()=>{
+      const id=pushSupport()?await currentPushDevice(client):null;
+      if(!current)return;
+      if(!dirty.current)setPreferences(snapshot.preferences);
+      setDevice(id);setPermission(pushSupport()?Notification.permission:"unsupported");
+    })().catch(cause=>{if(current)setError(notificationError(cause));});
+    return()=>{current=false;};
+  },[client,snapshot]);
   async function run(operation:()=>Promise<unknown>,success:string){
     if(working.current)return;
     working.current=true;setBusy(true);onPushBusy(true);setError("");setMessage("");
@@ -119,7 +170,7 @@ export function SupabaseNotifications({client,actorId,onPushBusy}:{client:Supaba
     <p>Die Browserberechtigung wird ausschließlich bei bewusster Aktivierung angefragt. Auf dem Sperrbildschirm stehen keine fachlichen Details.</p>
     {permission==="unsupported" && <p className="notice">In-App-Nachrichten bleiben verfügbar. Auf dem iPhone die App in Safari über „Teilen“ → „Zum Home-Bildschirm“ installieren und von dort öffnen. Ein geeignetes aktuelles System und eine sichere Verbindung sind erforderlich.</p>}
     {permission==="denied" && <p className="notice">Die Ablehnung wird respektiert. Zum späteren Freigeben die Benachrichtigungsberechtigung in den Browser- beziehungsweise Systemeinstellungen selbst ändern.</p>}
-    {error && <p className="notice error" role="alert">{error}</p>}
+    {(error || inboxError) && <p className="notice error" role="alert">{error||inboxError}</p>}
     {message && <p className="notice" role="status">{message}</p>}
     {busy && pushStage && <p className="notice" role="status" aria-live="polite">{pushStages[pushStage]}</p>}
     {!snapshot && !error && <p role="status">Persönliche Benachrichtigungen werden geladen …</p>}
@@ -132,7 +183,7 @@ export function SupabaseNotifications({client,actorId,onPushBusy}:{client:Supaba
         <button className="button secondary" disabled={busy || !current || !snapshot.preferences.push_enabled || !snapshot.server_ready}
           onClick={()=>void run(()=>testPush(client,current!.id),"DEV-Test nur an dieses eigene Gerät angefordert. Anbieterannahme ist kein Nachweis einer Geräteanzeige.")}>Test-Push senden · DEV</button></div>
       <p className="muted text-sm">Testlimit pro Konto, gemeinsam für alle Geräte: höchstens einmal pro Minute und dreimal pro Stunde. Deaktivieren, Reaktivieren oder Entfernen setzt dieses Limit nicht zurück.</p>
-      <form className="form-grid" onSubmit={event=>{event.preventDefault();void run(async()=>{
+      <form id="benachrichtigungseinstellungen" className="form-grid" onSubmit={event=>{event.preventDefault();void run(async()=>{
         await saveNotificationPreferences(client,preferences);dirty.current=false;
       },"Benachrichtigungseinstellungen gespeichert.");}}>
         <h3 className="span-2">Benachrichtigungseinstellungen</h3>
@@ -164,7 +215,7 @@ export function SupabaseNotifications({client,actorId,onPushBusy}:{client:Supaba
               void run(()=>removePush(client,item.id,item.id===device),"Eigenes Gerät dauerhaft entfernt.");
           }}>Gerät entfernen</button>
         </div></article>)}
-      <h3>Posteingang · {snapshot.unread} ungelesen</h3>
+      <h3 id="posteingang">Posteingang · {snapshot.unread} ungelesen</h3>
       <p className="muted text-sm">Die neuesten bis zu 100 berechtigt sichtbaren Nachrichten. Ungelesen zählt alle sichtbaren Nachrichten. Versandstatus bezeichnet Push-Dienstannahme, nicht den nachgewiesenen Empfang.</p>
       <button className="button secondary" disabled={busy || !snapshot.unread} onClick={()=>void run(()=>readNotification(client),"Alle berechtigt sichtbaren Nachrichten als gelesen markiert.")}>Alle als gelesen markieren</button>
       {!snapshot.notices.length && <p>Keine berechtigt sichtbaren Benachrichtigungen.</p>}

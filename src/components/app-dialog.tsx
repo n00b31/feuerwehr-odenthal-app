@@ -1,14 +1,14 @@
 "use client";
 
-import { createContext, useContext, useEffect, useId, useRef, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useId, useRef, type ReactNode,type CSSProperties } from "react";
 import { X } from "lucide-react";
 
 export const AppDialogVisibility = createContext(true);
 let scrollLocks=0;
 let originalOverflow="";
 
-export function AppDialog({ title, children, close, className = "", lockScroll=false, closeDisabled=false }: {
-  title: string; children: ReactNode; close: () => void; className?: string; lockScroll?:boolean;closeDisabled?:boolean;
+export function AppDialog({ title, children, close, className = "", lockScroll=false, closeDisabled=false,style }: {
+  title: string; children: ReactNode; close: () => void; className?: string; lockScroll?:boolean;closeDisabled?:boolean;style?:CSSProperties;
 }) {
   const titleId = useId();
   const ref = useRef<HTMLDialogElement>(null);
@@ -25,11 +25,11 @@ export function AppDialog({ title, children, close, className = "", lockScroll=f
       if (previous?.isConnected) previous.focus({ preventScroll: true });
     };
   }, [visible,lockScroll]);
-  return visible ? <dialog ref={ref} className={`modal ${className}`} aria-labelledby={titleId}
+  return visible ? <dialog ref={ref} className={`modal ${className}`} style={style} aria-labelledby={titleId}
     onCancel={(event) => { event.preventDefault(); if(!closeDisabled)close(); }}
     onClick={(event) => { if (!closeDisabled && event.target === event.currentTarget) close(); }}>
-    <header className="modal-header"><h2 id={titleId}>{title}</h2>
+    <div className="modal-header"><h2 id={titleId}>{title}</h2>
       <button className="icon-button" disabled={closeDisabled} onClick={close} aria-label="Dialog schließen"><X size={20} /></button>
-    </header><div className="modal-body">{children}</div>
+    </div><div className="modal-body">{children}</div>
   </dialog> : null;
 }

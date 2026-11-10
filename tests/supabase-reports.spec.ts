@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import {emptyInbox} from "./notification-fixture";
 import { readFile } from "node:fs/promises";
 import { publicPath } from "../src/config/app";
 import type { ReportQuery, ReportMetrics } from "../src/domain/dev-reports";
@@ -48,6 +49,7 @@ async function connect(page: Page, role: "MEMBER" | "UNIT_ADMIN" | "FIRE_CHIEF" 
       return respond({ user_id: actor, display_name: "Synthetic Reporter", account_status: "approved",
         access_granted: true, unit_id: unit, unit_name: "Scheuren", roles: role==="MEMBER" ? [role] : ["MEMBER",role] });
     }
+    if(pathname.endsWith("/ff_notifications"))return respond(emptyInbox(actor));
     if (pathname.endsWith("/ff_events_page")) return respond({ server_now: new Date().toISOString(),
       manageable_units: [], events: [], retained_events: [], has_more: false, next_cursor: null });
     if (pathname.endsWith("/ff_pending_registrations") || pathname.endsWith("/document_areas")) return respond([]);

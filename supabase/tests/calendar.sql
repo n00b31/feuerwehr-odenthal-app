@@ -72,6 +72,22 @@ select pg_temp.calendar_assert((select count(*)=0 from jsonb_array_elements(publ
 select pg_temp.calendar_assert((select after_data->'unit_ids' @> jsonb_build_array(current_setting('cal.unit'))
   from public.audit_entries where event_id=current_setting('cal.multi')::uuid and action='calendar_event_saved' limit 1),
   'audits capture explicit target unit identities');
+select set_config('cal.distant',(public.ff_save_calendar_event(pg_temp.calendar_payload('Synthetic distant information','information',null)||
+  jsonb_build_object('starts_at',clock_timestamp()+interval '80 days','ends_at',clock_timestamp()+interval '80 days 2 hours'))->>'id'),true);
+select set_config('cal.past',(public.ff_save_calendar_event(pg_temp.calendar_payload('Synthetic past information','information',null)||
+  jsonb_build_object('starts_at',clock_timestamp()-interval '2 days','ends_at',clock_timestamp()-interval '1 day'))->>'id'),true);
+select pg_temp.calendar_assert(jsonb_array_length(public.ff_calendar_upcoming()->'events')=5,
+  'mobile calendar initially returns exactly five visible upcoming entries');
+select pg_temp.calendar_assert(public.ff_calendar_upcoming()->'next_cursor'<>'null'::jsonb,
+  'mobile upcoming entries expose more available results');
+select pg_temp.calendar_assert((select count(*)=1 from jsonb_array_elements(public.ff_calendar_upcoming(page_size=>400)->'events') e
+  where e->>'id'=current_setting('cal.distant')),'upcoming list includes next entries beyond the 42-day calendar window');
+select pg_temp.calendar_assert(not exists(select 1 from jsonb_array_elements(public.ff_calendar_upcoming(page_size=>400)->'events') e
+  where (e->>'ends_at')::timestamptz<=statement_timestamp()),'completed events are excluded using server time');
+select pg_temp.calendar_assert(not exists(select 1 from (
+  select (e->>'starts_at')::timestamptz starts,lag((e->>'starts_at')::timestamptz) over(order by position) previous
+  from jsonb_array_elements(public.ff_calendar_upcoming(page_size=>400)->'events') with ordinality x(e,position)) ordered
+  where previous>starts),'upcoming list preserves chronological ordering');
 reset role;
 
 select set_config('request.jwt.claim.sub','a0500000-0000-4000-8000-000000000002',true);
@@ -84,6 +100,13 @@ select pg_temp.calendar_assert((select count(*)=0 from public.events where id=cu
 select pg_temp.calendar_assert((select count(*)=0 from public.event_calendar where event_id=current_setting('cal.private')::uuid),'metadata RLS also protects private event');
 select pg_temp.calendar_assert((select count(*)=1 from public.events where id=current_setting('cal.multi')::uuid),'target unit member sees multi-unit information');
 select pg_temp.calendar_assert((select count(*)=0 from public.events where id=current_setting('cal.function_event')::uuid),'function event protected');
+select pg_temp.calendar_assert(not exists(select 1 from jsonb_array_elements(public.ff_calendar_upcoming(page_size=>400,
+  retained_ids=>array[current_setting('cal.private')::uuid])->'events') e
+  where e->>'id' in(current_setting('cal.private'),current_setting('cal.function_event'))),
+  'upcoming query preserves member visibility and does not expose private or unrelated function entries');
+select pg_temp.calendar_assert(jsonb_array_length(public.ff_calendar_upcoming(
+  retained_ids=>array[current_setting('cal.private')::uuid])->'retained_events')=0,
+  'forged retained IDs cannot expose private upcoming entries');
 select pg_temp.calendar_assert(public.ff_calendar_conflicts(current_setting('cal.resource')::uuid,current_setting('cal.lower')::timestamptz,
   current_setting('cal.upper')::timestamptz)#>>'{0,title}'='Bereits belegt (Details geschützt)','busy interval does not leak private title');
 select pg_temp.calendar_assert(public.ff_calendar_conflicts(current_setting('cal.resource')::uuid,current_setting('cal.lower')::timestamptz,

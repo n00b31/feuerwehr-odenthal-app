@@ -1,7 +1,9 @@
 import { test,expect,type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import {emptyInbox} from "./notification-fixture";
 import { publicPath } from "../src/config/app";
 import { calendarPayloadSchema,type CalendarEvent,type CalendarContext } from "../src/domain/calendar";
+test.use({viewport:{width:1280,height:900}});
 
 const api="https://syntheticci.supabase.co";
 const actor="a0500000-0000-4000-8000-000000000001";
@@ -102,6 +104,7 @@ async function connect(page:Page,role:"global"|"unit"|"member"="global",stations
       roles:global ? ["MEMBER","GLOBAL_ADMIN"] : admin ? ["MEMBER","UNIT_ADMIN"] : ["MEMBER"]});
     if(pathname.endsWith("/units")) return respond(context.units);
     if(pathname.endsWith("/document_areas") || pathname.endsWith("/ff_pending_registrations")) return respond([]);
+    if(pathname.endsWith("/ff_notifications"))return respond(emptyInbox(actor));
     if(pathname.endsWith("/ff_calendar_context")) return respond(context);
     if(pathname.endsWith("/ff_events_page")) {
       state.serviceQueries++;

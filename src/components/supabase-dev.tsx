@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname,useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
-import { Moon, Sun, LogOut, RefreshCw, ShieldCheck, Bell } from "lucide-react";
+import { Moon, Sun, LogOut, RefreshCw, ShieldCheck } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabasePublicConfig } from "@/config/supabase";
 import { DEV_ROLE_LABELS, publicPath } from "@/config/app";
@@ -21,7 +21,8 @@ import { currentRelease } from "@/config/release";
 import { SupabaseReports } from "./supabase-reports";
 import { ForgotPasswordForm, PasswordFields, RecoveryPasswordForm } from "./auth-recovery";
 import { SupabaseDashboard } from "./supabase-dashboard";
-import { NotificationAdministration,NotificationBridge,SupabaseNotifications } from "./supabase-notifications";
+import { NotificationAdministration,NotificationBridge,NotificationPreview,SupabaseNotifications } from "./supabase-notifications";
+import { NotificationProvider } from "./notification-context";
 import { releaseCurrentPush } from "@/data/supabase-notifications";
 import { useMobileLayout } from "./responsive-ui";
 
@@ -94,7 +95,8 @@ export function SupabaseDev() {
   const access = screen.phase === "active" || screen.phase === "blocked" ? screen.access : null;
   const active = screen.phase === "active";
   const managesMembers = active && screen.access.roles.some((role) => role === "GLOBAL_ADMIN" || role === "UNIT_ADMIN");
-  return <div className={`app-shell dev-shell${active && pathname!=="/"?" mobile-workspace":""}`}>
+  return <NotificationProvider key={active?screen.access.user_id:"guest"} client={active?client:null} actorId={active?screen.access.user_id:null} paused={busy||pushBusy}>
+    <div className={`app-shell dev-shell${active?" compact-shell":""}${active && pathname!=="/"?" mobile-workspace":""}`}>
     <a className="skip-link" href="#main">Zum Inhalt springen</a>
     {active && <aside className="sidebar"><SidebarNavigation pathname={pathname} unitName={screen.access.unit_name ?? ""}
       admin={managesMembers} logo /></aside>}
@@ -102,7 +104,7 @@ export function SupabaseDev() {
     <header className="topbar">
       <Link href="/" className="header-brand"><BrandLogo /></Link>
       <div className="topbar-actions">
-        {active && <Link className="icon-button" href="/profil/#benachrichtigungen" aria-label="Benachrichtigungen öffnen"><Bell size={20}/></Link>}
+        {active && client && <NotificationPreview key={screen.access.user_id} client={client} actorId={screen.access.user_id}/>}
         <button className="icon-button" aria-label="Farbschema wechseln" onClick={() => setPreference(resolved === "dark" ? "light" : "dark")}>{resolved === "dark" ? <Sun size={20} /> : <Moon size={20} />}</button>
         {client && <button className="button secondary header-signout" onClick={() => void signOut()} disabled={busy || pushBusy}><LogOut size={18} />Abmelden / Sitzung entfernen</button>}
       </div>
@@ -129,8 +131,8 @@ export function SupabaseDev() {
     </main>
     <footer className="footer"><span>Feuerwehr Odenthal · Supabase DEV</span><span>Keine Offline-Freigabe · Europe/Berlin</span></footer>
     </div>
-    {active && <BottomNavigation pathname={pathname} admin={managesMembers} compact={pathname!=="/"} />}
-  </div>;
+    {active && <BottomNavigation pathname={pathname} admin={managesMembers} compact />}
+  </div></NotificationProvider>;
 }
 
 function AuthForm({ client, refresh }: { client: SupabaseClient; refresh: () => void }) {
@@ -214,6 +216,15 @@ function AuthForm({ client, refresh }: { client: SupabaseClient; refresh: () => 
 
 function DevWorkspace({ client, access, data, pathname, refresh, eventEditor, setEventEditor,onPushBusy,signOut,signOutDisabled }: { client: SupabaseClient; access: Access; data: DevData | null; pathname: string; refresh: () => void; eventEditor: EventEditorState | null; setEventEditor: (value: EventEditorState | null) => void;onPushBusy:(busy:boolean)=>void;signOut:()=>void;signOutDisabled:boolean }) {
   const mobile=useMobileLayout();
+  const router=useRouter();
+  useEffect(()=>{
+    if(pathname!=="/profil")return;
+    const redirect=()=>{
+      if(["#dienstbuch","#dutybook","#diensthistorie"].includes(window.location.hash))router.replace("/statistik/#dienstbuch");
+    };
+    redirect();window.addEventListener("hashchange",redirect);
+    return()=>window.removeEventListener("hashchange",redirect);
+  },[pathname,router]);
   const globalAdmin = access.roles.includes("GLOBAL_ADMIN");
   const managesMembers = globalAdmin || access.roles.includes("UNIT_ADMIN");
   if (pathname === "/") return <SupabaseDashboard key={access.user_id} client={client} access={access} />;
@@ -229,8 +240,8 @@ function DevWorkspace({ client, access, data, pathname, refresh, eventEditor, se
           <Link className="button secondary" href="/termine/?bereich=fahrzeuge">Fahrzeugkalender direkt öffnen</Link></section></>
       : <p className="notice error" role="alert">Keine Berechtigung zur Mitgliederverwaltung. Direkte API-Aufrufe werden ebenfalls serverseitig geprüft.</p>
     : pathname === "/dokumente" ? <section className="card section-card"><h2>Dokumentenbereiche</h2><p>App-Sichtbarkeit ersetzt keine SharePoint-Berechtigung.</p>{data.documents.length === 0 && <p>Noch keine sichtbaren DEV-Dokumentenbereiche.</p>}{data.documents.map((item) => <article key={item.id}><h3>{item.name}</h3><p>{item.description}</p><a href={item.sharepoint_url} target="_blank" rel="noopener noreferrer">SharePoint öffnen</a></article>)}</section>
-    : pathname === "/statistik" ? <SupabaseReports client={client} access={access} />
-    : pathname === "/profil" ? <><section className="card section-card"><h2>Verifiziertes DEV-Profil</h2><p>{access.display_name} · Einheit {access.unit_name}</p><p>Status: Freigegeben. Kein Identitäts- oder Rollenwechsel über lokale Demo-Profile.</p><p>Die Sitzung liegt ausschließlich unter einem projekt- und unterpfadbezogenen SDK-Speicherschlüssel in diesem Browser. Zum Entfernen „Abmelden / Sitzung entfernen“ verwenden.</p><button className="button secondary mobile-only" onClick={signOut} disabled={signOutDisabled}><LogOut size={18}/>Abmelden / Sitzung entfernen</button></section><div id="benachrichtigungen"><SupabaseNotifications key={access.user_id} client={client} actorId={access.user_id} onPushBusy={onPushBusy}/></div><SupabaseReports client={client} access={access} personalOnly /></>
+    : pathname === "/statistik" ? <div id="dienstbuch"><SupabaseReports client={client} access={access} /></div>
+    : pathname === "/profil" ? <><section className="card section-card"><h2>Verifiziertes DEV-Profil</h2><p>{access.display_name} · Einheit {access.unit_name}</p><p>Status: Freigegeben. Kein Identitäts- oder Rollenwechsel über lokale Demo-Profile.</p><p>Die Sitzung liegt ausschließlich unter einem projekt- und unterpfadbezogenen SDK-Speicherschlüssel in diesem Browser. Zum Entfernen „Abmelden / Sitzung entfernen“ verwenden.</p><button className="button secondary mobile-only" onClick={signOut} disabled={signOutDisabled}><LogOut size={18}/>Abmelden / Sitzung entfernen</button></section><div id="benachrichtigungen"><SupabaseNotifications key={access.user_id} client={client} actorId={access.user_id} onPushBusy={onPushBusy}/></div></>
     : <SupabaseEvents client={client} initial={data} preferredUnit={access.unit_id} actorId={access.user_id} editor={eventEditor} setEditor={setEventEditor}
       canPlan={access.roles.some(role=>role==="GLOBAL_ADMIN" || role==="UNIT_ADMIN" || role==="FUNCTION_ADMIN")} />}
   </>;
