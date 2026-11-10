@@ -4,6 +4,12 @@
 Feuerwehralarmierung. Zustellung ist browser-, geräte- und netzabhängig.
 Die unabhängige Demo wird nicht verändert.
 
+**Aktueller Abnahmestand:** PR #24 ist gemergt; iPhone-Aktivierung und
+tatsächlicher Empfang sind durch den Projektverantwortlichen bestätigt.
+Desktop-Push bleibt offen. Der nachfolgende DEV-0.7-Installationsbericht
+ist historisch; die aktuelle Eingrenzung und der Hotfix stehen unter
+[DEV 0.7.1](#dev-071--edge-registrierung-und-fehlerdiagnose).
+
 ## Analyse und Implementierungsplan
 
 Der bestehende Service Worker `public/sw.js` wird erweitert, nicht ersetzt.
@@ -329,3 +335,125 @@ Referenzen:
 [Supabase Cron](https://supabase.com/docs/guides/functions/schedule-functions),
 [Web Push auf iOS](https://webkit.org/blog/13966/web-push-for-web-apps-on-ios-and-ipados/),
 [Push API](https://developer.mozilla.org/en-US/docs/Web/API/Push_API).
+
+## DEV 0.7.1 – Edge-Registrierung und Fehlerdiagnose
+
+### Bestätigte Abnahme und Fehlerstelle
+
+PR #24 wurde am 09.11.2026 auf Main-Commit
+`8d4167f26da39952d1f450e776842e1435062417` gemergt.
+Der Projektverantwortliche bestätigt erfolgreiche Aktivierung und
+tatsächlichen Push-Empfang auf der iPhone-PWA. **Das ist keine vollständige
+DEV-0.7-Abnahme. Desktop bleibt offen; DEV 0.8 wird nicht begonnen.**
+
+Die vom Projektverantwortlichen am 10.11.2026 übermittelte, schlüsselfreie
+Diagnose aus seinem **normalen Edge-Fenster** zeigt:
+
+| Schritt | Tatsächlicher Befund |
+|---|---|
+| `Notification.permission` | `granted` |
+| `getRegistration()` | Registrierung vorhanden, aktiver Worker |
+| `getSubscription()` | erfolgreich, kein bestehendes Abonnement |
+| `subscribe()` | `AbortError`, Dienst-/Netzwerkhinweis; kein Berechtigungs- oder Schlüsselhinweis |
+
+Damit scheitert der Browser **vor** einer neuen Subscription und vor
+`ff_push_register`. Der Fehler dieses Versuchs entsteht nicht durch das
+Speichern einer Subscription, die Supabase-Rollenprüfung oder RLS.
+Eine erfolgreiche Website-Berechtigung ist nicht gleichbedeutend mit einer
+erfolgreichen Anmeldung beim browserseitigen Push-Dienst.
+
+Die Anwendung verschluckte bisher die konkrete Ausnahme und ersetzte sie
+durch dieselbe Sammelmeldung wie eine fehlgeschlagene Backend-Berechtigung.
+Das ist der nachgewiesene App-Fehler, der mit DEV 0.7.1 korrigiert wird.
+**Der konkrete Netzwerk-, Dienst- oder Richtlinienauslöser auf dem
+betroffenen Laptop ist mit diesem Trace noch nicht bewiesen.**
+Es wird weder behauptet, dass ein Frontend-Patch Windows-/Proxy-Richtlinien
+reparieren könne, noch wird eine erfolgreiche Desktop-Zustellung behauptet.
+
+Ergänzende isolierte Untersuchung am 09.11.2026: Ein sichtbarer nativer
+Edge 155.0.4283.60 konnte im temporären normalen, persistenten Profil mit
+dem unveränderten öffentlichen DEV-VAPID-Schlüssel ein echtes
+WNS-Abonnement erstellen. Es wurde sofort wieder abgemeldet; kein Backend-
+Datensatz und keine Push-Nachricht wurden dafür erzeugt. Dagegen wies ein
+isolierter InPrivate-Kontext trotz künstlich gewährter Notification-
+Berechtigung `subscribe()` zurück. **InPrivate erklärt nicht den
+gemeldeten Fehler**, da der Projektverantwortliche ein normales Fenster
+bestätigt hat. Beide Untersuchungen sind keine End-to-End-Abnahme seines
+normalen Edge-Profils. Der erfolgreiche normale Versuch widerlegt jedoch
+eine pauschale Unverträglichkeit der bisherigen ArrayBuffer-Konvertierung
+oder des unveränderten öffentlichen Schlüssels mit Edge.
+
+### Korrektur ohne Datenbank- oder Versandänderung
+
+- Eigene Fehlercodes für fehlende Unterstützung, blockierte/fehlende
+  Berechtigung, nicht aktivierten Worker, Subscription-Abfrage,
+  ungültigen öffentlichen Schlüssel, Dienst-/Erstellungsfehler,
+  Backend-Registrierung und fehlgeschlagene lokale Bereinigung.
+- `AbortError` bei weiterhin erteilter Berechtigung erhält
+  `push_service_failed`, eine verständliche Erklärung und Hinweise auf
+  Browser-Neustart beziehungsweise die Prüfung von Netzwerk, Proxy/VPN
+  und Browser-/Windows-Richtlinien. Kein wiederholter Berechtigungsdialog
+  und kein automatisches Wiederholen oder Abschalten von Sicherheitsregeln.
+- Die Konsole erhält nur `FF_PUSH_DIAG`, den festen Diagnosecode und einen
+  freigegebenen Exception-Namen. Kein rohes Error-Objekt, Meldungstext,
+  Subscription-JSON, vollständiger Endpoint, Schlüssel oder Token.
+- Fehler bei der lokalen Subscription-Abfrage lassen die zentral geladene
+  Inbox verfügbar. Ein erfolgreicher Hintergrundabruf verwirft nicht die
+  Diagnose einer fehlgeschlagenen Aktivierung.
+- Die Anzeige unterscheidet „Nicht aktiviert · Browserberechtigung erteilt“
+  von einer bestätigten aktiven Geräteregistrierung.
+- Passende bestehende Subscriptions werden wiederverwendet. Ein anderer
+  gespeicherter öffentlicher Schlüssel wird erkannt, ohne das bestehende
+  Abonnement stillschweigend zu ersetzen. Auch ein eigenes inaktives
+  Browser-Abonnement kann ausdrücklich entfernt werden; die historische
+  Geräteregistrierung und andere Geräte bleiben erhalten.
+- Bei einem Backend-Fehler wird ausschließlich ein gerade für diesen
+  Versuch neu erstelltes Browser-Abonnement bereinigt, niemals ein vorher
+  vorhandenes oder das eines anderen Geräts. Fehler bei der Bereinigung
+  sind gesondert sichtbar.
+
+Keine Migration, kein RLS-/Auth-Umbau, keine Änderung der Endpoint-Allowlist,
+keine VAPID-Rotation, kein Edge-Deployment und keine Änderung bestehender
+Gerätedatensätze im Hosted DEV. Der bestehende Worker und sein ausdrücklich
+bestätigter Update-Ablauf bleiben unverändert.
+
+### Regression und weiterhin notwendige Desktop-Abnahme
+
+Die Notification-Suite deckt synthetische WNS-/Apple-Subscriptions,
+wiederholte Aktivierung, Mehrgerätebetrieb, den gemeldeten AbortError,
+Blockierung, Worker-/Abfrage-/Backend-Fehler, Bereinigung und veraltete
+Schlüssel ab. Sämtliche Supabase- und Push-APIs sind in diesen Browserfällen
+abgefangen. Ausführung im installierten Microsoft Edge erfolgt mit:
+
+```powershell
+$env:PLAYWRIGHT_CHANNEL='msedge'
+$env:NEXT_PUBLIC_BASE_PATH='/feuerwehr-odenthal-app'
+$env:PLAYWRIGHT_BASE_URL='http://127.0.0.1:3181'
+npx.cmd playwright test --config playwright.auth.config.ts supabase-notifications.spec.ts
+```
+
+Diese Tests sind **synthetische Protokollregressionen in einem echten
+Browserprozess**, keine echten Push-Zustelltests und keine iOS-Emulation.
+Lokal erfolgreich: 27 Notification-Fälle in Chromium und dieselben
+27 Fälle im installierten Microsoft Edge; 184 Domain/Auth/Konfigurations-
+und 24 Skripttests. Die komplette DEV-Auswahl umfasst jetzt 128 Browserfälle.
+Die bestehende CI prüft weiterhin Domain/Auth, Demo, komplette DEV-
+Browserregression, Static Export, Secret-Scanner und PostgreSQL/RLS.
+
+Nach manuellem Merge ist auf dem betroffenen Laptop weiterhin erforderlich:
+
+1. Ungespeicherte Eingaben sichern und das angebotene PWA-Update bewusst
+   bestätigen. Sichtbare Version und Build-ID festhalten.
+2. Im normalen Edge-Fenster einmal aktivieren. Bei erneutem Fehler nur
+   Diagnosecode und Exception-Namen notieren, keine Schlüssel/Endpoints.
+3. Edge vollständig schließen und erneut öffnen. Bei weiter bestehendem
+   Dienstfehler mit einem separaten normalen Edge-Profil eingrenzen.
+   Unternehmensrichtlinien, Proxy/VPN und Push-Dienstzugriff bei Bedarf
+   durch die zuständige Administration prüfen lassen, nicht umgehen.
+4. Erst eine bestätigte eigene Geräte-Registrierung und ein bewusst
+   ausgelöster eigener DEV-Test mit tatsächlicher Desktop-Anzeige und
+   geprüftem Klickziel schließen die Desktop-Abnahme ab.
+5. Vorhandenes iPhone parallel belassen und dessen Empfang erneut prüfen.
+
+Bis dahin: **DEV 0.7 nicht vollständig abgenommen; Desktop-Dienstfehler
+auf dem gemeldeten Laptop nicht als behoben nachgewiesen.**

@@ -8,38 +8,66 @@ const device="c0700000-0000-4000-8000-000000000001",notice="d0700000-0000-4000-8
 const api="https://syntheticci.supabase.co",date="2026-11-09T12:00:00Z";
 const point=createECDH("prime256v1");point.generateKeys();
 const publicKey=point.getPublicKey().toString("base64url");
-type BrowserPushState={requests:number;gesture:boolean;subscribed:boolean;unsubscribed:number};
-async function connect(page:Page,options:{support?:boolean;denied?:boolean;linked?:boolean;global?:boolean;guestPush?:boolean}={}){
-  const state={calls:[] as string[],revoked:false,fail:false,tests:0,snapshot:{
+type BrowserPushState={requests:number;gesture:boolean;subscribed:boolean;unsubscribed:number;subscriptions:number;
+  workerActive:boolean;failure:"service"|"subscribe"|"lookup"|"worker"|"permission"|"denied"|"notAllowed"|"cleanup"|null;validKey:boolean;staleKey:boolean};
+async function connect(page:Page,options:{support?:boolean;denied?:boolean;linked?:boolean;global?:boolean;guestPush?:boolean;
+  provider?:"windows"|"apple";existing?:boolean;otherDevice?:boolean;invalidKey?:boolean}={}){
+  const state={calls:[] as string[],revoked:false,fail:false,registerFail:false,tests:0,snapshot:{
     actor_id:actor,unread:1,notices:[{id:notice,source_kind:"event",target_id:event,event_type:"event_created",category:"services",
       title:"Neuer Übungsdienst",message:"Synthetic notification practice",created_at:date,read_at:null,
       delivery:{total:0,accepted:0,pending:0,failed:0,cancelled:0}}],
     preferences:{push_enabled:false,categories:["services","changes","reminders","vehicles","administration","information"],reminder_two_hours:false},
-    public_key:publicKey,server_ready:true,devices:[],
+    public_key:options.invalidKey?"A".repeat(87):publicKey,server_ready:true,devices:options.otherDevice?[{id:"c0700000-0000-4000-8000-000000000002",
+      device_name:"Existing iPhone PWA",created_at:date,last_success_at:date,active:true}]:[],
   } as NotificationWorkspace};
-  await page.addInitScript(({support,denied})=>{
-    const state={requests:0,gesture:false,subscribed:false,unsubscribed:0};
+  await page.addInitScript(({support,denied,existing,provider,key})=>{
+    const state:BrowserPushState={requests:0,gesture:false,subscribed:existing,unsubscribed:0,subscriptions:0,
+      workerActive:true,failure:null,validKey:false,staleKey:false};
     Object.defineProperty(window,"syntheticPush",{value:state});
     let permission:NotificationPermission=denied?"denied":"default";
     class SyntheticNotification {
       static get permission(){return permission;}
-      static requestPermission(){state.requests++;state.gesture=navigator.userActivation.isActive;permission="granted";return Promise.resolve(permission);}
+      static requestPermission(){
+        state.requests++;state.gesture=navigator.userActivation.isActive;
+        if(state.failure==="permission")throw new DOMException("SYNTHETIC_DO_NOT_LOG","SecurityError");
+        if(state.failure==="denied"){permission="denied";return Promise.resolve(permission);}
+        permission="granted";return Promise.resolve(permission);
+      }
     }
     Object.defineProperty(window,"Notification",{value:SyntheticNotification});
     Object.defineProperty(window,"PushManager",{value:class{}});
     if(!support)Object.defineProperty(window,"isSecureContext",{value:false});
-    const subscription={endpoint:"https://fcm.googleapis.com/fcm/send/synthetic-browser",
-      toJSON:()=>({endpoint:"https://fcm.googleapis.com/fcm/send/synthetic-browser",keys:{p256dh:"synthetic-point",auth:"synthetic-auth"}}),
-      unsubscribe:async()=>{state.unsubscribed++;state.subscribed=false;return true;}};
+    const endpoint=provider==="windows"?"https://wns2-am3p.notify.windows.com/w/?token=synthetic-browser"
+      :provider==="apple"?"https://web.push.apple.com/synthetic-browser":"https://fcm.googleapis.com/fcm/send/synthetic-browser";
+    const expected=Uint8Array.from(atob(key.replace(/-/g,"+").replace(/_/g,"/")+"="),c=>c.charCodeAt(0));
+    const subscription={endpoint,
+      get options(){const bytes=expected.slice();if(state.staleKey)bytes[64]^=1;return {userVisibleOnly:true,applicationServerKey:bytes.buffer};},
+      toJSON:()=>({endpoint,keys:{p256dh:"synthetic-point",auth:"synthetic-auth"}}),
+      unsubscribe:async()=>{state.unsubscribed++;if(state.failure==="cleanup")return false;state.subscribed=false;return true;}};
     const registration=new EventTarget();
-    Object.assign(registration,{active:{},waiting:null,installing:null,getNotifications:async()=>[],
-      pushManager:{getSubscription:async()=>state.subscribed?subscription:null,subscribe:async()=>{
+    Object.defineProperty(registration,"active",{get:()=>state.workerActive?{state:"activated"}:null});
+    Object.assign(registration,{waiting:null,installing:null,getNotifications:async()=>[],
+      pushManager:{getSubscription:async()=>{
+        if(state.failure==="lookup")throw new DOMException("SYNTHETIC_DO_NOT_LOG","InvalidStateError");
+        return state.subscribed?subscription:null;
+      },subscribe:async(options:PushSubscriptionOptionsInit)=>{
+        state.subscriptions++;
+        if(!(options.applicationServerKey instanceof ArrayBuffer))throw new DOMException("SYNTHETIC_DO_NOT_LOG","InvalidAccessError");
+        const bytes=new Uint8Array(options.applicationServerKey);
+        state.validKey=options.userVisibleOnly===true && bytes.length===65 && bytes[0]===4 && bytes.every((value,i)=>value===expected[i]);
+        if(!state.validKey)throw new DOMException("SYNTHETIC_DO_NOT_LOG","InvalidAccessError");
+        if(state.failure==="service")throw new DOMException("Registration failed - push service error SYNTHETIC_DO_NOT_LOG","AbortError");
+        if(state.failure==="subscribe")throw new DOMException("SYNTHETIC_DO_NOT_LOG","NotSupportedError");
+        if(state.failure==="notAllowed")throw new DOMException("SYNTHETIC_DO_NOT_LOG","NotAllowedError");
         state.subscribed=true;return subscription;
       }}});
     const workers=new EventTarget();
-    Object.assign(workers,{register:async()=>registration,getRegistration:async()=>registration});
+    Object.assign(workers,{register:async()=>registration,getRegistration:async()=>{
+      if(state.failure==="worker")throw new DOMException("SYNTHETIC_DO_NOT_LOG","SecurityError");
+      return registration;
+    }});
     Object.defineProperty(navigator,"serviceWorker",{value:workers});
-  },{support:options.support!==false,denied:options.denied??false});
+  },{support:options.support!==false,denied:options.denied??false,existing:options.existing??false,provider:options.provider,key:publicKey});
   const user={id:actor,aud:"authenticated",role:"authenticated",email:"synthetic.notifications@feuerwehr-odenthal.de",
     email_confirmed_at:date,created_at:date,app_metadata:{provider:"email",providers:["email"]},user_metadata:{display_name:"Synthetic Member"}};
   await page.context().route(/https:\/\/(?!syntheticci\.supabase\.co)[^/]+\.supabase\.co\/.*/,route=>route.abort());
@@ -74,11 +102,14 @@ async function connect(page:Page,options:{support?:boolean;denied?:boolean;linke
     if(path.endsWith("ff_push_current"))return respond(device);
     if(path.endsWith("ff_push_register")){
       expect(request.postDataJSON().subscription.endpoint).toContain("synthetic-browser");
-      state.snapshot.preferences.push_enabled=true;state.snapshot.devices=[{id:device,device_name:request.postDataJSON().device_name,
+      if(state.registerFail)return respond({code:"42501",message:"SYNTHETIC_DO_NOT_LOG https://invalid.example/private-token"},403);
+      state.snapshot.preferences.push_enabled=true;state.snapshot.devices=[...state.snapshot.devices.filter(row=>row.id!==device),
+        {id:device,device_name:request.postDataJSON().device_name,
         created_at:date,last_success_at:null,active:true}];return respond(device);
     }
     if(path.endsWith("ff_push_deactivate")){
-      state.snapshot.devices.forEach(row=>{row.active=false;});return respond(null);
+      const target=request.postDataJSON().device_id??device;
+      state.snapshot.devices.forEach(row=>{if(row.id===target)row.active=false;});return respond(null);
     }
     if(path==="/functions/v1/push-dispatch"){
       expect(request.postDataJSON()).toEqual({action:"test",device_id:device});state.tests++;return respond({queued:true},202);
@@ -116,7 +147,7 @@ test("permission is requested only on explicit click, then own device can receiv
   await expect.poll(()=>state.tests).toBe(1);
   await expect(page.getByRole("button",{name:"Push auf diesem Gerät deaktivieren",exact:true})).toBeEnabled();
   await page.getByRole("button",{name:"Push auf diesem Gerät deaktivieren",exact:true}).click();
-  await expect(page.getByText("Push-Status: Deaktiviert",{exact:true})).toBeVisible();
+  await expect(page.getByText("Push-Status: Nicht aktiviert · Browserberechtigung erteilt",{exact:true})).toBeVisible();
   expect((await browserState(page)).unsubscribed).toBe(1);
 });
 test("browser rejection is respected without repeat prompts and In-App fallback remains usable",async({page})=>{
@@ -182,4 +213,111 @@ for(const mode of ["light","dark"] as const)test(`notification profile is access
   await page.emulateMedia({colorScheme:mode});await connect(page);
   expect((await new AxeBuilder({page}).include("#benachrichtigungen").analyze()).violations).toEqual([]);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+});
+
+test("Edge-style granted permission plus native service AbortError never becomes a backend/authorization error",async({page})=>{
+  const diagnostics:string[]=[];
+  page.on("console",message=>{if(message.text().includes("FF_PUSH_DIAG"))diagnostics.push(message.text());});
+  const state=await connect(page,{provider:"windows",otherDevice:true});
+  await page.evaluate(()=>{Reflect.get(window,"syntheticPush").failure="service";});
+  await page.getByRole("button",{name:"Push-Benachrichtigungen aktivieren",exact:true}).click();
+  const alert=page.getByRole("main").getByRole("alert");
+  await expect(alert).toContainText("push_service_failed");
+  await expect(alert).toContainText("Website-Berechtigung erteilt");
+  expect(state.calls.filter(path=>path.endsWith("ff_push_register"))).toHaveLength(0);
+  expect((await browserState(page)).validKey).toBe(true);
+  expect((await browserState(page)).unsubscribed).toBe(0);
+  await expect(page.getByRole("heading",{name:"Posteingang · 1 ungelesen"})).toBeVisible();
+  expect(diagnostics.join()).toContain("AbortError");
+  expect(diagnostics.join()).not.toContain("SYNTHETIC_DO_NOT_LOG");
+  expect(diagnostics.join()).not.toContain("notify.windows.com");
+  expect(state.snapshot.devices[0].active).toBe(true);
+  await page.evaluate(()=>window.dispatchEvent(new Event("focus")));
+  await expect(alert).toContainText("push_service_failed");
+  await page.evaluate(()=>{Reflect.get(window,"syntheticPush").failure=null;});
+  await page.getByRole("button",{name:"Push-Benachrichtigungen aktivieren",exact:true}).click();
+  await expect(page.getByText("Push-Status: Aktiviert",{exact:true})).toBeVisible();
+});
+for(const provider of ["windows","apple"] as const)test(`synthetic ${provider} subscription is reused without replacing another device`,async({page})=>{
+  const state=await connect(page,{provider,otherDevice:true});
+  const activate=page.getByRole("button",{name:"Push-Benachrichtigungen aktivieren",exact:true});
+  await activate.click();await expect(page.getByText("Push-Status: Aktiviert",{exact:true})).toBeVisible();
+  await activate.click();await expect(page.getByText("Push für dieses eigene Gerät aktiviert.",{exact:true})).toBeVisible();
+  const browser=await browserState(page);
+  expect(browser.subscriptions).toBe(1);expect(browser.validKey).toBe(true);expect(browser.requests).toBe(1);
+  expect(state.snapshot.devices).toHaveLength(2);
+  await page.getByRole("button",{name:"Push auf diesem Gerät deaktivieren",exact:true}).click();
+  await expect(page.getByText("Push-Status: Nicht aktiviert · Browserberechtigung erteilt",{exact:true})).toBeVisible();
+  expect(state.snapshot.devices.find(row=>row.device_name==="Existing iPhone PWA")?.active).toBe(true);
+});
+for(const existing of [false,true])test(`backend rejection preserves old subscriptions and cleans up only newly created ones: existing=${existing}`,async({page})=>{
+  const state=await connect(page,{existing,otherDevice:true});
+  state.registerFail=true;
+  await page.getByRole("button",{name:"Push-Benachrichtigungen aktivieren",exact:true}).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("backend_registration_failed");
+  const browser=await browserState(page);
+  expect(browser.unsubscribed).toBe(existing?0:1);expect(browser.subscribed).toBe(existing);
+  expect(state.snapshot.devices).toHaveLength(1);expect(state.snapshot.devices[0].active).toBe(true);
+  await expect(page.getByRole("main").getByRole("alert")).not.toContainText("SYNTHETIC_DO_NOT_LOG");
+});
+for(const [failure,code] of [["worker","worker_unavailable"],["lookup","subscription_lookup_failed"],
+  ["permission","permission_failed"],["subscribe","subscription_create_failed"],["notAllowed","subscription_create_failed"],
+  ["denied","permission_blocked"]] as const)test(`registration reports the exact ${failure} phase without backend writes`,async({page})=>{
+  const state=await connect(page);
+  await page.evaluate(value=>{Reflect.get(window,"syntheticPush").failure=value;},failure);
+  await page.getByRole("button",{name:"Push-Benachrichtigungen aktivieren",exact:true}).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText(code);
+  expect(state.calls.filter(path=>path.endsWith("ff_push_register"))).toHaveLength(0);
+  expect((await browserState(page)).unsubscribed).toBe(0);
+});
+test("malformed public point is rejected before subscribe without altering existing devices",async({page})=>{
+  const state=await connect(page,{otherDevice:true,invalidKey:true});
+  await page.getByRole("button",{name:"Push-Benachrichtigungen aktivieren",exact:true}).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("public_key_invalid");
+  expect((await browserState(page)).subscriptions).toBe(0);
+  expect(state.snapshot.devices[0].active).toBe(true);
+});
+test("failed local subscription lookup still refreshes the usable In-App inbox",async({page})=>{
+  await connect(page);
+  await page.evaluate(()=>{Reflect.get(window,"syntheticPush").failure="lookup";});
+  await page.getByRole("button",{name:"Benachrichtigungen aktualisieren",exact:true}).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("subscription_lookup_failed");
+  await expect(page.getByRole("heading",{name:"Posteingang · 1 ungelesen"})).toBeVisible();
+  await page.getByRole("button",{name:"Alle als gelesen markieren",exact:true}).click();
+  await expect(page.getByRole("heading",{name:"Posteingang · 0 ungelesen"})).toBeVisible();
+  await expect(page.getByText("Alle berechtigt sichtbaren Nachrichten als gelesen markiert.",{exact:true})).toHaveCount(0);
+});
+test("backend failure with unsuccessful cleanup is explicit and never reports activation",async({page})=>{
+  const state=await connect(page);state.registerFail=true;
+  await page.evaluate(()=>{Reflect.get(window,"syntheticPush").failure="cleanup";});
+  await page.getByRole("button",{name:"Push-Benachrichtigungen aktivieren",exact:true}).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("subscription_cleanup_failed");
+  await expect(page.getByText("Push für dieses eigene Gerät aktiviert.",{exact:true})).toHaveCount(0);
+});
+test("an existing but not activated worker is not passed to PushManager",async({page})=>{
+  const state=await connect(page);
+  await page.evaluate(()=>{Reflect.get(window,"syntheticPush").workerActive=false;});
+  await page.getByRole("button",{name:"Push-Benachrichtigungen aktivieren",exact:true}).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("worker_unavailable");
+  expect((await browserState(page)).subscriptions).toBe(0);
+  expect(state.calls.filter(path=>path.endsWith("ff_push_register"))).toHaveLength(0);
+});
+test("existing subscription with an old public key is not silently replaced or saved",async({page})=>{
+  const state=await connect(page,{existing:true,otherDevice:true});
+  await page.evaluate(()=>{Reflect.get(window,"syntheticPush").staleKey=true;});
+  await page.getByRole("button",{name:"Push-Benachrichtigungen aktivieren",exact:true}).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("subscription_key_mismatch");
+  expect((await browserState(page)).subscribed).toBe(true);
+  expect((await browserState(page)).unsubscribed).toBe(0);
+  expect(state.calls.filter(path=>path.endsWith("ff_push_register"))).toHaveLength(0);
+});
+test("own inactive browser subscription can be explicitly removed without touching another device",async({page})=>{
+  const state=await connect(page,{existing:true,otherDevice:true});
+  state.snapshot.devices.push({id:device,device_name:"Expired local browser",created_at:date,last_success_at:null,active:false});
+  await page.getByRole("button",{name:"Benachrichtigungen aktualisieren",exact:true}).click();
+  await page.getByRole("button",{name:"Browser-Abonnement entfernen",exact:true}).click();
+  await expect(page.getByText("Eigenes Gerät deaktiviert.",{exact:true})).toBeVisible();
+  expect((await browserState(page)).unsubscribed).toBe(1);
+  expect(state.snapshot.devices).toHaveLength(2);
+  expect(state.snapshot.devices.find(row=>row.device_name==="Existing iPhone PWA")?.active).toBe(true);
 });

@@ -1,12 +1,17 @@
 # Feuerwehr Odenthal · Supabase DEV und lokale Regression
 
-**DEV 0.7 (Feature-Branch):** [Organisatorische In-App- und Web-Push-Benachrichtigungen](docs/dev-notifications.md).
-Der bestehende Posteingang und Service Worker werden erweitert:
-freiwillige Geräteaktivierung, eigene Einstellungen, Erinnerungen, geschützter
-serverseitiger Versand und Direktnavigation nach erneuter Berechtigungsprüfung.
-Keine Alarmierung, kein Ersatz für aPager. Reale Geräteabnahme bleibt offen.
-Die öffentliche DEV bleibt bis zum manuellen Merge bei **DEV 0.6.4.1**.
-Keine automatische Veröffentlichung, kein automatischer Merge, keine Änderung der Demo.
+**DEV 0.7.1 (Hotfix-Branch):** Gezielte Push-Registrierungsdiagnosen,
+Erhalt bestehender Geräte und sichere Behandlung fehlgeschlagener
+Abonnements. [Ursache, Grenzen und Desktop-Abnahme](docs/dev-notifications.md#dev-071--edge-registrierung-und-fehlerdiagnose).
+
+**DEV 0.7 – PR #24 gemergt, Abnahme weiterhin offen:** Zentrale Inbox,
+freiwillige Geräteaktivierung, eigene Einstellungen, Erinnerungen und
+geschützter Versand. Der Projektverantwortliche hat Aktivierung und
+tatsächlichen Push-Empfang auf der iPhone-PWA bestätigt. Auf seinem normalen
+Edge-Fenster scheitert der native Push-Dienst vor der Backend-Registrierung;
+eine erfolgreiche Desktop-Abnahme ist noch nicht belegt.
+Keine Alarmierung, kein Ersatz für aPager. Kein automatischer Merge,
+keine Änderung der unabhängigen Demo und noch kein Beginn von DEV 0.8.
 
 **DEV 0.6.4.1 – manuell abgenommen und gesichert:** Offene Anwesenheitslisten,
 Dashboard-Zähler, Abschlussaktualisierung und Berechtigungen wurden vom

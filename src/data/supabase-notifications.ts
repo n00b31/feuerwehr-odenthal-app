@@ -1,9 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { publicPath } from "@/config/app";
-import { notificationWorkspaceSchema,notificationPreferencesSchema,publicApplicationKey,type NotificationPreferences } from "@/domain/notifications";
+import { notificationWorkspaceSchema,notificationPreferencesSchema,publicApplicationKey,pushSupport,
+  PushRegistrationError,notificationDiagnostic,type PushErrorCode,type NotificationPreferences } from "@/domain/notifications";
 
 function checked<T>({data,error}:{data:T;error:unknown}) { if(error)throw error;return data; }
+function pushFailure(code:PushErrorCode,cause?:unknown) {
+  const error=new PushRegistrationError(code,cause);
+  console.warn("FF_PUSH_DIAG",notificationDiagnostic(error));
+  return error;
+}
 export async function readNotifications(client:SupabaseClient,actor:string,id?:string) {
   const snapshot=notificationWorkspaceSchema.parse(checked(await client.rpc("ff_notifications",{notice_id:id ? z.uuid().parse(id) : null})));
   if(snapshot.actor_id!==actor)throw new Error("Benachrichtigungsidentität stimmt nicht überein.");
@@ -17,25 +23,56 @@ export async function saveNotificationPreferences(client:SupabaseClient,value:No
 }
 export async function currentPushDevice(client:SupabaseClient) {
   if(!("serviceWorker" in navigator))return null;
-  const registration=await navigator.serviceWorker.getRegistration(publicPath("/"));
-  const subscription=await registration?.pushManager.getSubscription();
+  let registration:ServiceWorkerRegistration|undefined;
+  try { registration=await navigator.serviceWorker.getRegistration(publicPath("/")); }
+  catch(error) { throw pushFailure("worker_unavailable",error); }
+  if(!registration?.active)return null;
+  let subscription:PushSubscription|null;
+  try { subscription=await registration.pushManager.getSubscription(); }
+  catch(error) { throw pushFailure("subscription_lookup_failed",error); }
   if(!subscription)return null;
   return z.uuid().nullable().parse(checked(await client.rpc("ff_push_current",{endpoint:subscription.endpoint})));
 }
 export async function activatePush(client:SupabaseClient,key:string,name:string) {
+  if(!pushSupport())throw pushFailure("unsupported");
   // Invoke requestPermission synchronously from the caller's click, before awaiting a worker.
-  const permission=Notification.permission==="default" ? await Notification.requestPermission() : Notification.permission;
-  if(permission!=="granted")throw new Error("Browserberechtigung wurde nicht erteilt. Die In-App-Übersicht bleibt verfügbar.");
-  const registration=await navigator.serviceWorker.getRegistration(publicPath("/"));
-  if(!registration?.active)throw new Error("Der App-Service-Worker ist noch nicht bereit. Bitte die App erneut öffnen.");
-  let subscription=await registration.pushManager.getSubscription();
+  let permission:NotificationPermission;
+  try { permission=Notification.permission==="default" ? await Notification.requestPermission() : Notification.permission; }
+  catch(error) { throw pushFailure("permission_failed",error); }
+  if(permission!=="granted")throw pushFailure(permission==="denied" ? "permission_blocked" : "permission_not_granted");
+  let registration:ServiceWorkerRegistration|undefined;
+  try { registration=await navigator.serviceWorker.getRegistration(publicPath("/")); }
+  catch(error) { throw pushFailure("worker_unavailable",error); }
+  if(!registration?.active || registration.active.state!=="activated")throw pushFailure("worker_unavailable");
+  let applicationServerKey:ArrayBuffer;
+  try { applicationServerKey=publicApplicationKey(key); }
+  catch(error) { throw pushFailure("public_key_invalid",error); }
+  let subscription:PushSubscription|null;
+  try { subscription=await registration.pushManager.getSubscription(); }
+  catch(error) { throw pushFailure("subscription_lookup_failed",error); }
+  const previousKey=subscription?.options?.applicationServerKey;
+  if(previousKey){
+    const previous=new Uint8Array(previousKey),current=new Uint8Array(applicationServerKey);
+    if(previous.length!==current.length || previous.some((value,index)=>value!==current[index]))
+      throw pushFailure("subscription_key_mismatch");
+  }
   let created=false;
-  if(!subscription){subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:publicApplicationKey(key)});created=true;}
+  if(!subscription){
+    try { subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey});created=true; }
+    catch(error) {
+      if(Notification.permission==="denied")throw pushFailure("permission_blocked",error);
+      throw pushFailure(error instanceof Error && error.name==="AbortError" && Notification.permission==="granted"
+        ? "push_service_failed" : "subscription_create_failed",error);
+    }
+  }
   try {
     return z.uuid().parse(checked(await client.rpc("ff_push_register",{subscription:subscription.toJSON(),device_name:name})));
   } catch(error) {
-    if(created && !await subscription.unsubscribe())throw new Error("Registrierung fehlgeschlagen; Browser-Abonnement konnte nicht entfernt werden.");
-    throw error;
+    if(created){
+      try { if(!await subscription.unsubscribe())throw new Error("unsubscribe_failed"); }
+      catch(cleanupError) { throw pushFailure("subscription_cleanup_failed",cleanupError); }
+    }
+    throw pushFailure("backend_registration_failed",error);
   }
 }
 export async function deactivatePush(client:SupabaseClient,id:string,current=false) {
