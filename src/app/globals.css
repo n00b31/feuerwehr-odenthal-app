@@ -52,7 +52,7 @@
   .mobile-filter-bar > span { color: var(--cp-text-muted); font-size: .75rem; overflow-wrap: anywhere; }
   .mobile-filter-bar > button { flex-shrink: 0; }
   .mobile-workspace .dev-event { padding: 0; margin-block: 12px; }
-  .service-summary { display: grid; gap: 8px; width: 100%; padding: 16px; border: 0; text-align: start; font: inherit; background: var(--cp-surface); color: var(--cp-text); cursor: pointer; border-radius: 10px; overflow-wrap: anywhere; }
+  .service-summary { display: grid; gap: 8px; width: 100%; padding: 16px; border: 0; text-align: start; font: inherit; background: var(--cp-surface); color: var(--cp-text); cursor: pointer; border-radius: 10px; overflow-wrap: anywhere; scroll-margin-block-start: calc(76px + env(safe-area-inset-top)); }
   .mobile-workspace .personal-response .service-summary { background: inherit; }
   .service-date { grid-row: 1; color: var(--cp-text); font-size: .75rem; font-weight: 600; }
   .service-title { font-size: 1.0625rem; line-height: 1.35; }

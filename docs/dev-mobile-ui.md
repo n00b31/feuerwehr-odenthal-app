@@ -126,6 +126,8 @@ Rückmeldespeicherung, Anwesenheitsabschluss, Entfernen aus dem Offen-Filter,
 sekundäre Navigation, Kalender, Profil und vorhandene Abmeldung.
 Öffnen/Schließen wird auf unveränderte Daten, fehlende zusätzliche
 Terminabfragen sowie Fokus- und Scroll-Rückgabe geprüft.
+Scroll-Anker berücksichtigen den kompakten Header und den oberen Safe-Area-Abstand,
+damit das Datum der angesprungenen Terminkarte nicht verdeckt wird.
 
 Die bestehenden Auth-, Freigabe-, Rollen-, Dienst-, Berichts-, Kalender-,
 Fahrzeug-, Serien-, Cockpit- und Push-/Gerätelebenszyklus-Tests bleiben
@@ -160,8 +162,13 @@ alle vier wurden anschließend erfolgreich erneut geprüft. Die ergänzte
 responsive Suite besteht vollständig mit 19 Fällen, einschließlich des
 Pixelvergleichs zur abgenommenen Startseite und des unmittelbaren Entfernens
 abgeschlossener Listen beim Verlassen der mobilen Detailansicht.
-Der PR führt zusätzlich den vollständigen CI-Lauf einschließlich Datenbank/RLS,
-Demo-Regression, DEV-Browsern und Veröffentlichungsschutz aus.
+Der vollständige PR-CI-Lauf für `09d1eaa` war erfolgreich:
+160 DEV-Browserfälle, 19 Demo-Browserfälle, Datenbank/RLS, Upgrade-Prüfung
+und Veröffentlichungsschutz ([UI/Export](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42810431919),
+[Datenbank](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/42810431780)).
+Die zusätzliche Scroll-Anker-Korrektur ist erneut mit allen 19 responsiven Fällen
+einschließlich Startseiten-Pixelvergleich geprüft. Maßgeblich für den jeweils
+neuesten Commit bleiben die Prüfungen im Pull Request.
 
 ## Manuelle Abnahme nach Review und Merge
 

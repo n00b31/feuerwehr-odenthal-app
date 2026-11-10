@@ -33,7 +33,8 @@ for(const width of [320,375,390,430,768,1440])for(const theme of ["light","dark"
         expect(await link.evaluate(e=>e.scrollWidth<=e.clientWidth)).toBe(true);
       }
       const card=page.getByRole("button",{name:`Termindetails öffnen: ${state.events[1].title}`,exact:false});
-      await card.scrollIntoViewIfNeeded();
+      await card.evaluate(element=>element.scrollIntoView({block:"start"}));
+      expect((await card.boundingBox())!.y).toBeGreaterThanOrEqual((await page.locator(".topbar").boundingBox())!.height);
       const scroll=await page.evaluate(()=>window.scrollY),queries=state.queries.length;
       expect(await card.evaluate(e=>e.getBoundingClientRect().height)).toBeLessThan(260);
       await card.click();
@@ -58,7 +59,7 @@ for(const width of [320,375,390,430,768,1440])for(const theme of ["light","dark"
     await noOverflow(page);
     if(width===390){
       await capture(page,`header-${theme}`);
-      await page.locator(".service-summary").first().evaluate(element=>window.scrollTo(0,element.getBoundingClientRect().top+window.scrollY-16));
+      await page.locator(".service-summary").first().evaluate(element=>element.scrollIntoView({block:"start"}));
       await capture(page,`services-${theme}`);
     }
     if(width===1440 && theme==="light")await capture(page,"desktop-services");
