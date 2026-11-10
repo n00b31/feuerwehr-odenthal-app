@@ -42,7 +42,7 @@ export async function currentPushDevice(client:SupabaseClient) {
   if(!subscription)return null;
   return z.uuid().nullable().parse(checked(await client.rpc("ff_push_current",{endpoint:subscription.endpoint})));
 }
-export async function activatePush(client:SupabaseClient,key:string,name:string,onProgress?:(stage:PushStage)=>void) {
+export async function activatePush(client:SupabaseClient,key:string,name:string,onProgress?:(stage:PushStage)=>void,deviceId?:string) {
   if(!pushSupport())throw pushFailure("unsupported");
   // Invoke requestPermission synchronously from the caller's click, before awaiting a worker.
   onProgress?.("permission");
@@ -68,10 +68,9 @@ export async function activatePush(client:SupabaseClient,key:string,name:string,
     if(previous.length!==current.length || previous.some((value,index)=>value!==current[index]))
       throw pushFailure("subscription_key_mismatch");
   }
-  let created=false;
   if(!subscription){
     onProgress?.("subscribe");
-    try { subscription=await nativePushResult(registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey}),30_000);created=true; }
+    try { subscription=await nativePushResult(registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey}),30_000); }
     catch(error) {
       if(Notification.permission==="denied")throw pushFailure("permission_blocked",error);
       if(error instanceof Error && error.name==="TimeoutError")throw pushFailure("subscription_timeout",error);
@@ -81,25 +80,33 @@ export async function activatePush(client:SupabaseClient,key:string,name:string,
   }
   onProgress?.("backend");
   try {
-    return z.uuid().parse(checked(await client.rpc("ff_push_register",{subscription:subscription.toJSON(),device_name:name})));
+    return z.uuid().parse(checked(await client.rpc(deviceId?"ff_push_reactivate":"ff_push_register",
+      {subscription:subscription.toJSON(),device_name:name,...(deviceId?{device_id:z.uuid().parse(deviceId)}:{})})));
   } catch(error) {
-    if(created){
-      try { if(!await subscription.unsubscribe())throw new Error("unsubscribe_failed"); }
-      catch(cleanupError) { throw pushFailure("subscription_cleanup_failed",cleanupError); }
-    }
-    throw pushFailure("backend_registration_failed",error);
+    // Another tab may already have registered this same native subscription. Never delete it implicitly.
+    if(error && typeof error==="object" && "code" in error && error.code==="PT404")throw pushFailure("device_unavailable");
+    throw pushFailure(deviceId?"reactivation_failed":"backend_registration_failed",error);
   }
 }
-export async function deactivatePush(client:SupabaseClient,id:string,current=false) {
-  let failure:unknown;
+export async function deactivatePush(client:SupabaseClient,id:string) {
+  // Retain the local subscription so that reactivation can identify this same device.
   try { checked(await client.rpc("ff_push_deactivate",{device_id:z.uuid().parse(id),endpoint:null})); }
-  catch(error) { failure=error; }
-  if(current && "serviceWorker" in navigator){
-    const registration=await navigator.serviceWorker.getRegistration(publicPath("/"));
-    const subscription=await registration?.pushManager.getSubscription();
-    if(subscription && !await subscription.unsubscribe())throw new Error("Browser-Abonnement konnte nicht entfernt werden.");
+  catch(error) { throw pushFailure(error && typeof error==="object" && "code" in error && ["PT404","42501"].includes(String(error.code))
+    ? "device_unavailable":"deactivation_failed",error); }
+}
+export async function removePush(client:SupabaseClient,id:string,current=false) {
+  try { checked(await client.rpc("ff_push_remove",{device_id:z.uuid().parse(id)})); }
+  catch(error) {
+    throw pushFailure(error && typeof error==="object" && "code" in error && error.code==="PT404"
+      ? "device_unavailable":"removal_failed",error);
   }
-  if(failure)throw failure;
+  if(current){
+    try {
+      const registration=await nativePushResult(navigator.serviceWorker.getRegistration(publicPath("/")),10_000);
+      const subscription=registration?await nativePushResult(registration.pushManager.getSubscription(),15_000):null;
+      if(subscription && !await nativePushResult(subscription.unsubscribe(),15_000))throw new Error("unsubscribe_failed");
+    } catch(error) { throw pushFailure("local_removal_failed",error); }
+  }
 }
 export async function releaseCurrentPush(client:SupabaseClient) {
   if(!("serviceWorker" in navigator))return;
@@ -115,6 +122,28 @@ export async function releaseCurrentPush(client:SupabaseClient) {
   if(failure)throw failure;
 }
 export async function testPush(client:SupabaseClient,id:string) {
-  const result=checked(await client.functions.invoke("push-dispatch",{body:{action:"test",device_id:z.uuid().parse(id)}}));
-  return z.object({queued:z.literal(true)}).parse(result);
+  const {data,error}=await client.functions.invoke("push-dispatch",{body:{action:"test",device_id:z.uuid().parse(id)}});
+  if(error){
+    let code:PushErrorCode="test_failed";
+    if(error.context instanceof Response){
+      let payload:unknown;
+      try { payload=await error.context.json(); } catch { throw pushFailure("test_failed"); }
+      const parsed=z.object({error:z.enum(["test_rate_limited","device_inactive","device_unavailable"])}).safeParse(payload);
+      if(parsed.success)code=parsed.data.error;
+    }
+    throw pushFailure(code);
+  }
+  const result=z.object({queued:z.literal(true),notification_id:z.uuid()}).safeParse(data);
+  if(!result.success)throw pushFailure("test_failed");
+  for(let attempt=0;attempt<5;attempt++){
+    let status:unknown;
+    try { status=checked(await client.rpc("ff_push_test_status",{notice_id:result.data.notification_id})); }
+    catch(error) { throw pushFailure("test_failed",error); }
+    const parsed=z.object({status:z.enum(["pending","leased","accepted","failed","cancelled"]),
+      reason:z.enum(["subscription_invalid","device_inactive","provider_rejected"]).nullable()}).safeParse(status);
+    if(!parsed.success)throw pushFailure("test_failed");
+    if(parsed.data.status==="accepted")return;
+    if(parsed.data.status==="failed" || parsed.data.status==="cancelled")throw pushFailure(parsed.data.reason??"provider_rejected");
+    if(attempt<4)await new Promise(resolve=>setTimeout(resolve,1_000));
+  }
 }

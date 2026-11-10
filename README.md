@@ -1,5 +1,13 @@
 # Feuerwehr Odenthal · Supabase DEV und lokale Regression
 
+**DEV 0.7.2 (Hotfix-Branch):** Vollständiger eigener Push-Geräte-Lebenszyklus
+mit bestätigtem Entfernen, gezielter Reaktivierung und sicherer Entwertung
+alter Versandaufträge. Die nachgewiesenen Testlimit-Fehler werden nicht
+mehr als Registrierungsfehler dargestellt. Keine gelockerte Versandquote.
+[Ursache, Rollout und manuelle Geräteabnahme](docs/dev-notifications.md#dev-072--push-device-lifecycle).
+Die vollständige Sequenz auf iPhone und Windows 11/Edge bleibt bis zum
+manuellen Test nach Merge ausdrücklich offen.
+
 **DEV 0.7.1 (Hotfix-Branch):** Gezielte Push-Registrierungsdiagnosen,
 sichtbarer Fortschritt, begrenzte native Wartezeiten, Erhalt bestehender
 Geräte und sichere Behandlung fehlgeschlagener oder verspäteter Abonnements.

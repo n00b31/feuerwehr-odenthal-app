@@ -14,7 +14,8 @@ type BrowserPushState={requests:number;gesture:boolean;subscribed:boolean;unsubs
   finishPermission:(()=>void)|null;finishSubscription:(()=>void)|null};
 async function connect(page:Page,options:{support?:boolean;denied?:boolean;linked?:boolean;global?:boolean;guestPush?:boolean;
   provider?:"windows"|"apple";existing?:boolean;otherDevice?:boolean;invalidKey?:boolean}={}){
-  const state={calls:[] as string[],revoked:false,fail:false,registerFail:false,tests:0,snapshot:{
+  const state={calls:[] as string[],revoked:false,fail:false,registerFail:false,tests:0,testError:"",
+    testStatus:"accepted",testReason:null as string|null,snapshot:{
     actor_id:actor,unread:1,notices:[{id:notice,source_kind:"event",target_id:event,event_type:"event_created",category:"services",
       title:"Neuer Übungsdienst",message:"Synthetic notification practice",created_at:date,read_at:null,
       delivery:{total:0,accepted:0,pending:0,failed:0,cancelled:0}}],
@@ -109,8 +110,9 @@ async function connect(page:Page,options:{support?:boolean;denied?:boolean;linke
       for(const row of state.snapshot.notices)row.read_at=date;state.snapshot.unread=0;return respond(null);
     }
     if(path.endsWith("ff_notification_preferences")){state.snapshot.preferences=request.postDataJSON();return respond(null);}
-    if(path.endsWith("ff_push_current"))return respond(device);
-    if(path.endsWith("ff_push_register")){
+    if(path.endsWith("ff_push_current"))return respond(state.snapshot.devices.some(row=>row.id===device)?device:null);
+    if(path.endsWith("ff_push_test_status"))return respond({status:state.testStatus,reason:state.testReason});
+    if(path.endsWith("ff_push_register") || path.endsWith("ff_push_reactivate")){
       expect(request.postDataJSON().subscription.endpoint).toContain("synthetic-browser");
       if(state.registerFail)return respond({code:"42501",message:"SYNTHETIC_DO_NOT_LOG https://invalid.example/private-token"},403);
       state.snapshot.preferences.push_enabled=true;state.snapshot.devices=[...state.snapshot.devices.filter(row=>row.id!==device),
@@ -121,8 +123,14 @@ async function connect(page:Page,options:{support?:boolean;denied?:boolean;linke
       const target=request.postDataJSON().device_id??device;
       state.snapshot.devices.forEach(row=>{if(row.id===target)row.active=false;});return respond(null);
     }
+    if(path.endsWith("ff_push_remove")){
+      state.snapshot.devices=state.snapshot.devices.filter(row=>row.id!==request.postDataJSON().device_id);
+      return respond(null);
+    }
     if(path==="/functions/v1/push-dispatch"){
-      expect(request.postDataJSON()).toEqual({action:"test",device_id:device});state.tests++;return respond({queued:true},202);
+      expect(request.postDataJSON()).toEqual({action:"test",device_id:device});
+      if(state.testError)return respond({error:state.testError},state.testError==="test_rate_limited"?429:409);
+      state.tests++;return respond({queued:true,notification_id:notice},202);
     }
     if(path.endsWith("ff_events_page"))return respond({server_now:date,manageable_units:[],retained_events:[],has_more:false,next_cursor:null,events:[{
       id:event,title:"Synthetic notification practice",description:"Synthetic protocol fixture",event_type:"regular",starts_at:"2026-12-01T18:00:00Z",
@@ -157,8 +165,8 @@ test("permission is requested only on explicit click, then own device can receiv
   await expect.poll(()=>state.tests).toBe(1);
   await expect(page.getByRole("button",{name:"Push auf diesem Gerät deaktivieren",exact:true})).toBeEnabled();
   await page.getByRole("button",{name:"Push auf diesem Gerät deaktivieren",exact:true}).click();
-  await expect(page.getByText("Push-Status: Nicht aktiviert · Browserberechtigung erteilt",{exact:true})).toBeVisible();
-  expect((await browserState(page)).unsubscribed).toBe(1);
+  await expect(page.getByText("Push-Status: Deaktiviert",{exact:true})).toBeVisible();
+  expect((await browserState(page)).unsubscribed).toBe(0);
 });
 test("browser rejection is respected without repeat prompts and In-App fallback remains usable",async({page})=>{
   await connect(page,{denied:true});
@@ -257,16 +265,16 @@ for(const provider of ["windows","apple"] as const)test(`synthetic ${provider} s
   expect(browser.subscriptions).toBe(1);expect(browser.validKey).toBe(true);expect(browser.requests).toBe(1);
   expect(state.snapshot.devices).toHaveLength(2);
   await page.getByRole("button",{name:"Push auf diesem Gerät deaktivieren",exact:true}).click();
-  await expect(page.getByText("Push-Status: Nicht aktiviert · Browserberechtigung erteilt",{exact:true})).toBeVisible();
+  await expect(page.getByText("Push-Status: Deaktiviert",{exact:true})).toBeVisible();
   expect(state.snapshot.devices.find(row=>row.device_name==="Existing iPhone PWA")?.active).toBe(true);
 });
-for(const existing of [false,true])test(`backend rejection preserves old subscriptions and cleans up only newly created ones: existing=${existing}`,async({page})=>{
+for(const existing of [false,true])test(`backend rejection never implicitly deletes a subscription another tab may use: existing=${existing}`,async({page})=>{
   const state=await connect(page,{existing,otherDevice:true});
   state.registerFail=true;
   await page.getByRole("button",{name:"Push-Benachrichtigungen aktivieren",exact:true}).click();
   await expect(page.getByRole("main").getByRole("alert")).toContainText("backend_registration_failed");
   const browser=await browserState(page);
-  expect(browser.unsubscribed).toBe(existing?0:1);expect(browser.subscribed).toBe(existing);
+  expect(browser.unsubscribed).toBe(0);expect(browser.subscribed).toBe(true);
   expect(state.snapshot.devices).toHaveLength(1);expect(state.snapshot.devices[0].active).toBe(true);
   await expect(page.getByRole("main").getByRole("alert")).not.toContainText("SYNTHETIC_DO_NOT_LOG");
 });
@@ -297,11 +305,11 @@ test("failed local subscription lookup still refreshes the usable In-App inbox",
   await expect(page.getByRole("heading",{name:"Posteingang · 0 ungelesen"})).toBeVisible();
   await expect(page.getByText("Alle berechtigt sichtbaren Nachrichten als gelesen markiert.",{exact:true})).toHaveCount(0);
 });
-test("backend failure with unsuccessful cleanup is explicit and never reports activation",async({page})=>{
+test("backend failure keeps a native subscription for a deliberate retry and never reports activation",async({page})=>{
   const state=await connect(page);state.registerFail=true;
   await page.evaluate(()=>{Reflect.get(window,"syntheticPush").failure="cleanup";});
   await page.getByRole("button",{name:"Push-Benachrichtigungen aktivieren",exact:true}).click();
-  await expect(page.getByRole("main").getByRole("alert")).toContainText("subscription_cleanup_failed");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("backend_registration_failed");
   await expect(page.getByText("Push für dieses eigene Gerät aktiviert.",{exact:true})).toHaveCount(0);
 });
 test("an existing but not activated worker is not passed to PushManager",async({page})=>{
@@ -325,10 +333,11 @@ test("own inactive browser subscription can be explicitly removed without touchi
   const state=await connect(page,{existing:true,otherDevice:true});
   state.snapshot.devices.push({id:device,device_name:"Expired local browser",created_at:date,last_success_at:null,active:false});
   await page.getByRole("button",{name:"Benachrichtigungen aktualisieren",exact:true}).click();
-  await page.getByRole("button",{name:"Browser-Abonnement entfernen",exact:true}).click();
-  await expect(page.getByText("Eigenes Gerät deaktiviert.",{exact:true})).toBeVisible();
+  page.once("dialog",dialog=>dialog.accept());
+  await page.getByRole("article").filter({hasText:"Expired local browser"}).getByRole("button",{name:"Gerät entfernen",exact:true}).click();
+  await expect(page.getByText("Eigenes Gerät dauerhaft entfernt.",{exact:true})).toBeVisible();
   expect((await browserState(page)).unsubscribed).toBe(1);
-  expect(state.snapshot.devices).toHaveLength(2);
+  expect(state.snapshot.devices).toHaveLength(1);
   expect(state.snapshot.devices.find(row=>row.device_name==="Existing iPhone PWA")?.active).toBe(true);
 });
 test("quiet permission prompt has visible progress and a strict 30-second limit; late consent never registers automatically",async({page})=>{
@@ -387,4 +396,62 @@ test("late native subscription cannot make an authenticated backend write after 
   await expect(page.getByRole("button",{name:"Anmelden",exact:true})).toBeVisible();
   await page.evaluate(()=>{Reflect.get(window,"syntheticPush").finishSubscription();});
   expect(state.calls.filter(path=>path.endsWith("ff_push_register"))).toHaveLength(0);
+});
+for(const provider of ["windows","apple"] as const)test(`synthetic ${provider} lifecycle: repeated reactivation, removal and fresh registration preserve another device`,async({page})=>{
+  const state=await connect(page,{provider,otherDevice:true});
+  const activate=page.getByRole("button",{name:"Push-Benachrichtigungen aktivieren",exact:true});
+  const send=page.getByRole("button",{name:"Test-Push senden · DEV",exact:true});
+  await activate.click();await expect(page.getByText("Push-Status: Aktiviert",{exact:true})).toBeVisible();
+  await send.click();await expect.poll(()=>state.tests).toBe(1);
+  for(let i=0;i<3;i++){
+    await page.getByRole("button",{name:"Push auf diesem Gerät deaktivieren",exact:true}).click();
+    await expect(page.getByText("Push-Status: Deaktiviert",{exact:true})).toBeVisible();
+    await expect(send).toBeDisabled();
+    await page.getByRole("button",{name:"Gerät reaktivieren",exact:true}).click();
+    await expect(page.getByText("Push-Status: Aktiviert",{exact:true})).toBeVisible();
+    await send.click();await expect.poll(()=>state.tests).toBe(i+2);
+  }
+  expect((await browserState(page)).subscriptions).toBe(1);
+  const local=page.getByRole("article").filter({hasText:"dieses Gerät"});
+  page.once("dialog",dialog=>dialog.dismiss());
+  await local.getByRole("button",{name:"Gerät entfernen",exact:true}).click();
+  expect(state.snapshot.devices).toHaveLength(2);
+  page.once("dialog",dialog=>dialog.accept());
+  await local.getByRole("button",{name:"Gerät entfernen",exact:true}).click();
+  await expect(page.getByText("Eigenes Gerät dauerhaft entfernt.",{exact:true})).toBeVisible();
+  expect(state.snapshot.devices).toHaveLength(1);
+  expect((await browserState(page)).unsubscribed).toBe(1);
+  await activate.click();await expect(page.getByText("Push-Status: Aktiviert",{exact:true})).toBeVisible();
+  await send.click();await expect.poll(()=>state.tests).toBe(5);
+  expect((await browserState(page)).subscriptions).toBe(2);
+  expect(state.snapshot.devices.find(row=>row.device_name==="Existing iPhone PWA")?.active).toBe(true);
+});
+for(const reason of ["test_rate_limited","device_inactive","device_unavailable"] as const)test(`test ${reason} is explicit, never a registration error`,async({page})=>{
+  const state=await connect(page);
+  await page.getByRole("button",{name:"Push-Benachrichtigungen aktivieren",exact:true}).click();
+  await expect(page.getByText("Push-Status: Aktiviert",{exact:true})).toBeVisible();
+  state.testError=reason;
+  await page.getByRole("button",{name:"Test-Push senden · DEV",exact:true}).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText(reason);
+  await expect(page.getByText("Registrierung: Aktiv",{exact:true})).toBeVisible();
+  expect(state.tests).toBe(0);
+});
+test("provider rejection is not reported as registration failure or successful delivery",async({page})=>{
+  const state=await connect(page);
+  await page.getByRole("button",{name:"Push-Benachrichtigungen aktivieren",exact:true}).click();
+  await expect(page.getByText("Push-Status: Aktiviert",{exact:true})).toBeVisible();
+  state.testStatus="failed";state.testReason="subscription_invalid";
+  await page.getByRole("button",{name:"Test-Push senden · DEV",exact:true}).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("subscription_invalid");
+  await expect(page.getByText("Registrierung: Aktiv",{exact:true})).toBeVisible();
+});
+test("removing another own device never unsubscribes this browser",async({page})=>{
+  const state=await connect(page,{otherDevice:true});
+  await page.getByRole("button",{name:"Push-Benachrichtigungen aktivieren",exact:true}).click();
+  await expect(page.getByText("Push-Status: Aktiviert",{exact:true})).toBeVisible();
+  page.once("dialog",dialog=>dialog.accept());
+  await page.getByRole("article").filter({hasText:"Existing iPhone PWA"}).getByRole("button",{name:"Gerät entfernen",exact:true}).click();
+  await expect(page.getByText("Eigenes Gerät dauerhaft entfernt.",{exact:true})).toBeVisible();
+  expect(state.snapshot.devices).toHaveLength(1);expect(state.snapshot.devices[0].id).toBe(device);
+  expect((await browserState(page)).unsubscribed).toBe(0);
 });

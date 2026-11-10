@@ -7,7 +7,7 @@ import { Bell,RefreshCw } from "lucide-react";
 import { z } from "zod";
 import { notificationCategories,notificationCategorySchema,notificationError,notificationHref,pushSupport,pushStages,
   type PushStage,type NotificationPreferences,type NotificationWorkspace,type Notice } from "@/domain/notifications";
-import { activatePush,currentPushDevice,deactivatePush,readNotification,readNotifications,saveNotificationPreferences,testPush } from "@/data/supabase-notifications";
+import { activatePush,currentPushDevice,deactivatePush,removePush,readNotification,readNotifications,saveNotificationPreferences,testPush } from "@/data/supabase-notifications";
 import { dateLabel } from "@/domain/time";
 
 function changed(){window.dispatchEvent(new Event("ff-notifications-changed"));}
@@ -68,6 +68,9 @@ export function SupabaseNotifications({client,actorId,onPushBusy}:{client:Supaba
   const [permission,setPermission]=useState<NotificationPermission|"unsupported">("default");
   const [error,setError]=useState(""),[message,setMessage]=useState(""),[busy,setBusy]=useState(false);
   const [pushStage,setPushStage]=useState<PushStage|null>(null);
+  const [registrationFailed,setRegistrationFailed]=useState(false);
+  const stage=useRef<PushStage|null>(null);
+  function progress(value:PushStage){stage.current=value;setPushStage(value);setRegistrationFailed(false);}
   const working=useRef(false),dirty=useRef(false),epoch=useRef({value:0});
   const reload=useCallback(()=>{
     const version=++epoch.current.value;
@@ -93,18 +96,26 @@ export function SupabaseNotifications({client,actorId,onPushBusy}:{client:Supaba
     if(working.current)return;
     working.current=true;setBusy(true);onPushBusy(true);setError("");setMessage("");
     try{await operation();if(await reload())setMessage(success);}
-    catch(cause){setPermission(pushSupport()?Notification.permission:"unsupported");setError(notificationError(cause));}
-    finally{working.current=false;setBusy(false);onPushBusy(false);setPushStage(null);}
+    catch(cause){
+      if(stage.current)setRegistrationFailed(true);
+      setPermission(pushSupport()?Notification.permission:"unsupported");
+      if(stage.current)setError(notificationError(cause));
+      else try { await reload();setError(notificationError(cause)); }
+      catch(refreshError){setError(`${notificationError(cause)} Aktualisierung fehlgeschlagen: ${notificationError(refreshError)}`);}
+    }
+    finally{working.current=false;setBusy(false);onPushBusy(false);setPushStage(null);stage.current=null;}
   }
-  const current=snapshot?.devices.find(item=>item.id===device && item.active);
+  const local=snapshot?.devices.find(item=>item.id===device);
+  const current=local?.active?local:undefined;
   const status=permission==="unsupported" ? "Auf diesem Gerät nicht unterstützt" : permission==="denied" ? "Vom Browser blockiert"
-    : current && snapshot?.preferences.push_enabled ? "Aktiviert" : current ? "Deaktiviert"
+    : current && snapshot?.preferences.push_enabled ? "Aktiviert" : local ? "Deaktiviert"
     : permission==="granted" ? "Nicht aktiviert · Browserberechtigung erteilt" : "Noch nicht eingerichtet";
   return <section className="card section-card" aria-label="Benachrichtigungen">
     <div className="event-card-top"><h2><Bell size={22}/> Benachrichtigungen</h2>
       <button className="button secondary" disabled={busy} onClick={()=>{setError("");void reload().catch(cause=>setError(notificationError(cause)));}}><RefreshCw size={18}/>Benachrichtigungen aktualisieren</button></div>
     <p className="notice">Organisatorische Informationen, keine Alarmierung. Kein Ersatz für aPager oder die offizielle Feuerwehralarmierung.</p>
     <p><strong>Push-Status: {status}</strong></p>
+    <p role="status">Registrierung: {pushStage?"Registrierung läuft":registrationFailed?"Registrierung fehlgeschlagen":current?"Aktiv":local?"Deaktiviert":"Nicht eingerichtet"}</p>
     <p>Die Browserberechtigung wird ausschließlich bei bewusster Aktivierung angefragt. Auf dem Sperrbildschirm stehen keine fachlichen Details.</p>
     {permission==="unsupported" && <p className="notice">In-App-Nachrichten bleiben verfügbar. Auf dem iPhone die App in Safari über „Teilen“ → „Zum Home-Bildschirm“ installieren und von dort öffnen. Ein geeignetes aktuelles System und eine sichere Verbindung sind erforderlich.</p>}
     {permission==="denied" && <p className="notice">Die Ablehnung wird respektiert. Zum späteren Freigeben die Benachrichtigungsberechtigung in den Browser- beziehungsweise Systemeinstellungen selbst ändern.</p>}
@@ -116,10 +127,11 @@ export function SupabaseNotifications({client,actorId,onPushBusy}:{client:Supaba
       {!snapshot.server_ready && <p className="notice">Push-Versand ist serverseitig noch nicht eingerichtet oder pausiert. In-App-Nachrichten sind unabhängig von der Browserunterstützung verfügbar.</p>}
       <div className="form-grid"><label>Gerätename<input value={name} onChange={event=>setName(event.target.value)} minLength={1} maxLength={80} disabled={busy}/></label>
         <button className="button" disabled={busy || permission==="unsupported" || permission==="denied" || !snapshot.server_ready || !snapshot.public_key || !name.trim()}
-          onClick={()=>void run(()=>activatePush(client,snapshot.public_key!,name,setPushStage),"Push für dieses eigene Gerät aktiviert.")}>Push-Benachrichtigungen aktivieren</button>
-        {current && <button className="button secondary" disabled={busy} onClick={()=>void run(()=>deactivatePush(client,current.id,true),"Push für dieses Gerät deaktiviert.")}>Push auf diesem Gerät deaktivieren</button>}
+          onClick={()=>void run(()=>activatePush(client,snapshot.public_key!,name,progress,local?.id),"Push für dieses eigene Gerät aktiviert.")}>Push-Benachrichtigungen aktivieren</button>
+        {current && <button className="button secondary" disabled={busy} onClick={()=>void run(()=>deactivatePush(client,current.id),"Push für dieses Gerät deaktiviert.")}>Push auf diesem Gerät deaktivieren</button>}
         <button className="button secondary" disabled={busy || !current || !snapshot.preferences.push_enabled || !snapshot.server_ready}
           onClick={()=>void run(()=>testPush(client,current!.id),"DEV-Test nur an dieses eigene Gerät angefordert. Anbieterannahme ist kein Nachweis einer Geräteanzeige.")}>Test-Push senden · DEV</button></div>
+      <p className="muted text-sm">Testlimit pro Konto, gemeinsam für alle Geräte: höchstens einmal pro Minute und dreimal pro Stunde. Deaktivieren, Reaktivieren oder Entfernen setzt dieses Limit nicht zurück.</p>
       <form className="form-grid" onSubmit={event=>{event.preventDefault();void run(async()=>{
         await saveNotificationPreferences(client,preferences);dirty.current=false;
       },"Benachrichtigungseinstellungen gespeichert.");}}>
@@ -138,11 +150,20 @@ export function SupabaseNotifications({client,actorId,onPushBusy}:{client:Supaba
         <button className="button secondary" disabled={busy}>Benachrichtigungseinstellungen speichern</button>
       </form>
       <h3>Registrierte Geräte</h3>
+      <p className="muted text-sm">Aktivierung und Anbieterannahme sind getrennt. „Noch keine“ bedeutet nur: bisher kein bestätigter Versand. Andere Browser können hier serverseitig deaktiviert oder entfernt werden; ihr lokales Abonnement bleibt dort bestehen. Bereits an den Anbieter übergebene Nachrichten können nicht zurückgerufen werden.</p>
       {!snapshot.devices.length && <p>Noch kein Gerät registriert.</p>}
       {snapshot.devices.map(item=><article className="notice-row" key={item.id}><span><strong>{item.device_name}{item.id===device ? " · dieses Gerät" : ""}</strong>
-        <small>{item.active?"Aktiv":"Inaktiv"} · Registriert {dateLabel(item.created_at)} · Letzte Anbieterannahme: {item.last_success_at?dateLabel(item.last_success_at):"noch keine"}</small></span>
-        {(item.active || item.id===device) && <button className="button secondary" disabled={busy} onClick={()=>void run(()=>deactivatePush(client,item.id,item.id===device),"Eigenes Gerät deaktiviert.")}>
-          {item.active?"Gerät deaktivieren":"Browser-Abonnement entfernen"}</button>}</article>)}
+        <small>Registrierung: {item.active?"Aktiv":"Deaktiviert"} · Registriert {dateLabel(item.created_at)} · Letzte Anbieterannahme: {item.last_success_at?dateLabel(item.last_success_at):"noch keine"}</small>
+        {!item.active && item.id!==device && <small>Zum Reaktivieren dieses Gerät öffnen und Push dort erneut aktivieren.</small>}</span>
+        <div className="dev-actions">
+          {item.active && <button className="button secondary" disabled={busy} onClick={()=>void run(()=>deactivatePush(client,item.id),"Eigenes Gerät deaktiviert.")}>Gerät deaktivieren</button>}
+          {!item.active && item.id===device && <button className="button secondary" disabled={busy || permission!=="granted" || !snapshot.server_ready}
+            onClick={()=>void run(()=>activatePush(client,snapshot.public_key!,item.device_name,progress,item.id),"Eigenes Gerät reaktiviert.")}>Gerät reaktivieren</button>}
+          <button className="button secondary" disabled={busy} onClick={()=>{
+            if(window.confirm(`Gerät „${item.device_name}“ dauerhaft entfernen? Neue Push-Zustellungen werden verhindert. Auf einem anderen Gerät bleibt dessen lokales Browser-Abonnement bestehen.`))
+              void run(()=>removePush(client,item.id,item.id===device),"Eigenes Gerät dauerhaft entfernt.");
+          }}>Gerät entfernen</button>
+        </div></article>)}
       <h3>Posteingang · {snapshot.unread} ungelesen</h3>
       <p className="muted text-sm">Die neuesten bis zu 100 berechtigt sichtbaren Nachrichten. Ungelesen zählt alle sichtbaren Nachrichten. Versandstatus bezeichnet Push-Dienstannahme, nicht den nachgewiesenen Empfang.</p>
       <button className="button secondary" disabled={busy || !snapshot.unread} onClick={()=>void run(()=>readNotification(client),"Alle berechtigt sichtbaren Nachrichten als gelesen markiert.")}>Alle als gelesen markieren</button>

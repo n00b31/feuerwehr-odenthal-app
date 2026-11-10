@@ -57,6 +57,9 @@ jobs:
           pg < supabase/migrations/20261109003600_notifications.sql
           pg < supabase/migrations/20261109003700_notification_safe_updates.sql
           pg < supabase/tests/upgrade-070-after.sql
+          pg < supabase/tests/upgrade-072-before.sql
+          pg < supabase/migrations/20261110003900_push_device_lifecycle.sql
+          pg < supabase/tests/upgrade-072-after.sql
   database:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -186,6 +189,11 @@ jobs:
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/notifications.sql
+      - name: Verify complete Push device lifecycle, safe removal and stale lease rejection
+        if: ${{ !cancelled() && steps.migrations.outcome == 'success' }}
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: docker exec -i "$POSTGRES_CONTAINER" psql -X -U postgres -d ff_dev_ci -v ON_ERROR_STOP=1 < supabase/tests/push-lifecycle.sql
       - name: Verify real parallel recovery limits and one-time PKCE claims
         if: ${{ !cancelled() && steps.migrations.outcome == 'success' }}
         env:
@@ -212,3 +220,8 @@ jobs:
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: bash supabase/tests/notification-concurrency.sh
+      - name: Verify simultaneous device registration, removal and stale reactivation
+        if: ${{ !cancelled() && steps.attendance_concurrency.outcome == 'success' }}
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: bash supabase/tests/push-lifecycle-concurrency.sh
