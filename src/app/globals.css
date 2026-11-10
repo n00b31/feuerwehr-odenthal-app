@@ -74,6 +74,7 @@
   .compact-shell .mobile-sheet .modal-body { padding: 16px; }
   .mobile-menu-actions, .more-links { display: grid; gap: 8px; }
   .more-links a { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 12px; color: var(--cp-text); text-decoration: none; border-radius: 10px; background: var(--cp-surface-soft); }
+  .more-links a[aria-current="page"] { color: var(--cp-accent); background: var(--cp-accent-soft); font-weight: 650; }
   .mobile-workspace .service-details > * + * { margin-top: 16px; }
   .mobile-workspace .dev-response > .dev-actions { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); align-items: stretch; }
   .mobile-workspace .dev-response .button { flex-wrap: wrap; gap: 4px; font-size: .8125rem; padding: 8px 4px; }

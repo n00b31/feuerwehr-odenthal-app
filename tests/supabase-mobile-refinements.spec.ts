@@ -31,7 +31,7 @@ async function noOverflow(page:Page){
 }
 async function navigate(page:Page,name:string){
   const width=page.viewportSize()?.width??1440,mobile=width<768;
-  if(name==="Statistik" && mobile){
+  if(name==="Profil" && mobile){
     await page.getByRole("button",{name:"Mehr Bereiche"}).click();
     await page.getByRole("dialog",{name:"Weitere Bereiche"}).getByRole("link",{name,exact:true}).click();
   }else await page.locator(mobile?".compact-bottom-nav":width<1100?".legacy-bottom-nav":".sidebar")
@@ -53,7 +53,8 @@ for(const width of [320,375,390,430,768,1440])for(const theme of ["light","dark"
       expect(height).toBeLessThanOrEqual(72);
       await expect(page.locator(".topbar .header-signout")).toBeHidden();
       const nav=page.getByRole("navigation",{name:"Mobile Navigation",exact:true});
-      expect(await nav.getByRole("link").allTextContents()).toEqual(["Start","Termine","Dokumente","Profil"]);
+      expect(await nav.getByRole("link").allTextContents()).toEqual(["Start","Termine","Dokumente","Statistik"]);
+      expect(await nav.locator(":scope > a, :scope > button").allTextContents()).toEqual(["Start","Termine","Dokumente","Statistik","Mehr"]);
       await expect(nav.getByRole("link",{name:"Start",exact:true})).toHaveAttribute("aria-current","page");
     }else await expect(page.locator(".topbar .header-signout")).toBeVisible();
     await noOverflow(page);
@@ -80,7 +81,7 @@ for(const width of [320,375,390,430,768,1440])for(const theme of ["light","dark"
     await page.getByRole("button",{name:"Farbschema wechseln"}).click();
     if(width<768){
       await page.getByRole("button",{name:"Mehr Bereiche"}).click();
-      await expect(page.getByRole("dialog",{name:"Weitere Bereiche"}).getByRole("link",{name:"Statistik",exact:true})).toBeVisible();
+      await expect(page.getByRole("dialog",{name:"Weitere Bereiche"}).getByRole("link",{name:"Profil",exact:true})).toBeVisible();
       if(width===390)await capture(page,`more-${theme}`);
       await page.getByRole("button",{name:"Dialog schließen",exact:true}).click();
     }
@@ -219,7 +220,8 @@ test("journal stays only in statistics; profile settings and old journal bookmar
   await capture(page,"profile");
   await navigate(page,"Statistik");
   await expect(page.getByRole("heading",{name:"Mein Dienstbuch",exact:true})).toBeVisible();
-  await expect(page.getByRole("button",{name:"Mehr Bereiche"})).toHaveClass(/active/);
+  await expect(page.locator(".compact-bottom-nav").getByRole("link",{name:"Statistik",exact:true})).toHaveAttribute("aria-current","page");
+  await expect(page.getByRole("button",{name:"Mehr Bereiche"})).not.toHaveClass(/active/);
   await capture(page,"statistics");
   await page.goBack();
   await expect(page.getByRole("heading",{name:"Verifiziertes DEV-Profil"})).toBeVisible();
@@ -228,3 +230,58 @@ test("journal stays only in statistics; profile settings and old journal bookmar
   await expect(page.getByRole("heading",{name:"Mein Dienstbuch",exact:true})).toBeVisible();
   expect(fixture.state.audit).toHaveLength(0);
 });
+
+for(const role of ["global","unit","member","delegate"] as const)for(const theme of ["light","dark"] as const){
+  test(`five mobile destinations and authorized More links: ${role} ${theme}`,async({context,page})=>{
+    await page.setViewportSize({width:320,height:760});
+    await page.emulateMedia({colorScheme:theme});
+    const fixture=await mobileFixture(context,role);
+    await login(page,role==="global");
+    const nav=page.getByRole("navigation",{name:"Mobile Navigation",exact:true});
+    const more=nav.getByRole("button",{name:"Mehr Bereiche"});
+    expect(await nav.locator(":scope > a, :scope > button").allTextContents())
+      .toEqual(["Start","Termine","Dokumente","Statistik","Mehr"]);
+    for(const name of ["Start","Termine","Dokumente","Statistik"]){
+      await nav.getByRole("link",{name,exact:true}).click();
+      await expect(nav.getByRole("link",{name,exact:true})).toHaveAttribute("aria-current","page");
+      await expect(more).not.toHaveClass(/active/);
+      await expect(more).toHaveAttribute("aria-expanded","false");
+      await noOverflow(page);
+    }
+    await more.click();
+    const sheet=page.getByRole("dialog",{name:"Weitere Bereiche",exact:true});
+    const admin=role==="global" || role==="unit";
+    await expect(more).toHaveAttribute("aria-expanded","true");
+    expect(await sheet.getByRole("link").allTextContents()).toEqual(admin?["Profil","Administration"]:["Profil"]);
+    await sheet.getByRole("link",{name:"Profil",exact:true}).click();
+    await expect(sheet).toHaveCount(0);
+    await expect(page.getByRole("heading",{name:"Verifiziertes DEV-Profil"})).toBeVisible();
+    await expect(more).toHaveClass(/active/);
+    await expect(more).toHaveAttribute("aria-expanded","false");
+    await more.click();
+    await expect(sheet.getByRole("link",{name:"Profil",exact:true})).toHaveAttribute("aria-current","page");
+    await noOverflow(page);
+    await page.keyboard.press("Escape");
+    await expect(more).toBeFocused();
+    await page.goBack();
+    await expect(nav.getByRole("link",{name:"Statistik",exact:true})).toHaveAttribute("aria-current","page");
+    await more.click();
+    if(admin){
+      await sheet.getByRole("link",{name:"Administration",exact:true}).click();
+      await expect(page.getByRole("heading",{name:"Mitgliederverwaltung",exact:true})).toBeVisible();
+      await expect(more).toHaveClass(/active/);
+      await more.click();
+      await expect(sheet.getByRole("link",{name:"Administration",exact:true})).toHaveAttribute("aria-current","page");
+      await page.keyboard.press("Escape");
+    }else{
+      await expect(sheet.getByRole("link",{name:"Administration",exact:true})).toHaveCount(0);
+      await page.keyboard.press("Escape");
+      await page.goto(publicPath("/administration/"));
+      await expect(page.getByRole("main").getByRole("alert")).toContainText("Keine Berechtigung zur Mitgliederverwaltung");
+      await expect(page.getByRole("heading",{name:"Mitgliederverwaltung",exact:true})).toHaveCount(0);
+    }
+    await noOverflow(page);
+    expect((await new AxeBuilder({page}).analyze()).violations).toEqual([]);
+    expect(fixture.state.audit).toHaveLength(0);
+  });
+}

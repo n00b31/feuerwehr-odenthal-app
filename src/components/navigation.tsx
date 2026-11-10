@@ -30,16 +30,16 @@ export function SidebarNavigation({ pathname, unitName, admin, close, logo = fal
 
 export function BottomNavigation({ pathname, admin = false, compact = false }: { pathname: string; admin?: boolean; compact?: boolean }) {
   const [more,setMore]=useState(false);
-  const secondary=[navigation[3],...(admin?[administration]:[])];
+  const secondary=[navigation[4],...(admin?[administration]:[])];
   return <><nav className={`bottom-nav ${compact?"legacy-bottom-nav":""}`} aria-label="Mobile Navigation">{[...navigation, ...(admin ? [administration] : [])].map(({ href, name, icon: Icon }) =>
     <Link key={href} href={href} className={pathname === href ? "active" : ""} aria-current={pathname === href ? "page" : undefined}>
       <span className="nav-icon"><Icon size={21} aria-hidden="true" /></span><span>{name}</span></Link>)}</nav>
     {compact && <nav className="bottom-nav compact-bottom-nav" aria-label="Mobile Navigation">
-      {navigation.filter(item=>item.href!=="/statistik").map(({href,name,icon:Icon})=><Link key={href} href={href}
+      {navigation.filter(item=>item.href!=="/profil").map(({href,name,icon:Icon})=><Link key={href} href={href}
         className={pathname===href?"active":""} aria-current={pathname===href?"page":undefined}>
         <span className="nav-icon"><Icon size={21} aria-hidden="true"/></span><span>{name}</span>
       </Link>)}
-      <button className={secondary.some(item=>item.href===pathname)?"active":""} aria-haspopup="dialog"
+      <button className={secondary.some(item=>item.href===pathname)?"active":""} aria-haspopup="dialog" aria-expanded={more}
         aria-label="Mehr Bereiche" onClick={()=>setMore(true)}><span className="nav-icon"><Ellipsis size={21} aria-hidden="true"/></span><span>Mehr</span></button>
     </nav>}
     {compact && more && <MobileSheet title="Weitere Bereiche" close={()=>setMore(false)}>
