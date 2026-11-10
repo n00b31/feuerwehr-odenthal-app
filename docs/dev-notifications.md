@@ -6,7 +6,11 @@ Die unabhängige Demo wird nicht verändert.
 
 **Aktueller Abnahmestand:** PR #24 ist gemergt; iPhone-Aktivierung und
 tatsächlicher Empfang sind durch den Projektverantwortlichen bestätigt.
-Desktop-Push bleibt offen. Der nachfolgende DEV-0.7-Installationsbericht
+Am 10.11.2026 bestätigt er außerdem Aktivierung und tatsächliche Test-Push-
+Anzeige unter Windows mit Edge auf einem nicht verwalteten Rechner.
+Der verwaltete Rechner bleibt eine separate, durch die IT einzugrenzende
+Störung. Weitere Abnahmepunkte werden dadurch nicht automatisch bestätigt.
+Der nachfolgende DEV-0.7-Installationsbericht
 ist historisch; die aktuelle Eingrenzung und der Hotfix stehen unter
 [DEV 0.7.1](#dev-071--edge-registrierung-und-fehlerdiagnose).
 
@@ -343,8 +347,11 @@ Referenzen:
 PR #24 wurde am 09.11.2026 auf Main-Commit
 `8d4167f26da39952d1f450e776842e1435062417` gemergt.
 Der Projektverantwortliche bestätigt erfolgreiche Aktivierung und
-tatsächlichen Push-Empfang auf der iPhone-PWA. **Das ist keine vollständige
-DEV-0.7-Abnahme. Desktop bleibt offen; DEV 0.8 wird nicht begonnen.**
+tatsächlichen Push-Empfang auf der iPhone-PWA. Zu Beginn des Hotfixes
+blieb der Desktop-Test offen. Die spätere erfolgreiche echte
+Desktop-Teilabnahme und der verbleibende verwaltete Rechner sind unten
+getrennt dokumentiert. **Keine pauschale DEV-0.7-Gesamtabnahme und kein
+Beginn von DEV 0.8.**
 
 Die vom Projektverantwortlichen am 10.11.2026 übermittelte, schlüsselfreie
 Diagnose aus seinem **normalen Edge-Fenster** zeigt:
@@ -446,7 +453,7 @@ keine VAPID-Rotation, kein Edge-Deployment und keine Änderung bestehender
 Gerätedatensätze im Hosted DEV. Der bestehende Worker und sein ausdrücklich
 bestätigter Update-Ablauf bleiben unverändert.
 
-### Regression und weiterhin notwendige Desktop-Abnahme
+### Regression und Grenzen der automatisierten Nachweise
 
 Die Notification-Suite deckt synthetische WNS-/Apple-Subscriptions,
 wiederholte Aktivierung, Mehrgerätebetrieb, den gemeldeten AbortError,
@@ -506,20 +513,58 @@ Ursache auf dem betroffenen Laptop und keine bereits angewandte Lösung**:
 Die Entwicklung hat weder diese Richtlinie noch Windows-Dienste,
 Firewall, Proxy, vorhandene Profile oder laufende Benutzerbrowser verändert.
 
-Nach manuellem Merge ist auf dem betroffenen Laptop weiterhin erforderlich:
+### Bestätigte reale Desktop-Teilabnahme vom 10.11.2026
+
+Der Projektverantwortliche hat ausdrücklich bestätigt:
+
+- Der ursprünglich betroffene Windows-Rechner ist verwaltet.
+- Auf einem nicht verwalteten Windows-Rechner lässt sich Push in
+  Microsoft Edge erfolgreich aktivieren.
+- Auch eine über „Test-Push senden · DEV“ ausgelöste Benachrichtigung
+  ist dort **tatsächlich unter Windows mit Edge erschienen**, nicht nur
+  die Aktivierung als erfolgreich angezeigt worden.
+
+Dies ist ein **vom Benutzer bestätigter realer Geräte-/Versandtest**,
+kein synthetischer Test und keine selbstständig aufgezeichnete
+End-to-End-Sitzung der Entwicklung. Browserversion und persönliche
+Build-Anzeige wurden dabei nicht gesondert übermittelt.
+
+Die öffentliche DEV-Anwendung lieferte zum Dokumentationszeitpunkt
+`DEV 0.7`, Commit
+`8d4167f26da39952d1f450e776842e1435062417`,
+Build-ID `8d4167f26da3-b2d56a59-340e-43f4-8e16-79a4d43e046b`.
+PR #25 war noch offen. Der Empfang ist daher **kein Beleg einer
+Fehlerbehebung durch den noch nicht veröffentlichten DEV-0.7.1-Patch**.
+
+Ergebnis: Edge-Desktop-Push funktioniert in der bestätigten nicht
+verwalteten Windows-Umgebung bereits mit DEV 0.7. Der verbleibende
+Fehler ist umgebungsabhängig und auf dem verwalteten Rechner weiterhin
+vor der Backend-Registrierung zu untersuchen. Dass eine bestimmte
+Unternehmensrichtlinie oder ein bestimmter Netzfilter ihn verursacht,
+ist damit noch nicht bewiesen. Diese lokale Eingrenzung liegt bei der
+zuständigen IT; Sicherheitsvorgaben werden nicht umgangen.
+
+Die Entwicklung selbst hat keine echten Pushs oder Testmails versandt.
+Die obige echte Testnachricht wurde vom Projektverantwortlichen ausgelöst.
+Weitere Geräte, Klicknavigation und sämtliche fachlichen
+Benachrichtigungsszenarien werden dadurch nicht pauschal abgenommen.
+
+Nach manuellem Merge bleibt für den Hotfix erforderlich:
 
 1. Ungespeicherte Eingaben sichern und das angebotene PWA-Update bewusst
    bestätigen. Sichtbare Version und Build-ID festhalten.
 2. Im normalen Edge-Fenster einmal aktivieren. Bei erneutem Fehler nur
    Diagnosecode und Exception-Namen notieren, keine Schlüssel/Endpoints.
-3. Edge vollständig schließen und erneut öffnen. Bei weiter bestehendem
-   Dienstfehler mit einem separaten normalen Edge-Profil eingrenzen.
-   Unternehmensrichtlinien, Proxy/VPN und Push-Dienstzugriff bei Bedarf
-   durch die zuständige Administration prüfen lassen, nicht umgehen.
-4. Erst eine bestätigte eigene Geräte-Registrierung und ein bewusst
-   ausgelöster eigener DEV-Test mit tatsächlicher Desktop-Anzeige und
-   geprüftem Klickziel schließen die Desktop-Abnahme ab.
+3. Den weiterhin betroffenen verwalteten Rechner durch die zuständige
+   Administration eingrenzen lassen. Ein weiteres Profil allein
+   unterscheidet den Windows- und integrierten WNS-Client nicht.
+   Unternehmensrichtlinien, Proxy/VPN und Push-Dienstzugriff nicht umgehen.
+4. Die neue Diagnose-/Timeout-Oberfläche und die bewusste Wiederholung
+   am veröffentlichten Hotfix prüfen; auf dem funktionierenden Desktop
+   eigene Geräte-Registrierung, echte Anzeige und Klickziel erneut prüfen.
 5. Vorhandenes iPhone parallel belassen und dessen Empfang erneut prüfen.
 
-Bis dahin: **DEV 0.7 nicht vollständig abgenommen; Desktop-Dienstfehler
-auf dem gemeldeten Laptop nicht als behoben nachgewiesen.**
+Status: **Realer Edge-/Windows-Push auf nicht verwaltetem Rechner bestätigt.
+Dienstfehler auf verwaltetem Rechner nicht als behoben nachgewiesen;
+Hotfix-Oberfläche noch nicht manuell auf dem veröffentlichten Stand geprüft.
+DEV 0.8 bleibt außerhalb dieses Auftrags.**
