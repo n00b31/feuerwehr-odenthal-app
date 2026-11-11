@@ -123,9 +123,14 @@ export function createRecoveryHandler(configuration: RecoveryConfiguration, requ
       const redirect = new URL(configuration.recoveryUrl);
       redirect.searchParams.set("recovery_request", requestId);
       // Only the server-selected verified address is sent. No client redirect or password is accepted.
+      const mailSignal = AbortSignal.timeout(30_000);
       const sent = await requestFetch(`${configuration.url}/auth/v1/recover?redirect_to=${encodeURIComponent(redirect.href)}`, {
         method: "POST", headers: { apikey: configuration.publicKey, "content-type": "application/json" },
-        body: JSON.stringify({ email: reserved.email, code_challenge: challenge, code_challenge_method: "s256" }), signal: AbortSignal.timeout(8000),
+        body: JSON.stringify({ email: reserved.email, code_challenge: challenge, code_challenge_method: "s256" }), signal: mailSignal,
+      }).catch((cause: unknown) => {
+        report(mailSignal.aborted || (cause instanceof Error && cause.name === "TimeoutError")
+          ? "auth_mail_timeout" : "auth_mail_transport_failed");
+        throw new Error("auth_mail_unavailable");
       });
       mailOutcome = sent.ok ? "auth_accepted" : "auth_rejected";
       if (!sent.ok) report("auth_mail_rejected");

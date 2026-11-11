@@ -1,5 +1,60 @@
 # Auth-Hotfix: Passwortbestätigung und Wiederherstellung
 
+## SMTP-Nachprüfung vom 11.11.2026
+
+Der Verantwortliche hat Custom SMTP im DEV aktiviert. Die folgenden historischen
+Abschnitte dokumentieren weiterhin den ursprünglichen integrierten Versand.
+Custom SMTP hebt die zusätzlichen atomaren App-Grenzen nicht auf; die
+dokumentierte Lücke bei direkten Auth-API-Aufrufen bleibt ebenfalls bestehen.
+
+Die tatsächlich bereitgestellte `password-recovery`-Edge-Function (Version 2)
+brach auch den Auth-Mailaufruf nach acht Sekunden ab. Zwei autorisierte
+Testanfragen endeten im App-Protokoll nach ungefähr 8,3 Sekunden als `unknown`.
+Auth protokollierte ungefähr 10,2 beziehungsweise 10,3 Sekunden und HTTP 200.
+Eine zusätzliche read-only Prüfung ergab für beide Testkonten keinen
+gespeicherten `auth.users.recovery_sent_at`. Der Verantwortliche bestätigte
+keinen Maileingang. **Damit sind weder abgeschlossener Recovery-Versand noch
+SMTP-Zustellung bewiesen; HTTP 200 im Auth-Log genügt nicht.** Ein Abbruch der
+HTTP-Verbindung kann einen laufenden Auth-Vorgang beeinflussen; die genaue
+Auswirkung auf diese SMTP-Versuche ist ohne weitere Versanddiagnose unbewiesen.
+Die App darf deshalb nicht als Ursache ausgeschlossen werden.
+
+Ein synthetischer Test des echten Handlers reproduziert eine um 10,3 Sekunden
+verzögerte Auth-Antwort einschließlich des tatsächlich übergebenen AbortSignals:
+vor der Korrektur Abbruch nach acht Sekunden und `unknown`, statt die Antwort
+abzuwarten. Es werden keine echten Supabase-/SMTP-Aufrufe oder Mails verwendet.
+
+Die Korrektur begrenzt ausschließlich den Mailaufruf nun auf **30 Sekunden**.
+RPC-, Identitäts- und PKCE-Austausch-Timeouts bleiben bei acht Sekunden.
+Kein automatischer Retry, keine Lockerung von Versandlimits, Freigabe, Rollen,
+PKCE oder Redirects. Ein nicht rechtzeitig bestätigter Versand bleibt `unknown`;
+der Verifier bleibt für einen eventuell doch zugestellten Link erhalten.
+Interne feste Diagnosecodes unterscheiden `auth_mail_timeout`,
+`auth_mail_transport_failed` und die bisherige HTTP-Ablehnung
+`auth_mail_rejected`, ohne Mailadresse, Token, Endpoint-Parameter oder
+Upstream-Fehlermeldungen auszugeben. Die öffentliche Self-Service-Antwort bleibt
+absichtlich konto-neutral; die veraltete pauschale Zwei-Mails/Stunde-Angabe wird
+durch den Hinweis auf App-, Auth- und Anbietergrenzen ersetzt.
+
+Die automatischen Regressionen prüfen die verzögerte Annahme mit realer
+Wartezeit, den tatsächlichen Signalabbruch mit beschleunigtem Test-Deadline-Timer,
+Timeout-/Transportfehler für Self-Service und Administration sowie unveränderte
+konto-neutrale Antworten ohne automatische Wiederholungen. Browserprüfungen
+verwenden ausschließlich abgefangene synthetische Auth-Endpunkte und bestätigen
+keinen realen SMTP-Versand.
+
+**Rollout/Abnahme:** Eine Quellcodekorrektur allein ändert die gehostete
+Edge-Function nicht. Vor einem erneuten autorisierten Einzelversuch muss die
+geprüfte Backend-Korrektur separat im DEV bereitgestellt sein; das Pages-
+Deployment aktualisiert nur den Frontend-Hinweis. Keine erneute Migration und
+kein manuelles Zurücksetzen von Reservierungen erforderlich. Erst nach Ablauf
+der jeweiligen Reservierungsgrenze genau eine Testmail anfordern, App-Ergebnis,
+Auth-Verlauf und SMTP-Annahme/Queue-ID korrelieren und den Postfacheingang vom
+Empfänger bestätigen lassen. Die längere Wartezeit behebt den bewiesenen
+vorzeitigen Abbruch, **beweist aber nicht**, dass damit das gesamte
+Zustellproblem behoben ist. Kein weiterer echter Versand und keine
+Passwortänderung durch die hier beschriebenen synthetischen Prüfungen.
+
 ## Sicherheits- und Implementierungsplan
 
 Entscheidung des Projektverantwortlichen: vorhandenen integrierten DEV-Mailversand
