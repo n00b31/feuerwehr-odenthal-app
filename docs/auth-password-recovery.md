@@ -18,6 +18,20 @@ Funktionsberechtigungen bleiben unverändert. Bestehende Historie wird weder
 gelöscht noch zurückgesetzt. Die Migration 025 bleibt unverändert. Dies ändert
 keine projektweiten Supabase-, SMTP- oder anderen Auth-Mail-Limits.
 
+Die Änderung ist im ausschließlich geprüften DEV-Projekt
+`orxinqhhbtjpkzwlfaxq` installiert: Supabase-Historie
+`20261111151507 / dev_041_password_recovery_limits`. Funktionskörper und
+vollständige gespeicherte Migration stimmen per LF-normalisierten Hashes mit
+der versionierten Datei überein. SECURITY DEFINER, leerer Search-Path und ACL
+blieben unverändert; die private Funktion bleibt für anon, authenticated und
+service_role nicht direkt ausführbar. Alle vier vorhandenen Recovery-
+Protokolle sind nach Anzahl und Inhalts-Hash unverändert. Kein Testkonto,
+Passwort, reservierter Versand oder echter Mailversand wurde dafür erzeugt.
+[PostgreSQL-/Upgrade-/RLS-/Zwei-Verbindungs-CI 43045657797](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/43045657797)
+war vor der Installation erfolgreich, einschließlich tatsächlicher Ablehnung
+der vierten Stunden- und sechsten Tagesanfrage nach Abschluss des jeweils
+letzten zulässigen parallelen Versuchs.
+
 Die tatsächlich bereitgestellte `password-recovery`-Edge-Function (Version 2)
 brach auch den Auth-Mailaufruf nach acht Sekunden ab. Zwei autorisierte
 Testanfragen endeten im App-Protokoll nach ungefähr 8,3 Sekunden als `unknown`.
