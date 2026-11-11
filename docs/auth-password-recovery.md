@@ -32,6 +32,16 @@ war vor der Installation erfolgreich, einschließlich tatsächlicher Ablehnung
 der vierten Stunden- und sechsten Tagesanfrage nach Abschluss des jeweils
 letzten zulässigen parallelen Versuchs.
 
+192 Domain-/Auth-/Konfigurationstests, 24 Script-Tests, TypeScript und statischer
+DEV-Build sind erfolgreich; die 12 lokalen synthetischen Auth-Browsertests
+bestehen auch mit der aktualisierten 3/5-Anzeige. Die vollständige
+[DEV-/Demo-Frontend-CI 43045663155](https://github.com/n00b31/feuerwehr-odenthal-app/actions/runs/43045663155)
+ist dagegen **nicht grün**: Der Runner scheitert vor den Browserprüfungen beim
+Playwright-Systempaketdownload an DNS-Auflösungsfehlern für Ubuntu-Mirrors.
+Dies ist kein bestandener Remote-Browsernachweis. Der Timeoutfix bleibt im
+Branch vorbereitet, aber die gehostete Edge Function wurde nicht neu deployt;
+ein echter Zustelltest bleibt offen.
+
 Die tatsächlich bereitgestellte `password-recovery`-Edge-Function (Version 2)
 brach auch den Auth-Mailaufruf nach acht Sekunden ab. Zwei autorisierte
 Testanfragen endeten im App-Protokoll nach ungefähr 8,3 Sekunden als `unknown`.
