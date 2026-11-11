@@ -42,7 +42,7 @@ SQL
   echo "PASS: real two-connection lock observed; second $label denied"
 }
 reserve="select (public.ff_begin_self_password_recovery(' SYNTHETIC.PARALLEL.RECOVERY@FEUERWEHR-ODENTHAL.DE ')->>'accepted')::boolean;"
-parallel_calls "$reserve" "$reserve" "hourly reservation"
+parallel_calls "$reserve" "$reserve" "in-flight reservation"
 grep -qx 't' "$logs/first.log"
 [[ "$(pg -Atc "select count(*) from public.password_recovery_requests where user_id='62000000-0000-4000-8000-000000000001'")" == 1 ]]
 request_id="$(pg -Atc "select id from public.password_recovery_requests where user_id='62000000-0000-4000-8000-000000000001'")"
@@ -52,13 +52,24 @@ parallel_calls "$claim" "$claim" "PKCE verifier claim"
 grep -qx 't' "$logs/first.log"
 pg -c "select public.ff_finish_password_recovery('$request_id','auth_accepted');"
 pg <<'SQL'
+insert into public.password_recovery_requests(user_id,email,requested_at,finished_at,outcome)
+values ('62000000-0000-4000-8000-000000000001','synthetic.parallel.recovery@feuerwehr-odenthal.de',clock_timestamp(),clock_timestamp(),'unknown');
+SQL
+reserve_and_finish="do \$\$ declare reply jsonb; begin
+  reply := public.ff_begin_self_password_recovery('synthetic.parallel.recovery@feuerwehr-odenthal.de');
+  if (reply->>'accepted')::boolean is distinct from true then raise exception 'Expected one remaining slot'; end if;
+  perform public.ff_finish_password_recovery((reply->>'request_id')::uuid,'auth_accepted');
+end; \$\$; select true;"
+parallel_calls "$reserve_and_finish" "$reserve" "hourly fourth request after a completed third"
+grep -qx 't' "$logs/first.log"
+[[ "$(pg -Atc "select count(*) from public.password_recovery_requests where user_id='62000000-0000-4000-8000-000000000001'")" == 3 ]]
+pg <<'SQL'
 update public.password_recovery_requests set requested_at=clock_timestamp()-interval '2 hours',finished_at=clock_timestamp()-interval '2 hours'
   where user_id='62000000-0000-4000-8000-000000000001';
 insert into public.password_recovery_requests(user_id,email,requested_at,finished_at,outcome)
-values ('62000000-0000-4000-8000-000000000001','synthetic.parallel.recovery@feuerwehr-odenthal.de',clock_timestamp()-interval '4 hours',clock_timestamp()-interval '4 hours','auth_rejected'),
- ('62000000-0000-4000-8000-000000000001','synthetic.parallel.recovery@feuerwehr-odenthal.de',clock_timestamp()-interval '6 hours',clock_timestamp()-interval '6 hours','unknown');
+values ('62000000-0000-4000-8000-000000000001','synthetic.parallel.recovery@feuerwehr-odenthal.de',clock_timestamp()-interval '4 hours',clock_timestamp()-interval '4 hours','auth_rejected');
 SQL
-parallel_calls "$reserve" "$reserve" "rolling 24-hour reservation"
-grep -qx 'f' "$logs/first.log"
-[[ "$(pg -Atc "select count(*) from public.password_recovery_requests where user_id='62000000-0000-4000-8000-000000000001'")" == 3 ]]
-echo "PASS: neither simultaneous request bypassed the rolling three-reservation maximum"
+parallel_calls "$reserve_and_finish" "$reserve" "rolling 24-hour sixth request after a completed fifth"
+grep -qx 't' "$logs/first.log"
+[[ "$(pg -Atc "select count(*) from public.password_recovery_requests where user_id='62000000-0000-4000-8000-000000000001'")" == 5 ]]
+echo "PASS: simultaneous requests respect three completed attempts per hour and five per rolling 24 hours"

@@ -298,6 +298,7 @@ test("forgot password has a conditional response and no automatic retry or accou
   await page.getByRole("button", { name: "Wiederherstellung anfordern", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("bestätigt weder ein Konto noch den Mailversand");
   await expect(page.getByRole("status")).toContainText("konfigurierten Mailanbieters");
+  await expect(page.getByRole("status")).toContainText("3 Anfragen pro Stunde und 5 innerhalb von 24 Stunden");
   await expect(page.getByRole("status")).not.toContainText("zwei Projektmails");
   const knownText = await page.getByRole("status").textContent();
   await page.getByLabel("Feuerwehr-E-Mail").fill("synthetic.unknown@feuerwehr-odenthal.de");

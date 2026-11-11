@@ -7,6 +7,17 @@ Abschnitte dokumentieren weiterhin den ursprünglichen integrierten Versand.
 Custom SMTP hebt die zusätzlichen atomaren App-Grenzen nicht auf; die
 dokumentierte Lücke bei direkten Auth-API-Aufrufen bleibt ebenfalls bestehen.
 
+Auf ausdrücklichen Wunsch werden diese App-Grenzen mit der additiven Migration
+`20261111004100_password_recovery_limits.sql` auf **3 Anfragen pro Adresse in
+rollierenden 60 Minuten und 5 in rollierenden 24 Stunden** erhöht, gemeinsam für
+Self-Service und GLOBAL_ADMIN. Alle Ergebnisse zählen; Zeitfenster laufen weiter
+ab Abschluss eines Versuchs. Eine noch offene Reservierung blockiert weiterhin
+parallele Anfragen derselben Adresse. Atomarer Advisory-Lock, Adminschutz
+(höchstens 5 administrative Anfragen in 5 Minuten), Freigaberegeln und
+Funktionsberechtigungen bleiben unverändert. Bestehende Historie wird weder
+gelöscht noch zurückgesetzt. Die Migration 025 bleibt unverändert. Dies ändert
+keine projektweiten Supabase-, SMTP- oder anderen Auth-Mail-Limits.
+
 Die tatsächlich bereitgestellte `password-recovery`-Edge-Function (Version 2)
 brach auch den Auth-Mailaufruf nach acht Sekunden ab. Zwei autorisierte
 Testanfragen endeten im App-Protokoll nach ungefähr 8,3 Sekunden als `unknown`.
@@ -46,8 +57,9 @@ keinen realen SMTP-Versand.
 **Rollout/Abnahme:** Eine Quellcodekorrektur allein ändert die gehostete
 Edge-Function nicht. Vor einem erneuten autorisierten Einzelversuch muss die
 geprüfte Backend-Korrektur separat im DEV bereitgestellt sein; das Pages-
-Deployment aktualisiert nur den Frontend-Hinweis. Keine erneute Migration und
-kein manuelles Zurücksetzen von Reservierungen erforderlich. Erst nach Ablauf
+Deployment aktualisiert nur den Frontend-Hinweis. Der Timeoutfix braucht keine
+Datenbankmigration; für die gesondert beauftragte Änderung auf 3/5 ist Migration
+041 erforderlich. Kein manuelles Zurücksetzen von Reservierungen. Erst nach Ablauf
 der jeweiligen Reservierungsgrenze genau eine Testmail anfordern, App-Ergebnis,
 Auth-Verlauf und SMTP-Annahme/Queue-ID korrelieren und den Postfacheingang vom
 Empfänger bestätigen lassen. Die längere Wartezeit behebt den bewiesenen
@@ -69,8 +81,9 @@ dokumentieren. Keine neuen Mailanbieter, keine temporären Passwörter und keine
    bereits verifizierte Feuerwehr-Adressen, verschickt selbst keine Tokens an
    den Browser und benutzt weiter Supabase Auths integrierten Mailversand.
 3. Self-Service und administrative Anfragen teilen eine atomare Datenbankgrenze:
-   eine reservierte Anfrage pro normalisierter Adresse in 60 Minuten, höchstens
-   drei in rollierenden 24 Stunden. Auch fehlgeschlagene oder unklare
+   ursprünglich eine reservierte Anfrage pro normalisierter Adresse in
+   60 Minuten und drei in rollierenden 24 Stunden; Migration 041 erhöht dies
+   auf drei in 60 Minuten und fünf in rollierenden 24 Stunden. Auch fehlgeschlagene oder unklare
    Versandversuche verbrauchen die Reservierung; kein automatischer Retry.
    Die Zeitfenster laufen ab Abschluss des Versandversuchs, nicht bereits vor
    dessen Netzwerklaufzeit. Unaufgelöste Reservierungen blockieren weitere
@@ -125,8 +138,8 @@ Am 08.11.2026 im Dashboard von DEV `orxinqhhbtjpkzwlfaxq` gelesen:
 
 ## Nicht geschlossene Grenze: direkte Auth-API
 
-**Die Forderung „1 versandte Mail/Stunde und 3/24 Stunden“ ist nicht für das
-gesamte Supabase-Projekt garantiert.** Ein direkter Aufruf von
+**Die App-Grenzen (mit Migration 041: 3 Anfragen/Stunde und 5/24 Stunden)
+sind nicht für das gesamte Supabase-Projekt garantiert.** Ein direkter Aufruf von
 `/auth/v1/recover` benutzt nicht die zusätzliche App-Edge-Function und nicht
 deren atomare Reservierung. Auch ein Browser-Cooldown, CORS oder ein
 projektweites Mailkontingent würde diese Lücke nicht schließen.
@@ -251,7 +264,7 @@ ausdrücklich **nicht** als durch diese Grenze abgesichert abgenommen.
 | 5 zweimal neues Passwort | Schema + SDK-Browserablauf |
 | 6 Freigabe bleibt erforderlich | SQL-Pending/keine Rollen und Browser-Pending nach erneutem Login |
 | 7 keine öffentliche Kontoauskunft | gleiche HTTP-Status-/Antworttexte für bekannt/unbekannt/unverifiziert/limitiert/SMTP-Fehler |
-| 8–10 60 Minuten, drei/24h, Parallelität | additive SQL-Tests und echte zwei PostgreSQL-Verbindungen; nur App-Pfad |
+| 8–10 drei/60 Minuten, fünf/24h, Parallelität (Migration 041) | SQL-Tests einschließlich vierter/sechster Ablehnung und echte zwei PostgreSQL-Verbindungen am letzten freien Slot; nur App-Pfad |
 | 11 direkte Auth-API | offene, vom Projektverantwortlichen akzeptierte Einschränkung oben |
 | 12–13 Admin-Grenzen | echte SQL-Rollen für alle fünf Rollen + serverseitige Auth-/RPC-Fixtures |
 | 14 keine Secrets im Frontend/Audit | Backend-Isolation, explizite Auditfelder, Browser-Speicher- und Exportprüfung |
