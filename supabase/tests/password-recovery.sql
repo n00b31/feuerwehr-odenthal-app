@@ -52,7 +52,7 @@ select public.ff_store_recovery_verifier(current_setting('ff.test.request')::uui
 select pg_temp.assert_true(public.ff_claim_recovery_verifier(current_setting('ff.test.request')::uuid)->>'user_id'
   ='61000000-0000-4000-8000-000000000006','server PKCE proof belongs to exactly the selected verified target');
 select pg_temp.assert_true(public.ff_claim_recovery_verifier(current_setting('ff.test.request')::uuid) is null,'private verifier is claimed once and removed');
-select pg_temp.assert_true((public.ff_begin_self_password_recovery(' SYNTHETIC.RECOVERY.6@FEUERWEHR-ODENTHAL.DE ')->>'accepted')::boolean=false,'normalized self and admin requests share hourly reservation');
+select pg_temp.assert_true((public.ff_begin_self_password_recovery(' SYNTHETIC.RECOVERY.6@FEUERWEHR-ODENTHAL.DE ')->>'accepted')::boolean=false,'normalized self and admin requests share one in-flight reservation');
 select public.ff_finish_password_recovery(current_setting('ff.test.request')::uuid,'auth_accepted');
 select pg_temp.assert_true((public.ff_begin_self_password_recovery('unknown@feuerwehr-odenthal.de')->>'accepted')::boolean=false,'unknown account does not reserve or send');
 reset role;
@@ -60,20 +60,51 @@ select pg_temp.assert_true((select status='pending' from public.profiles where i
 select pg_temp.assert_true((select count(*)=0 from public.role_assignments where user_id='61000000-0000-4000-8000-000000000006'),'recovery assigns no roles');
 select pg_temp.assert_true((select count(*)=2 from public.audit_entries where subject_id='61000000-0000-4000-8000-000000000006' and actor_id='61000000-0000-4000-8000-000000000001' and action like 'password_recovery_%'),'immutable audit retains initiating administrator and outcome');
 
+set local role service_role;
+select set_config('ff.test.second',(public.ff_begin_self_password_recovery(' SYNTHETIC.RECOVERY.6@FEUERWEHR-ODENTHAL.DE ')->>'request_id'),true);
+select pg_temp.assert_true(current_setting('ff.test.second') is not null,'second hourly reservation is admitted for the normalized address');
+select public.ff_finish_password_recovery(current_setting('ff.test.second')::uuid,'unknown');
+reset role;
+set local role authenticated;
+select set_config('ff.test.third',(public.ff_begin_admin_password_recovery('61000000-0000-4000-8000-000000000006')->>'request_id'),true);
+select pg_temp.assert_true(current_setting('ff.test.third') is not null,'third shared hourly reservation is admitted for GLOBAL_ADMIN');
+reset role;
+set local role service_role;
+select public.ff_finish_password_recovery(current_setting('ff.test.third')::uuid,'auth_rejected');
+select pg_temp.assert_true((public.ff_begin_self_password_recovery('synthetic.recovery.6@feuerwehr-odenthal.de')->>'accepted')::boolean=false,'fourth hourly reservation denied including rejected and unknown outcomes');
+reset role;
+set local role authenticated;
+select pg_temp.assert_true((public.ff_begin_admin_password_recovery('61000000-0000-4000-8000-000000000006')->>'accepted')::boolean=false,'administration cannot bypass the shared hourly maximum');
+reset role;
+select pg_temp.assert_true((select count(*)=3 from public.password_recovery_requests),'denied requests do not reserve additional hourly slots');
 update public.password_recovery_requests set requested_at=clock_timestamp()-interval '2 hours';
 set local role service_role;
-select pg_temp.assert_true((public.ff_begin_self_password_recovery('synthetic.recovery.6@feuerwehr-odenthal.de')->>'accepted')::boolean=false,'hourly window starts after finished dispatch attempt, not before network delay');
+select pg_temp.assert_true((public.ff_begin_self_password_recovery('synthetic.recovery.6@feuerwehr-odenthal.de')->>'accepted')::boolean=false,'three finished attempts remain in the hourly window even if dispatch began earlier');
 reset role;
 update public.password_recovery_requests set finished_at=clock_timestamp()-interval '2 hours';
-insert into public.password_recovery_requests(user_id,email,requested_at,finished_at,outcome)
-values ('61000000-0000-4000-8000-000000000006','synthetic.recovery.6@feuerwehr-odenthal.de',clock_timestamp()-interval '4 hours',clock_timestamp()-interval '4 hours','auth_rejected'),
- ('61000000-0000-4000-8000-000000000006','synthetic.recovery.6@feuerwehr-odenthal.de',clock_timestamp()-interval '6 hours',clock_timestamp()-interval '6 hours','unknown');
 set local role service_role;
-select pg_temp.assert_true((public.ff_begin_self_password_recovery('synthetic.recovery.6@feuerwehr-odenthal.de')->>'accepted')::boolean=false,'fourth rolling 24-hour reservation denied including uncertain sends');
+select set_config('ff.test.fourth',(public.ff_begin_self_password_recovery('synthetic.recovery.6@feuerwehr-odenthal.de')->>'request_id'),true);
+select pg_temp.assert_true(current_setting('ff.test.fourth') is not null,'expired hourly attempts allow a fourth daily reservation');
+select public.ff_finish_password_recovery(current_setting('ff.test.fourth')::uuid,'unknown');
 reset role;
-update public.password_recovery_requests set requested_at=clock_timestamp()-interval '25 hours',finished_at=clock_timestamp()-interval '25 hours';
+set local role authenticated;
+select set_config('ff.test.fifth',(public.ff_begin_admin_password_recovery('61000000-0000-4000-8000-000000000006')->>'request_id'),true);
+select pg_temp.assert_true(current_setting('ff.test.fifth') is not null,'fifth rolling 24-hour reservation is admitted');
+reset role;
+set local role service_role;
+select public.ff_finish_password_recovery(current_setting('ff.test.fifth')::uuid,'auth_rejected');
+select pg_temp.assert_true((public.ff_begin_self_password_recovery('synthetic.recovery.6@feuerwehr-odenthal.de')->>'accepted')::boolean=false,'sixth rolling 24-hour reservation denied although only two attempts are within the hour');
+select pg_temp.assert_true((public.ff_begin_self_password_recovery('synthetic.recovery.2@feuerwehr-odenthal.de')->>'accepted')::boolean,'per-address quota does not block a different eligible account');
+reset role;
+select pg_temp.assert_true((select count(*)=5 from public.password_recovery_requests where email='synthetic.recovery.6@feuerwehr-odenthal.de'),'denied sixth attempt preserves the five-attempt history');
+update public.password_recovery_requests set requested_at=clock_timestamp()-interval '25 hours',finished_at=clock_timestamp()-interval '25 hours'
+  where email='synthetic.recovery.6@feuerwehr-odenthal.de';
 set local role service_role;
 select pg_temp.assert_true((public.ff_begin_self_password_recovery('synthetic.recovery.6@feuerwehr-odenthal.de')->>'accepted')::boolean,'expired 24-hour reservations no longer block');
+reset role;
+update public.password_recovery_requests set requested_at=clock_timestamp()-interval '25 hours' where outcome='reserved';
+set local role service_role;
+select pg_temp.assert_true((public.ff_begin_self_password_recovery('synthetic.recovery.6@feuerwehr-odenthal.de')->>'accepted')::boolean=false,'an unresolved in-flight reservation still blocks even outside both rolling windows');
 reset role;
 do $$ declare i int; begin
   set local role service_role;

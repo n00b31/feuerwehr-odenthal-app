@@ -2,7 +2,7 @@ import { FunctionsHttpError, type SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { authErrorMessage } from "./validation";
 
-export const recoveryRequestMessage = "Wenn ein bereits verifiziertes, berechtigtes Konto existiert und die Versandgrenzen es erlauben, wird eine Wiederherstellung angefordert. Diese Antwort bestätigt weder ein Konto noch den Mailversand. DEV: nur vorautorisierte Testadressen, höchstens zwei Projektmails pro Stunde.";
+export const recoveryRequestMessage = "Wenn ein bereits verifiziertes, berechtigtes Konto existiert und die Versandgrenzen es erlauben, wird eine Wiederherstellung angefordert. Diese Antwort bestätigt weder ein Konto noch den Mailversand. DEV: nur autorisierte Testkonten. App-Grenze pro Adresse: 3 Anfragen pro Stunde und 5 innerhalb von 24 Stunden. Zusätzlich gelten die Versandgrenzen von Supabase Auth und des konfigurierten Mailanbieters.";
 
 export async function requestPasswordRecovery(client: SupabaseClient, input:
   { mode: "self"; email: string } | { mode: "admin"; target_user: string }) {

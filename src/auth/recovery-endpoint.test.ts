@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { setTimeout as delay } from "node:timers/promises";
 import { createRecoveryHandler } from "../../supabase/functions/password-recovery/handler";
 
 const id = "10000000-0000-4000-8000-000000000001";
@@ -11,8 +12,8 @@ const configuration = {
 function fixture() {
   const calls: { path: string; body: unknown; authorization: string | null }[] = [];
   const reports: string[] = [];
-  const state = { eligible: true, admin: true, authenticated: true, mailAccepted: true, intake: true, limited: false, mailTimeout: false,
-    verifier: "", claimable: true, grantUser: id };
+  const state = { eligible: true, admin: true, authenticated: true, mailAccepted: true, intake: true, limited: false, mailTimeout: false, mailTransport: false,
+    mailDelayMs: 0, verifier: "", claimable: true, grantUser: id };
   const fetcher: typeof fetch = async (resource, options) => {
     const url = new URL(String(resource));
     assert.equal(url.origin, configuration.url);
@@ -50,7 +51,9 @@ function fixture() {
       assert(body && typeof body === "object" && "code_challenge" in body);
       const expected = Buffer.from(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(state.verifier))).toString("base64url");
       assert.deepEqual(body, { email: "synthetic@feuerwehr-odenthal.de", code_challenge: expected, code_challenge_method: "s256" });
-      if (state.mailTimeout) throw new TypeError("synthetic sensitive upstream detail");
+      if (state.mailDelayMs) await delay(state.mailDelayMs, undefined, { signal: options?.signal ?? undefined });
+      if (state.mailTimeout) throw new DOMException("synthetic sensitive upstream detail", "TimeoutError");
+      if (state.mailTransport) throw new TypeError("synthetic sensitive upstream detail");
       return json({}, state.mailAccepted ? 200 : 429);
     }
     if (url.pathname.endsWith("ff_finish_password_recovery")) return json(null);
@@ -63,6 +66,54 @@ function fixture() {
   }));
   return { state, calls, reports, handler, send };
 }
+
+test("SMTP-paced Auth response after 10.3 seconds is awaited and recorded without a duplicate send", async () => {
+  const f = fixture();
+  f.state.mailDelayMs = 10_300;
+  const response = await f.send({ mode: "self", email: "synthetic@feuerwehr-odenthal.de" });
+  assert.equal(response.status, 200);
+  assert.deepEqual(f.calls.filter((call) => call.path.endsWith("ff_finish_password_recovery")).map((call) => call.body),
+    [{ request_id: id, result: "auth_accepted" }]);
+  assert.equal(f.calls.filter((call) => call.path === "/auth/v1/recover").length, 1);
+  assert.deepEqual(f.reports, []);
+});
+
+test("the bounded mail deadline aborts the pending request and records an unknown outcome without retry", async (t) => {
+  const timeout = AbortSignal.timeout.bind(AbortSignal);
+  const mailSignals: AbortSignal[] = [];
+  t.mock.method(AbortSignal, "timeout", (milliseconds: number) => {
+    const signal = timeout(milliseconds === 30_000 ? 20 : milliseconds);
+    if (milliseconds === 30_000) mailSignals.push(signal);
+    return signal;
+  });
+  const f = fixture();
+  f.state.mailDelayMs = 1000;
+  const response = await f.send({ mode: "self", email: "synthetic@feuerwehr-odenthal.de" });
+  assert.equal(response.status, 200);
+  assert.equal(mailSignals.length, 1);
+  assert.equal(mailSignals[0].aborted, true);
+  assert.deepEqual(f.reports, ["auth_mail_timeout", "recovery_failed"]);
+  assert.deepEqual(f.calls.filter((call) => call.path.endsWith("ff_finish_password_recovery")).map((call) => call.body),
+    [{ request_id: id, result: "unknown" }]);
+  assert.equal(f.calls.filter((call) => call.path === "/auth/v1/recover").length, 1);
+});
+
+test("mail timeout and transport errors are classified without secrets, retries or discarded unknown outcomes", async () => {
+  for (const [failure, diagnostic] of [["mailTimeout", "auth_mail_timeout"], ["mailTransport", "auth_mail_transport_failed"]] as const) {
+    for (const admin of [false, true]) {
+      const f = fixture();
+      f.state[failure] = true;
+      const response = await f.send(admin ? { mode: "admin", target_user: id }
+        : { mode: "self", email: "synthetic@feuerwehr-odenthal.de" }, admin);
+      assert.equal(response.status, admin ? 503 : 200);
+      assert.deepEqual(f.calls.filter((call) => call.path.endsWith("ff_finish_password_recovery")).map((call) => call.body),
+        [{ request_id: id, result: "unknown" }]);
+      assert.equal(f.calls.filter((call) => call.path === "/auth/v1/recover").length, 1);
+      assert.deepEqual(f.reports, [diagnostic, "recovery_failed"]);
+      assert(!await response.text().then((text) => /synthetic|timeout|transport|sensitive/.test(text)));
+    }
+  }
+});
 
 test("known, unknown, unverified, quota-limited and SMTP-rejected self requests have identical public responses", async () => {
   const f = fixture();
